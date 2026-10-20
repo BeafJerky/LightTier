@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | [conventions/](conventions/) | 开发规范：提交、版本、代码、主题等约束性规则 | 推送 | Git提交与版本号规范.md |
 | [guides/](guides/) | 操作指南：构建、打包、发布、使用、排障 | 推送 | （预留） |
-| [design/](design/) | 设计与方案：架构、UI、功能设计 | 推送 | （预留） |
+| [design/](design/) | 设计与方案：架构、UI、功能设计 | 推送 | EasyTier-v2.7.0-升级适配方案.md、EasyTier-各版本配置字段与CLI对照.md、EasyTier接入架构调研-从CLI多进程到内嵌内核.md |
 | [tracking/](tracking/) | 跟踪与记录：待修复清单、审查报告、进度（本地） | 不推送 | 待修复问题清单.md |
 | [archive/](archive/) | 公开归档：过时、一次性文档（只读保留） | 推送 | （预留） |
 | [assets/](assets/) | 文档资源：被推送文档引用的图片等 | 推送 | （预留） |
