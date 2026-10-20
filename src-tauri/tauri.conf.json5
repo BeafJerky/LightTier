@@ -74,9 +74,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    // 应用程序资源文件（resource/* 递归匹配所有子目录，含 core/ 与 themes/）
+    // 应用程序资源文件
+    // 注意：Tauri 的 glob 不会递归展开被匹配到的目录，必须逐个列出子目录内容；
+    // 只写 resource/* 会导致 core/ 与 themes/ 未进入安装包（内置内核与外部主题失效）
     "resources": [
-      "resource/*"
+      "resource/*",
+      "resource/themes/*",
+      "resource/core/*"
     ]
   },
   // 插件配置
