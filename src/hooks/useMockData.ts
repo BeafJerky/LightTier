@@ -8,6 +8,7 @@
  * 约定：对外暴露的 API 与真实实现同构，页面无需感知运行环境。
  */
 import { ref } from 'vue'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import type { FormWebData } from '@/types/formTypes'
 
 // ===== Mock 运行态数据（内核实例 / Web 配置服务，内存 Map 模拟进程表） =====
@@ -40,10 +41,11 @@ const mockWebConfigList = ref<FormWebData[]>([
   }
 ])
 
-// Tauri 环境检测：浏览器 dev 模式无 __TAURI__，全部走 mock
+// Tauri 环境检测：浏览器 dev 模式无 Tauri 运行时，全部走 mock
+// 注：withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri()（读 __TAURI_INTERNALS__）
 const isTauriEnv = (): boolean => {
   try {
-    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+    return isTauriRuntime()
   } catch {
     return false
   }

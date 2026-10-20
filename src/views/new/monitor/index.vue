@@ -251,6 +251,7 @@ import TrendChart from '@/components/TrendChart/index.vue'
 import { useTrendBuffer, type TrendPoint } from '@/hooks/useTrendBuffer'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 
 defineOptions({ name: 'NewMonitor' })
 
@@ -427,10 +428,10 @@ const displayList = computed(() => {
     }))
 })
 
-// --- 判断 Tauri 环境 ---
+// --- 判断 Tauri 环境（withGlobalTauri 已关闭，用 isTauri() 检测） ---
 const isTauriEnv = (): boolean => {
   try {
-    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+    return isTauriRuntime()
   } catch {
     return false
   }

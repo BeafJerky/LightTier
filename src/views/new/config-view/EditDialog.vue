@@ -74,9 +74,9 @@
       </button>
     </div>
 
-    <!-- 双模式切换：代码直编 / 表单结构化（切表单时自动重解析） -->
+    <!-- 双模式切换：代码直编 / 表单结构化（切表单自动重解析；切代码先回写表单改动） -->
     <div class="ed-tabs">
-      <button class="ed-tab" :class="{ active: editMode === 'code' }" @click="editMode = 'code'">{{
+      <button class="ed-tab" :class="{ active: editMode === 'code' }" @click="switchToCode">{{
         t('newEdit.codeEdit')
       }}</button>
       <button class="ed-tab" :class="{ active: editMode === 'form' }" @click="switchToForm">{{
@@ -259,8 +259,17 @@
                   :value="secretDisplays[f.key] ?? formData[f.key] ?? ''"
                   @input="onSecurityInput(f, ($event.target as HTMLInputElement).value)"
                   :placeholder="f.key"
-                  :type="f.secret ? 'text' : 'text'"
+                  :type="f.secret && !secretVisible[f.key] ? 'password' : 'text'"
                 />
+                <button
+                  v-if="f.secret"
+                  class="ed-btn-sm"
+                  :title="secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
+                  @click="toggleSecretVisible(f.key)"
+                  >{{
+                    secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')
+                  }}</button
+                >
                 <button
                   v-if="f.filePick"
                   class="ed-btn-sm"
@@ -357,6 +366,11 @@ import { onClickOutside } from '@vueuse/core'
 import { CodeEditor } from '@/components/CodeEditor'
 import * as toml from 'smol-toml'
 import { normalizeToml } from '@/utils/easyTierUtil'
+import {
+  buildConfigFormModel,
+  parseConfigFormModel,
+  type ConfigFormModel
+} from '@/utils/configFormUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import {
   CONFIG_TEMPLATES,
@@ -364,17 +378,16 @@ import {
   ADVANCED_FLAG_DEFS,
   ADVANCED_TEXT_DEFS,
   ADVANCED_TOP_TEXT_DEFS,
-  ADVANCED_FIELD_KEYS,
-  SECRET_MASK,
   type AdvancedFieldDef
 } from '@/constants/defaultData'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readTextFile } from '@tauri-apps/plugin-fs'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 
 const { t } = useI18n()
 
-// 非 Tauri 环境优雅降级（浏览器预览）
-const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+// 非 Tauri 环境优雅降级（浏览器预览）；withGlobalTauri 已关闭，用 isTauri() 检测
+const isTauri = isTauriRuntime()
 
 // configName / tomlContent 由父组件传入；existingConfigNames 用于新增时的重名校验
 const props = defineProps<{
@@ -403,6 +416,9 @@ watch(
       nameError.value = ''
       templateId.value = 'custom'
       templateDropdownOpen.value = false
+      // 重新打开时回到代码模式：避免上一次打开留下的表单值被保存到新配置
+      editMode.value = 'code'
+      formParsedOk.value = false
     }
   }
 )
@@ -454,6 +470,8 @@ const advFlags = computed(() => formData.value.flags || {})
 // 5.6：安全字段掩码回显（真实值备份在 secretBackup，保存时写回）
 const secretDisplays = ref<Record<string, string>>({})
 const secretBackup = ref<Record<string, string>>({})
+// 敏感字段显隐切换（默认使用 password 类型显示，点击“显示”后明文）
+const secretVisible = ref<Record<string, boolean>>({})
 // stun_servers 为数组，表单以逗号分隔文本展示
 const formStunServers = ref('')
 
@@ -468,114 +486,47 @@ const formDataNetworkName = ref('')
 const formDataNetworkSecret = ref('')
 
 // TOML 原文 → 表单模型：解析失败时保留空表单（用户切到表单模式不报错）
-const parseFormData = () => {
-  try {
-    const parsed = toml.parse(props.tomlContent) as FormData
-    formData.value = {
-      hostname: parsed.hostname || '',
-      instance_name: parsed.instance_name || '',
-      dhcp: parsed.dhcp !== undefined ? parsed.dhcp : true,
-      rpc_portal: parsed.rpc_portal || '',
-      network_identity: parsed.network_identity || {},
-      flags: { ...(parsed.flags || {}) }
-    }
-    // 5.6：安全模式顶层字段（掩码字段备份真实值，显示掩码）
-    SECURITY_FIELD_DEFS.forEach((f) => {
-      const v = (parsed as any)[f.key]
-      if (f.secret) {
-        if (v !== undefined && v !== null && v !== '') {
-          secretBackup.value[f.key] = String(v)
-          secretDisplays.value[f.key] = SECRET_MASK
-        } else {
-          delete secretBackup.value[f.key]
-          secretDisplays.value[f.key] = ''
-        }
-      } else if (v !== undefined && v !== null) {
-        formData.value[f.key] = v
-      }
-    })
-    // 5.6：顶层文本（socks5_proxy / stun_servers 逗号分隔）
-    formData.value.socks5_proxy = (parsed as any).socks5_proxy || ''
-    formStunServers.value = Array.isArray((parsed as any).stun_servers)
-      ? (parsed as any).stun_servers.join(', ')
-      : ''
-    formDataNetworkName.value = parsed.network_identity?.network_name || ''
-    formDataNetworkSecret.value = parsed.network_identity?.network_secret || ''
-    formListeners.value = parsed.listeners ? [...parsed.listeners] : []
-    formPeers.value = parsed.peer ? parsed.peer.map((p) => p.uri) : []
-    formRoutes.value = parsed.routes ? [...parsed.routes] : []
-    formExitNodes.value = parsed.exit_nodes ? [...parsed.exit_nodes] : []
-    // 5.6：动态 Flags 编辑器排除固定高级字段（避免同 key 双处编辑）
-    const flags = parsed.flags || {}
-    const dynamicKeys = Object.keys(flags).filter((k) => !ADVANCED_FIELD_KEYS.includes(k))
-    formFlagsKeys.value = dynamicKeys
-    formFlagsVals.value = dynamicKeys.map((k) => String(flags[k]))
-  } catch {
-    /* 解析失败用空表单 */
-  }
+// @returns 是否解析成功（供代码/表单双向切换判断能否安全回写）
+// 注：以当前代码区内容（tomlContent）为准而非 props 原文，保证代码区编辑/模板应用后表单同步
+const parseFormData = (): boolean => {
+  const model = parseConfigFormModel(tomlContent.value)
+  if (!model) return false
+  formData.value = { ...model.formData } as FormData
+  secretDisplays.value = model.secretDisplays
+  secretBackup.value = model.secretBackup
+  formStunServers.value = model.stunServers
+  formListeners.value = [...model.listeners]
+  formPeers.value = [...model.peers]
+  formRoutes.value = [...model.routes]
+  formExitNodes.value = [...model.exitNodes]
+  formFlagsKeys.value = [...model.flagsKeys]
+  formFlagsVals.value = [...model.flagsVals]
+  formDataNetworkName.value = model.networkName
+  formDataNetworkSecret.value = model.networkSecret
+  return true
 }
+
+// 当前表单状态 → 模型（供构建 TOML 使用）
+const collectFormModel = (): ConfigFormModel => ({
+  formData: formData.value as Record<string, any>,
+  secretDisplays: secretDisplays.value,
+  secretBackup: secretBackup.value,
+  stunServers: formStunServers.value,
+  listeners: formListeners.value,
+  peers: formPeers.value,
+  routes: formRoutes.value,
+  exitNodes: formExitNodes.value,
+  flagsKeys: formFlagsKeys.value,
+  flagsVals: formFlagsVals.value,
+  networkName: formDataNetworkName.value,
+  networkSecret: formDataNetworkSecret.value
+})
 
 // 表单模型 → TOML 文本：空值剔除、安全字段按掩码规则写回、flags 类型推断（bool/number/string）
 const buildFormToml = (): string => {
-  const data: Record<string, any> = { ...formData.value }
-  // 5.6：安全模式顶层字段（掩码字段：未改动写回原值，改动用新值，清空则删除）
-  SECURITY_FIELD_DEFS.forEach((f) => {
-    if (f.secret) {
-      const display = secretDisplays.value[f.key] || ''
-      if (display === SECRET_MASK) {
-        const real = secretBackup.value[f.key]
-        if (real) data[f.key] = real
-        else delete data[f.key]
-      } else if (display.trim()) {
-        data[f.key] = display.trim()
-        secretBackup.value[f.key] = display.trim()
-      } else {
-        delete data[f.key]
-        delete secretBackup.value[f.key]
-      }
-    } else if (formData.value[f.key] === undefined || formData.value[f.key] === '') {
-      delete data[f.key]
-    }
-  })
-  // 5.6：顶层文本（stun_servers 逗号分隔 → 数组）
-  if (formStunServers.value.trim()) {
-    data.stun_servers = formStunServers.value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  } else {
-    delete data.stun_servers
-  }
-  data.network_identity = {
-    network_name: formDataNetworkName.value || undefined,
-    network_secret: formDataNetworkSecret.value || undefined
-  }
-  if (formListeners.value.length) data.listeners = formListeners.value.filter(Boolean)
-  else delete data.listeners
-  if (formPeers.value.length) data.peer = formPeers.value.filter(Boolean).map((uri) => ({ uri }))
-  else delete data.peer
-  if (formRoutes.value.length) data.routes = formRoutes.value.filter(Boolean)
-  else delete data.routes
-  if (formExitNodes.value.length) data.exit_nodes = formExitNodes.value.filter(Boolean)
-  else delete data.exit_nodes
-  const flags: Record<string, any> = {}
-  // 5.6：固定高级字段（undefined/空值剔除，避免产生无意义字段）
-  Object.entries(formData.value.flags || {}).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === '') return
-    flags[k] = v
-  })
-  formFlagsKeys.value.forEach((k, i) => {
-    if (!k.trim()) return
-    const raw = formFlagsVals.value[i]
-    if (raw === '' || raw === undefined || raw === null) flags[k] = true
-    else if (raw === 'true') flags[k] = true
-    else if (raw === 'false') flags[k] = false
-    else if (/^-?\d+(\.\d+)?$/.test(raw)) flags[k] = Number(raw)
-    else flags[k] = raw
-  })
-  if (Object.keys(flags).length) data.flags = flags
-  else delete data.flags
-  return toml.stringify(data)
+  const { toml: content, secretBackup: backup } = buildConfigFormModel(collectFormModel())
+  secretBackup.value = backup
+  return content
 }
 
 // 删除某行自定义 Flag（key/value 同步移除，保持两数组索引对齐）
@@ -616,10 +567,25 @@ const pickCredentialFile = async () => {
   }
 }
 
+// 敏感字段显隐切换（password ↔ text）
+const toggleSecretVisible = (key: string) => {
+  secretVisible.value[key] = !secretVisible.value[key]
+}
+
 // 切到表单模式：以当前代码区内容重新解析，保证两种模式数据一致
+// formParsedOk 记录解析是否成功，失败时禁止表单 → 代码回写（避免覆盖用户无法解析的代码）
+const formParsedOk = ref(false)
 const switchToForm = () => {
-  parseFormData()
+  formParsedOk.value = parseFormData()
   editMode.value = 'form'
+}
+
+// 切到代码模式：先把表单改动回写到代码区，避免“表单改完切代码再保存”路径丢失修改
+const switchToCode = () => {
+  if (editMode.value === 'form' && formParsedOk.value) {
+    tomlContent.value = buildFormToml()
+  }
+  editMode.value = 'code'
 }
 
 // === 配置模板（5.8） ===
@@ -658,7 +624,7 @@ const applyTemplate = (id: 'server' | 'client' | 'custom') => {
   templateId.value = id
   tomlContent.value = Object.keys(tpl.values).length ? toml.stringify(tpl.values) : ''
   if (editMode.value === 'form') {
-    parseFormData()
+    formParsedOk.value = parseFormData()
   }
 }
 

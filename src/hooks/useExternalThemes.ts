@@ -23,6 +23,10 @@ const isValidThemeCss = (cssText: string): boolean => {
   return (cssText.match(/--theme-/g) || []).length >= 3
 }
 
+// 合法主题名：仅字母/数字/中划线/下划线（主题名会拼入资源目录路径，拒绝路径穿越等注入形态）
+const THEME_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
+export const isValidThemeName = (name: string): boolean => THEME_NAME_PATTERN.test(name)
+
 // 模块级单例：发现列表多组件共享
 const extThemes = ref<ExternalThemeInfo[]>([])
 
@@ -33,12 +37,13 @@ export const useExternalThemes = () => {
     try {
       const entries = await readDir('resource/themes', { baseDir: BaseDirectory.Resource })
       for (const e of entries.filter((e) => e.name?.endsWith('.css'))) {
+        const name = e.name!.replace('.css', '')
+        if (!isValidThemeName(name)) continue
         try {
           const cssText = (await readTextFile(`resource/themes/${e.name}`, {
             baseDir: BaseDirectory.Resource
           })) as string
           if (!isValidThemeCss(cssText)) continue
-          const name = e.name!.replace('.css', '')
           const match = cssText.match(/--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/)
           extThemes.value.push({
             name,
@@ -62,8 +67,9 @@ export const useExternalThemes = () => {
 /** 重启后恢复上次使用的外部主题 */
 export const restoreTheme = async () => {
   const saved = localStorage.getItem('theme')
-  // 内置主题无需恢复
+  // 内置主题无需恢复；主题名不合法（手工篡改 localStorage 等）直接忽略
   if (!saved || saved === 'cream' || saved === 'dark') return
+  if (!isValidThemeName(saved)) return
   try {
     const css = (await readTextFile(`resource/themes/${saved}.css`, {
       baseDir: BaseDirectory.Resource

@@ -483,9 +483,11 @@
                 <input
                   class="sd-lock-input"
                   :type="lockPwdVisible ? 'text' : 'password'"
-                  v-model="store.lockPassword"
+                  v-model="lockPwdInput"
                   :placeholder="t('newSettings.lockPasswordPlaceholder')"
                   maxlength="32"
+                  @keyup.enter="commitLockPassword"
+                  @blur="commitLockPassword"
                 />
                 <button
                   class="sd-lock-eye"
@@ -657,6 +659,7 @@ import { useEasyTierStore } from '@/store/modules/easytier'
 import { useStorage } from '@/hooks/web/useStorage'
 import { clearETLogs, clearLogs, downloadFile, openPath } from '@/utils/fileUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
+import { hashLockPassword } from '@/utils/lockUtil'
 import { runEasyTierCli } from '@/utils/shellUtil'
 import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
@@ -687,6 +690,8 @@ watch(
 )
 watch(visible, (v) => {
   emit('update:modelValue', v)
+  // 关闭时丢弃未提交的密码输入（明文不在内存/界面残留）
+  if (!v) lockPwdInput.value = ''
 })
 
 const store = useEasyTierStore()
@@ -734,10 +739,20 @@ const tabs = [
   { key: 'about', label: t('newSettings.about') }
 ]
 
-// 安全：锁定密码（5.12，直接绑定 store.lockPassword，随 pinia persist 持久化）
+// 安全：锁定密码（5.12）——输入为本地暂存，失焦/回车时加盐哈希后写入 store
+// （store.lockPassword 仅存校验串 sha256$salt$hash，随 pinia persist 持久化，绝不落明文）
 const lockPwdVisible = ref(false)
+const lockPwdInput = ref('')
+const commitLockPassword = () => {
+  const pwd = lockPwdInput.value
+  // 空输入不回写（解除保护需显式点“清除”，避免误清）
+  if (!pwd) return
+  store.lockPassword = hashLockPassword(pwd)
+  lockPwdInput.value = ''
+}
 const handleClearLockPassword = () => {
   store.lockPassword = ''
+  lockPwdInput.value = ''
   toast.success(t('newSettings.lockPasswordCleared'))
 }
 

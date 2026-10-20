@@ -8,6 +8,7 @@
         :class="{ 'cd-overlay-inline': inline, 'cd-overlay-sheet': sheetMode }"
         @click.self="handleOverlayClick"
         @keydown.escape="handleClose"
+        @keydown="handleKeydown"
         tabindex="-1"
       >
         <div
@@ -62,7 +63,9 @@
  *   （移动端二级页面用，标题与返回由所在页面承载）。
  *
  * 交互：遮罩点击（closeOnOverlay）与 Esc 键均可关闭（内联模式除外）；
+ * 键盘无障碍：打开聚焦遮罩层（Esc 可用）、Tab 圈定在弹窗内、关闭还原到打开前焦点；
  * 顶部/底部留白叠加 --lt-safe-area-* 安全区变量（桌面端为 0）。
+ * 滚动：应用外壳 html/body 为 overflow:hidden（内容区自行滚动），遮罩铺满视口即天然阻止背景滚动。
  */
 // Android 底部动作面板：模块级共享的 history 注入栈（物理返回键仅关闭最顶层面板）
 interface SheetHistoryEntry {
@@ -116,6 +119,8 @@ const emit = defineEmits<{
 // 内部可见态：与 v-model 双向同步（本地先变更，再经 watch 回传父组件）
 const visible = ref(props.modelValue)
 const overlayRef = ref<HTMLElement>()
+// 打开前的焦点元素（关闭后还原，避免焦点丢失到 body）
+let prevActive: HTMLElement | null = null
 watch(
   () => props.modelValue,
   (v) => {
@@ -124,9 +129,41 @@ watch(
 )
 watch(visible, (v) => {
   emit('update:modelValue', v)
-  // 桌面弹窗打开后聚焦遮罩层，保证 Esc 键关闭可用
-  if (v && !props.inline) nextTick(() => overlayRef.value?.focus())
+  if (props.inline) return
+  if (v) {
+    // 桌面弹窗打开后聚焦遮罩层（Esc 键关闭可用），并记住原焦点以便关闭后还原
+    prevActive = document.activeElement as HTMLElement | null
+    nextTick(() => overlayRef.value?.focus())
+  } else if (prevActive) {
+    // 原元素可能已随页面卸载，仅对仍在文档中的元素还原焦点
+    if (prevActive.isConnected) prevActive.focus()
+    prevActive = null
+  }
 })
+
+// Tab 焦点圈定：键盘导航不逃逸到弹窗外的页面内容（内联形态即页面内容，不圈定）
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key !== 'Tab' || props.inline) return
+  const root = overlayRef.value
+  if (!root) return
+  const focusables = root.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )
+  if (focusables.length === 0) return
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  const inside = active ? root.contains(active) : false
+  if (e.shiftKey) {
+    if (!inside || active === first) {
+      e.preventDefault()
+      last.focus()
+    }
+  } else if (!inside || active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
 
 const handleOverlayClick = () => {
   // 内联模式无遮罩层，点击空白不触发关闭（避免页面留白区域误关）

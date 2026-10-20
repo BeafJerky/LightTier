@@ -18,6 +18,7 @@ import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state
 import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window'
 import { emit } from '@tauri-apps/api/event'
 import { isAndroid } from '@/utils/platformUtil'
+import { migrateLockPassword, verifyLockPassword } from '@/utils/lockUtil'
 import { registerMobileVpnListeners, syncMobileVpnStatus } from '@/utils/mobileVpn'
 import { computed, nextTick, onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -54,9 +55,9 @@ const lockNow = () => {
   lockError.value = false
 }
 
-// 校验密码解锁；密码来自设置项（easytierStore.lockPassword）
+// 校验密码解锁；store 存的是加盐校验串（sha256$salt$hash，旧版明文在启动时迁移，绝不存明文）
 const unlock = () => {
-  if (inputPassword.value === easytierStore.lockPassword) {
+  if (verifyLockPassword(inputPassword.value, easytierStore.lockPassword)) {
     isLocked.value = false
     inputPassword.value = ''
     lockError.value = false
@@ -81,6 +82,8 @@ onBeforeMount(async () => {
   }
   checkDir()
   easytierStore.setConfigPath()
+  // 锁屏密码迁移（M-06）：旧版明文持久化值升级为加盐校验串（已是哈希/为空则不变）
+  easytierStore.lockPassword = migrateLockPassword(easytierStore.lockPassword)
 })
 
 onMounted(async () => {
@@ -111,10 +114,6 @@ onMounted(async () => {
     .catch(() => {
       /* non-Tauri */
     })
-
-  easytierStore.autorun().catch((e) => {
-    console.error('Failed to autorun:', e)
-  })
 
   // 发送事件通知后端，前端已准备就绪
   emit('frontend-ready').catch((e) => {

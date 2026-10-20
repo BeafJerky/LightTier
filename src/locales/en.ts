@@ -240,6 +240,8 @@ export default {
     securitySection: 'Security Mode',
     advancedSection: 'Advanced Options',
     pickFile: 'Pick File',
+    showSecret: 'Show',
+    hideSecret: 'Hide',
     tipPrivateKey: 'Local private key (keep it secret)',
     tipPublicKey: 'Local public key used to verify this node',
     tipCredential: 'Temporary network credential for short-term onboarding',

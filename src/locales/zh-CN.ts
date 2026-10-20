@@ -234,6 +234,8 @@ export default {
     securitySection: '安全模式',
     advancedSection: '高级选项',
     pickFile: '选择文件',
+    showSecret: '显示',
+    hideSecret: '隐藏',
     tipPrivateKey: '本地私钥（仅本机可见，请勿外泄）',
     tipPublicKey: '本地公钥（对端用其校验身份）',
     tipCredential: '临时入网凭据（凭据有效期短，适合临时组网）',

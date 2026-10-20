@@ -2,7 +2,9 @@
  * 应用入口
  *
  * 装配顺序：i18n → store → 全局组件 → Element Plus → 路由 → mount；
- * 挂载后异步执行不阻塞启动的后台任务（日志清理、出口路由残留清理、启动设置）。
+ * 挂载后异步执行不阻塞启动的后台任务（日志清理、出口路由残留清理）。
+ * 启动设置（最小化到托盘 / 自动运行网络）不在本文件编排：
+ * 前者由 App.vue 在窗口展示流程中处理，后者由 overview 页按 settings.autoRunNetwork 触发。
  */
 import 'vue/jsx'
 
@@ -42,14 +44,8 @@ import App from './App.vue'
 
 import { clearLogs } from './utils/fileUtil'
 import { cleanExitRouteResidue } from './utils/routeUtil'
-import { isAndroid } from './utils/platformUtil'
 import { t } from './utils/i18nUtil'
-import { useStorage } from '@/hooks/web/useStorage'
-import { useEasyTierStore } from '@/store/modules/easytier'
 import { ElNotification } from 'element-plus'
-
-// 引入 Tauri API
-import { getCurrentWindow } from '@tauri-apps/api/window'
 
 // 创建应用实例并完成全部装配
 const setupAll = async () => {
@@ -58,8 +54,6 @@ const setupAll = async () => {
   await setupI18n(app)
 
   setupStore(app)
-
-  const easyTierStore = useEasyTierStore()
 
   setupGlobCom(app)
 
@@ -84,27 +78,6 @@ const setupAll = async () => {
           type: 'warning',
           duration: 5000
         })
-      }
-    })(),
-
-    // 检查启动设置
-    (async () => {
-      const { getStorage } = useStorage('localStorage')
-
-      // 1. 启动后最小化（桌面专属）
-      if (getStorage('settings.minimizeOnStart') === 'true' && !isAndroid()) {
-        setTimeout(() => {
-          getCurrentWindow()
-            .hide()
-            .catch((err) => console.warn('隐藏窗口失败:', err))
-        }, 100)
-      }
-
-      // 2. 启动后自动运行网络
-      if (getStorage('settings.autoRunNetwork') === 'true') {
-        setTimeout(() => {
-          easyTierStore.autorun().catch((err) => console.warn('自动运行失败:', err))
-        }, 500)
       }
     })()
   ]).catch((err) => console.error('后台任务执行失败:', err))

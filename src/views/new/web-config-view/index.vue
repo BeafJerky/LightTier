@@ -423,6 +423,15 @@ const getServiceDotClass = computed(() => {
 })
 
 // ========== 数据加载 ==========
+/**
+ * 从进程命令行提取 --config-server 参数值（兼容 `--config-server <url>` 与 `--config-server=<url>`）
+ * 用于结构化精确匹配：子串匹配会让 .../user1 误命中 .../user12 的进程
+ */
+const extractConfigServerUrl = (cmdLine: string): string | null => {
+  const m = cmdLine.match(/--config-server(?:=|\s+)(\S+)/)
+  if (!m) return null
+  return m[1].replace(/^"|"$/g, '')
+}
 // 刷新运行时状态：进程扫描 + 服务状态合并到列表项，并恢复/初始化选中项（FAB 已负责文件加载）
 const refreshWebRuntimeState = async () => {
   const list = webConfigList.value
@@ -435,7 +444,8 @@ const refreshWebRuntimeState = async () => {
         const cmd = r.commandLine || ''
         const pid = r.pid
         const expectedUrl = `${item.protocol}://${item.host}:${item.port}/${item.userName}`
-        if (cmd.includes(expectedUrl) || (item.pid && item.pid === pid)) {
+        // 精确比较 --config-server 的参数值（另保留 pid 记录匹配）
+        if (extractConfigServerUrl(cmd) === expectedUrl || (item.pid && item.pid === pid)) {
           item.status = 'running'
           if (!item.pid) item.pid = pid
           break

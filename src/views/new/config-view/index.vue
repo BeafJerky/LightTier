@@ -357,6 +357,7 @@ import { useCreamToast } from '@/hooks/useCreamToast'
 import { useMockData } from '@/hooks/useMockData'
 import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import EditDialog from './EditDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
@@ -777,9 +778,9 @@ const deleteSelectedConfig = async () => {
 }
 
 // ===== 退出节点路由开关（5.9 / 5.10，仅 Tauri 桌面端） =====
-// 判定依据：Tauri 运行时且非 Android（Android 无 route 命令/PowerShell，视为非适用环境）
-const isTauri =
-  typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined && !isAndroidPlatform
+// 判定依据：Tauri 运行时且非 Android（Android 无 route 命令/PowerShell，视为非适用环境）；
+// withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri() 检测
+const isTauri = isTauriRuntime() && !isAndroidPlatform
 const isExitRouteBusy = ref(false)
 
 // 开关状态：优先 flags._enable_exit_route，缺失时降级读旧顶层字段 config_exit_nodes_route

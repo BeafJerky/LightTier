@@ -4,13 +4,9 @@ import {
   DEFAULT_VER_OPTIONS,
   MANAGER_INFO_API,
   MONITOR_LIST,
-  PREFIX_SVC,
   STUN_SERVER_URL,
   USER_AGENT
 } from '@/constants/easytier'
-import { listTomlFiles } from '@/utils/fileUtil'
-import { startServiceOnWindows } from '@/utils/shellUtil'
-import { isAndroid } from '@/utils/platformUtil'
 import { useMockData } from '@/hooks/useMockData'
 import { resourceDir } from '@tauri-apps/api/path'
 import { fetch } from '@tauri-apps/plugin-http'
@@ -26,8 +22,10 @@ import { ref } from 'vue'
  * - 远端数据缓存（内核版本、STUN 服务器、公共共享节点、监控摘要）
  * - 页面偏好设置（刷新频率、P2P 通知、锁屏密码等）
  *
- * 持久化：除 startQueue（运行时瞬时状态）外整体持久化到 localStorage。
- * 平台差异：autorun（服务自启）仅桌面生效，Android 由 VPN 前台服务承载。
+ * 持久化：除 startQueue（运行时瞬时状态）外整体持久化到 localStorage；
+ * 锁屏密码仅存加盐 SHA-256 校验串（见 utils/lockUtil，绝不落明文）。
+ * 启动自动运行由 overview 页读取 settings.autoRunNetwork 触发（单一编排点）；
+ * 桌面服务自启由 nssm 安装项承载，Android 由 VPN 前台服务承载。
  */
 export const useEasyTierStore = defineStore(
   'easytier',
@@ -66,7 +64,7 @@ export const useEasyTierStore = defineStore(
     const xshellPath = ref('')
     // 是否是首次加载（用于自动运行逻辑）
     const isFirstLoad = ref(true)
-    // 锁定密码
+    // 锁定密码：加盐 SHA-256 校验串（sha256$salt$hash），旧版明文由启动迁移升级
     const lockPassword = ref('')
     // 启动直接报错提示
     const errRunNotify = ref(true)
@@ -431,18 +429,6 @@ export const useEasyTierStore = defineStore(
       }
     }
 
-    const autorun = async () => {
-      // Android 无 Windows 服务模型（开机/启动自启由 VPN 前台服务承载），跳过服务启动
-      if (isAndroid()) return
-      const autoRun = localStorage.getItem('settings.autoRun')
-      if (autoRun === 'true') {
-        const fileList = await listTomlFiles()
-        for (const f of fileList) {
-          const configName = f.replace('.toml', '')
-          await startServiceOnWindows(PREFIX_SVC + configName)
-        }
-      }
-    }
     return {
       configPath,
       configList,
@@ -512,7 +498,6 @@ export const useEasyTierStore = defineStore(
       setRefreshInterval,
       loadConfigFiles,
       loadWebConfigFiles,
-      autorun,
       pageRefreshCallback,
       registerPageRefresh,
       clearPageRefresh,
