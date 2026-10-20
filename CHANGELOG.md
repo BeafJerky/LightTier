@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.1 (2026-10-20)
+
+> 综合审查修复发布：安全边界收口、日志与命令链路修复、平台兼容与交互优化，无新增用户功能。
+
+- 安全
+  - 启用严格 CSP（禁内联/远程脚本），关闭 `withGlobalTauri` 并清理 `window.__TAURI__` 直用
+  - fs 权限由全盘读写收窄到 resource/app 域；移除 wmic，补 whoami；新增 fs:allow-rename
+  - `run_cli` / `run_command` 增加 Rust 侧白名单（仅 resource/core 下的内核与 CLI）
+  - 锁屏密码改为加盐 SHA-256（`sha256$salt$hash`），启动时自动迁移旧明文
+  - 下载增加协议/大小/PK 魔数校验与临时文件原子替换；解压增加路径穿越防护、容量门限与 Unix 可执行位
+- 功能与可靠性
+  - 内核日志统一到 `<resource>/logs` 绝对路径，日志查看、清理与出口路由恢复可用
+  - `executeCmd` 以退出码为唯一成功判据；修复 Windows 单条进程结果与 Unix `ps` 文本解析
+  - 配置编辑修复表单切代码模式丢失改动；密文字段掩码显示与显隐切换
+  - 网卡过滤 `et*` → `et_*`，不再误排 Ethernet；Web 配置按 `--config-server` 精确匹配
+  - 启动编排收敛单入口，删除不可达的 autorun 与误接线；内核安装前增加停止节点确认
+  - 内置内核支持 Unix 可执行位回填；CreamDialog 增加焦点陷阱与焦点还原
+- Android 与工程
+  - VpnService 补前台服务与常驻通知，空 Intent 重建不再创建默认 TUN；清单补 allowBackup=false
+  - gradle.properties 移除入库 JDK 路径，改由 JAVA_HOME 或用户级配置提供
+  - 单测由 7 例扩充至 62 例（新增 coreLog / configForm / shell / file / lock / sys 六组）
+
 ## 1.1.0 (2026-10-09)
 
 > 工程质量发布：集中清理历史“打补丁”式配置、恢复类型严格性、收敛权限，无新增用户功能。
