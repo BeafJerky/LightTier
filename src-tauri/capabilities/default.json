@@ -33,6 +33,7 @@
     "fs:allow-exists",
     "fs:allow-open",
     "fs:allow-read-dir",
+    "fs:allow-rename",
     "fs:allow-resource-read",
     "fs:allow-resource-read-recursive",
     "fs:allow-resource-write",
@@ -63,22 +64,6 @@
     "shell:allow-kill",
     "shell:allow-open",
     "shell:allow-stdin-write",
-    {
-      "identifier": "fs:write-all",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    },
-    {
-      "identifier": "fs:read-all",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    },
     {
       "identifier": "shell:allow-execute",
       "allow": [
@@ -124,6 +109,11 @@
         },
         {
           "args": true,
+          "cmd": "whoami",
+          "name": "whoami"
+        },
+        {
+          "args": true,
           "cmd": "killall",
           "name": "killall"
         },
@@ -131,11 +121,6 @@
           "args": true,
           "cmd": "kill",
           "name": "kill"
-        },
-        {
-          "args": true,
-          "cmd": "wmic",
-          "name": "wmic"
         },
         {
           "args": true,

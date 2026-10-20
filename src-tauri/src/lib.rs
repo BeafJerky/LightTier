@@ -65,11 +65,62 @@ async fn check_cold_start(app: tauri::AppHandle) -> bool {
     is_cold
 }
 
+// 内核可执行文件白名单（安全收口）：仅允许运行资源目录 resource/core 下的
+// easytier-core / easytier-cli，防止前端（含被注入脚本）借 run_command/run_cli 执行任意程序
+#[cfg(not(mobile))]
+fn ensure_core_program_allowed(app: &tauri::AppHandle, program: &str) -> Result<(), String> {
+    let program_path = std::path::Path::new(program);
+    let stem = program_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    if stem != "easytier-core" && stem != "easytier-cli" {
+        return Err(format!("program not allowed: {program}"));
+    }
+
+    let core_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("failed to resolve resource dir: {e}"))?
+        .join("resource")
+        .join("core");
+
+    let parent = match program_path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => return Err(format!("program has no parent directory: {program}")),
+    };
+
+    // 目录存在时用 canonicalize 严格比较；目录尚不存在（首次安装未下载内核）等
+    // 失败场景退回字符串归一化比较（斜杠统一 + 小写 + 去尾斜杠）
+    let allowed = match (parent.canonicalize(), core_dir.canonicalize()) {
+        (Ok(p), Ok(c)) => p == c,
+        _ => normalize_path(&parent) == normalize_path(&core_dir),
+    };
+    if !allowed {
+        return Err(format!("program is outside core dir: {program}"));
+    }
+    Ok(())
+}
+
+#[cfg(not(mobile))]
+fn normalize_path(p: &std::path::Path) -> String {
+    p.to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+        .trim_end_matches('/')
+        .to_string()
+}
+
 #[tauri::command(rename_all = "snake_case")]
-fn run_cli(program: String, args: Vec<String>) -> String {
+fn run_cli(app: tauri::AppHandle, program: String, args: Vec<String>) -> String {
     // 桌面端：通过子进程执行命令并捕获输出
     #[cfg(not(mobile))]
     {
+        if let Err(e) = ensure_core_program_allowed(&app, &program) {
+            log::error!("run_cli rejected: {}", e);
+            return format!("Error: {}", e); // 返回错误信息
+        }
         // DETACHED_PROCESS: 使进程在后台运行
         // const DETACHED_PROCESS: u32 = 0x00000008;
         let mut cmd = Command::new(&program);
@@ -97,16 +148,20 @@ fn run_cli(program: String, args: Vec<String>) -> String {
     // 移动端：不支持子进程调用
     #[cfg(mobile)]
     {
-        let _ = (program, args);
+        let _ = (app, program, args);
         return "Error: run_cli is not supported on mobile platform".to_string();
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn run_command(program: String, args: Vec<String>) -> String {
+fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> String {
     // 桌面端：通过子进程在后台启动命令
     #[cfg(not(mobile))]
     {
+        if let Err(e) = ensure_core_program_allowed(&app, &program) {
+            log::error!("run_command rejected: {}", e);
+            return format!("Error: {}", e); // 返回错误信息
+        }
         // DETACHED_PROCESS: 使进程在后台运行
         // const DETACHED_PROCESS: u32 = 0x00000008;
         let mut cmd = Command::new(&program);
@@ -132,7 +187,7 @@ fn run_command(program: String, args: Vec<String>) -> String {
     // 移动端：不支持子进程调用
     #[cfg(mobile)]
     {
-        let _ = (program, args);
+        let _ = (app, program, args);
         return "Error: run_command is not supported on mobile platform".to_string();
     }
 }

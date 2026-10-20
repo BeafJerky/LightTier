@@ -47,11 +47,12 @@
     ],
     // 安全相关配置
     "security": {
-      // 内容安全策略（CSP）
-      "csp": null
+      // 内容安全策略（CSP）：禁止内联/远程脚本；样式需 unsafe-inline（Vue 动态样式）；
+      // 放行 Google Fonts、Tauri IPC/asset 协议、镜像测速主机（connect-src https:）与开发服务器 HMR
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost http://localhost:4000 ws://localhost:4000 https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'"
     },
-    // 启用更好的性能
-    "withGlobalTauri": true
+    // 不注入 window.__TAURI__ 全局对象（应用内统一经 @tauri-apps/api 的 isTauri() 检测）
+    "withGlobalTauri": false
   },
   // 打包配置
   "bundle": {

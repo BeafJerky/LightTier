@@ -13,18 +13,8 @@
     />
     <!-- <script src="https://unpkg.com/default-passive-events" type="text/javascript"></script> -->
     <title><%= title %></title>
-    <script>
-      ;(function () {
-        var root = document.documentElement
-        if (root.getAttribute('data-theme')) return
-        var t = localStorage.getItem('theme')
-        // 用户未显式选择主题时跟随系统深色偏好（首屏即生效，避免闪白/闪黑）
-        if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          t = 'dark'
-        }
-        if (t) root.setAttribute('data-theme', t)
-      })()
-    </script>
+    <!-- 首屏主题引导：外部同步脚本，配合严格 CSP（script-src 'self'，禁止内联） -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="app">
