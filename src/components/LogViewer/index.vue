@@ -43,6 +43,8 @@
  * 用户上翻后暂停跟随，滚回底部或手动刷新时恢复。
  */
 import { getLogsDir, listFiles, openPath, readFileContent } from '@/utils/fileUtil'
+import { pickLogTarget } from '@/utils/coreLogUtil'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { readTextReverse } from '@/utils/easyTierUtil'
 import { LOG_PATH } from '@/constants/easytier'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -58,10 +60,10 @@ const props = defineProps<{
 const { t } = useI18n()
 const easyTierStore = useEasyTierStore()
 
-// 非 Tauri 环境优雅降级（浏览器预览）
+// 非 Tauri 环境优雅降级（浏览器预览）；withGlobalTauri 已关闭，用 isTauri() 检测
 const isTauri = computed(() => {
   try {
-    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+    return isTauriRuntime()
   } catch {
     return false
   }
@@ -105,11 +107,9 @@ const loadLog = async () => {
   if (!props.configName || !isTauri.value) return
   loading.value = true
   try {
-    // 日志按日期轮转命名：{configName}.{YYYY-MM-DD} / {configName}.{YYYY-MM-DD}.log，兜底 easytier.log
+    // 目标选择：内置内核（v2.6.x）固定写 easytier.log；旧版内核按配置名写 {configName}.log（详见 coreLogUtil）
     const files = await listFiles(LOG_PATH)
-    const matched = files.filter((f) => f.startsWith(props.configName + '.'))
-    const latest = matched.length > 0 ? matched.sort().at(-1) : undefined
-    const target = latest || 'easytier.log'
+    const target = pickLogTarget(files, props.configName)
     const text = (await readFileContent(`${LOG_PATH}/${target}`)) as string
     content.value = text ? readTextReverse(text, 500) : ''
   } catch {

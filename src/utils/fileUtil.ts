@@ -5,6 +5,8 @@
  * 只传相对路径，禁止用 resourceDir() 拼绝对路径后传入；
  * 职责：目录检查创建、文件读写/列举/删除、内置 config.json 读写、下载（放宽
  * GitHub 重定向）、解压（fflate，剥离压缩包公共前缀目录）、打开系统路径与日志清理。
+ * 防护（M-03）：下载限协议/大小/zip 魔数，临时文件校验后原子替换；解压限条目数与
+ * 总大小、拦截 zip-slip 穿越条目，Unix 桌面解压后补内核可执行位。
  */
 import { CONFIG_PATH, CORE_PATH, LOG_PATH, RESOURCE_PATH, USER_AGENT } from '@/constants/easytier'
 import { dirname, extname, join, resourceDir } from '@tauri-apps/api/path'
@@ -16,16 +18,18 @@ import {
   readFile,
   readTextFile,
   remove,
+  rename,
   writeFile,
   writeTextFile
 } from '@tauri-apps/plugin-fs'
 import { fetch } from '@tauri-apps/plugin-http'
 import { attachConsole, error, info } from '@tauri-apps/plugin-log'
-import { open } from '@tauri-apps/plugin-shell'
+import { Command, open } from '@tauri-apps/plugin-shell'
 import { unzipSync } from 'fflate'
 import { isAndroid } from './platformUtil'
+import { getPlatform } from './sysUtil'
+import { isKernelLogFile } from './coreLogUtil'
 import pkg from '../../package.json'
-import dayjs from 'dayjs'
 
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
 attachConsole()
@@ -33,6 +37,48 @@ attachConsole()
 // 运行时基础目录：Android 使用应用数据目录（AppData），桌面使用打包资源目录（Resource）
 const getBaseDir = (): BaseDirectory =>
   isAndroid() ? BaseDirectory.AppData : BaseDirectory.Resource
+
+// === 下载与解压防护阈值（相对内核包体非常宽松的护栏，防镜像异常内容与 zip bomb） ===
+const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024 // 单文件下载上限 200MB
+const MAX_EXTRACT_ENTRIES = 500 // 解压条目数上限
+const MAX_EXTRACT_TOTAL_BYTES = 500 * 1024 * 1024 // 解压后总大小上限 500MB
+
+/** Unix 桌面（linux/macos）：解压内核后需要补可执行位 */
+const needsExecutableBit = (): boolean => {
+  try {
+    const p = getPlatform()
+    return p === 'linux' || p === 'macos'
+  } catch {
+    return false
+  }
+}
+
+/** zip 条目路径安全校验：拒绝绝对路径（/ 开头、盘符）与 .. 穿越，防 zip-slip（导出供测试） */
+export const isSafeZipEntryPath = (entryPath: string): boolean => {
+  if (!entryPath || entryPath.includes('\0')) return false
+  if (entryPath.startsWith('/') || entryPath.startsWith('\\')) return false
+  if (/^[a-zA-Z]:/.test(entryPath)) return false
+  return entryPath.split(/[\\/]/).every((seg) => seg !== '..')
+}
+
+/**
+ * Unix 桌面：批量补可执行位（chmod +x，经 shell 白名单 sh 执行）
+ * 路径经参数数组传递（sh -c 'chmod +x "$@"'），不做字符串拼接，避免引号注入
+ */
+const grantExecutableBits = async (paths: string[]): Promise<boolean> => {
+  try {
+    const command = Command.create('sh', ['-c', 'chmod +x "$@"', 'lt-chmod', ...paths])
+    const output = await command.execute()
+    if (output.code !== 0) {
+      error(`chmod 失败(code=${output.code}):${output.stderr || output.stdout}`)
+      return false
+    }
+    return true
+  } catch (e: any) {
+    error(`chmod 执行出错:${JSON.stringify(e)}`)
+    return false
+  }
+}
 
 /**
  * 确保目录存在（不存在则递归创建）
@@ -253,6 +299,19 @@ export const deleteFileOrDir = async (path: string) => {
  */
 export async function downloadFile(fileUrl: string): Promise<boolean> {
   try {
+    // 协议层防线：仅允许 http/https（镜像源可自定义，不做域名白名单）
+    let url: URL
+    try {
+      url = new URL(fileUrl)
+    } catch {
+      error(`下载地址非法:${fileUrl}`)
+      return false
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      error(`不支持的下载协议:${url.protocol}`)
+      return false
+    }
+
     info(`开始下载:${fileUrl}`)
     // 使用 Tauri 的 http plugin
     const response = await fetch(fileUrl, {
@@ -273,8 +332,28 @@ export async function downloadFile(fileUrl: string): Promise<boolean> {
       return false
     }
 
-    // 获取文件名从 URL 中提取
-    const filename = fileUrl.split('/').pop() || 'downloaded_file'
+    // 文件名：取 URL path 末段并清理非法字符（防路径穿越/覆盖非预期文件）
+    let rawName = url.pathname.split('/').pop() || ''
+    try {
+      rawName = decodeURIComponent(rawName)
+    } catch {
+      /* 非法转义序列保持原样，交由下方清理 */
+    }
+    const filename = rawName
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/^\.+/, '')
+      .replace(/[\s.]+$/, '')
+    if (!filename) {
+      error(`无法从下载地址解析文件名:${fileUrl}`)
+      return false
+    }
+
+    // Content-Length 预检（存在时提前拒绝超限包体）
+    const contentLength = Number(response.headers.get('content-length') || 0)
+    if (contentLength > MAX_DOWNLOAD_BYTES) {
+      error(`下载文件超过大小上限(${contentLength} > ${MAX_DOWNLOAD_BYTES}):${fileUrl}`)
+      return false
+    }
 
     // 构建保存路径（核心独立存放在 resource/core 下）
     const savePath = await join(CORE_PATH, filename)
@@ -284,12 +363,34 @@ export async function downloadFile(fileUrl: string): Promise<boolean> {
 
     // 获取二进制数据
     const uint8Array = new Uint8Array(await response.arrayBuffer())
-    info(`开始写入文件:${savePath}`)
 
-    // 写入文件
-    await writeFileContent(savePath, uint8Array, {
-      baseDir: getBaseDir()
-    })
+    // 实际包体上限复核（Content-Length 缺失/不实时兜底）
+    if (uint8Array.byteLength > MAX_DOWNLOAD_BYTES) {
+      error(`下载文件超过大小上限:${uint8Array.byteLength}`)
+      return false
+    }
+    // zip 魔数校验（"PK"）：拒绝镜像站返回的 HTML 错误页等非压缩包内容，避免污染本地安装包
+    if (!(uint8Array[0] === 0x50 && uint8Array[1] === 0x4b)) {
+      error(`下载内容不是有效的 zip 包:${fileUrl}`)
+      return false
+    }
+
+    info(`开始写入文件:${savePath}`)
+    // 先写临时文件、校验通过后原子替换目标，不破坏已存在的可用安装包
+    const tmpPath = savePath + '.download'
+    try {
+      await writeFileContent(tmpPath, uint8Array, {
+        baseDir: getBaseDir()
+      })
+      await rename(tmpPath, savePath, {
+        oldPathBaseDir: getBaseDir(),
+        newPathBaseDir: getBaseDir()
+      })
+    } catch (e) {
+      // 清理未落位的临时文件（尽力而为，忽略清理失败）
+      await remove(tmpPath, { baseDir: getBaseDir() }).catch(() => {})
+      throw e
+    }
 
     return true
   } catch (e: any) {
@@ -333,10 +434,25 @@ export async function extractFile(
     // 使用 fflate 解压
     const files = unzipSync(zipContent)
 
-    // 分析目录结构，找到最深的公共目录
+    // 安全闸 1：条目数与解压后总大小上限（防 zip bomb）
     const paths = Object.keys(files)
+    if (paths.length > MAX_EXTRACT_ENTRIES) {
+      error(`压缩包条目数超限(${paths.length} > ${MAX_EXTRACT_ENTRIES}):${zipPath}`)
+      return false
+    }
+    let totalBytes = 0
+    for (const data of Object.values(files)) totalBytes += data.length
+    if (totalBytes > MAX_EXTRACT_TOTAL_BYTES) {
+      error(`压缩包解压后大小超限(${totalBytes} > ${MAX_EXTRACT_TOTAL_BYTES}):${zipPath}`)
+      return false
+    }
+
+    // 分析目录结构，找到最深的公共目录
     // easytier-windows-x86_64/
     const commonPrefix = await findCommonPrefix(paths)
+    // Unix 桌面解压出的内核二进制需补可执行位，先收集目标绝对路径，解压完成后统一 chmod
+    const needExecBit = needsExecutableBit()
+    const executables: string[] = []
     // 写入解压后的文件
     for (const [filePath, fileData] of Object.entries(files)) {
       try {
@@ -345,6 +461,12 @@ export async function extractFile(
         const relativePath = commonPrefix ? filePath.replace(commonPrefix, '') : filePath
         // 跳过目录项
         if (relativePath.endsWith('/')) continue
+
+        // 安全闸 2：zip-slip 防护——拒绝绝对路径 / 含 .. 的穿越条目
+        if (!isSafeZipEntryPath(relativePath) || !isSafeZipEntryPath(filePath)) {
+          error(`跳过非法压缩包条目:${filePath}`)
+          continue
+        }
 
         // 构建目标文件路径 resource\easytier-cli.exe
         let targetPath: string
@@ -360,8 +482,22 @@ export async function extractFile(
         await writeFileContent(targetPath, fileData, {
           baseDir: getBaseDir()
         })
+
+        // Unix 内核二进制通常无扩展名（easytier-core / easytier-cli），收集以便补执行位
+        if (needExecBit && !relativePath.split('/').pop()!.includes('.')) {
+          executables.push(await join(await resourceDir(), targetPath))
+        }
       } catch (e: any) {
         error(`处理文件 ${filePath} 时出错:${JSON.stringify(e)}`)
+      }
+    }
+
+    // Unix 桌面：补可执行位（无执行位内核无法启动；失败则保留压缩包便于重试）
+    if (executables.length > 0) {
+      const chmodOk = await grantExecutableBits(executables)
+      if (!chmodOk) {
+        error(`补充可执行位失败，保留压缩包:${zipPath}`)
+        return false
       }
     }
 
@@ -413,19 +549,19 @@ export const clearLogs = async () => {
   }
 }
 
-// 清空logs目录下 easytier 的日志文件
+// 清空 logs 目录下内核日志文件（当前文件 + 轮转/旧版命名的历史文件）
+// 仅清空已存在的文件（旧实现按日期拼名会意外创建残留空文件；轮转实际为 easytier.log.N 而非日期后缀）
 export const clearETLogs = async (fileName: string) => {
   try {
-    const date = dayjs(new Date()).format('YYYY-MM-DD')
-
-    let logsFile = await join('logs', fileName + '.' + date)
-    await writeFileContent(logsFile, '', { baseDir: getBaseDir() })
-
-    logsFile = await join('logs', fileName + '.' + date + '.log')
-    await writeFileContent(logsFile, '', { baseDir: getBaseDir() })
-
-    logsFile = await join('logs', 'easytier.log')
-    await writeFileContent(logsFile, '', { baseDir: getBaseDir() })
+    const files = await listFiles(LOG_PATH)
+    const targets = files.filter((f) => isKernelLogFile(f, fileName))
+    for (const target of targets) {
+      try {
+        await writeFileContent(await join(LOG_PATH, target), '', { baseDir: getBaseDir() })
+      } catch (e: any) {
+        error(`清理日志文件 ${target} 失败（不影响使用）: ${e.message || e}`)
+      }
+    }
   } catch (e: any) {
     // 如果清理失败，只记录警告，不阻塞启动
     error(`清理日志文件失败（不影响使用）: ${e.message || e}`)

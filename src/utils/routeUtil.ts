@@ -24,7 +24,10 @@ import {
   routeCost
 } from '@/utils/easyTierUtil'
 import { deleteFileOrDir, listFiles, readFileContent, writeFileContent } from '@/utils/fileUtil'
+import { pickLogTarget } from '@/utils/coreLogUtil'
+import { PS_ADAPTER_FILTER_CLAUSE } from '@/utils/sysUtil'
 import { isAndroid } from '@/utils/platformUtil'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { LOG_PATH, RESOURCE_PATH } from '@/constants/easytier'
 
 // === 5.9 退出节点路由（配置级开关驱动，迁移自旧版 views/index setExitRoute） ===
@@ -83,9 +86,10 @@ const clearExitRouteRecord = async () => {
 }
 
 // 出口节点路由为 Windows 桌面专属能力（route 命令 / PowerShell / Winsock），Android 一律视为非适用环境
+// withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri() 检测
 const isTauriEnv = () => {
   try {
-    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined && !isAndroid()
+    return isTauriRuntime() && !isAndroid()
   } catch {
     return false
   }
@@ -103,13 +107,11 @@ const retryGet = async (fn: () => Promise<string | boolean | null>, maxRetry = 1
   return null
 }
 
-// 读取配置最新日志文本（供公网 IP 提取，轮转命名兼容 5.3）
+// 读取配置最新日志文本（供公网 IP 提取；目标文件选择与 LogViewer 同源，详见 coreLogUtil）
 const readConfigLog = async (configName: string): Promise<string> => {
   try {
     const files = await listFiles(LOG_PATH)
-    const matched = files.filter((f) => f.startsWith(configName + '.'))
-    const latest = matched.length > 0 ? matched.sort().at(-1) : undefined
-    const target = latest || 'easytier.log'
+    const target = pickLogTarget(files, configName)
     return (await readFileContent(`${LOG_PATH}/${target}`)) as string
   } catch {
     return ''
@@ -121,7 +123,7 @@ const getDefaultGateway = async (): Promise<string | null> => {
     const res = await executeCmd('powershell', [
       '-NoProfile',
       '-Command',
-      'Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq "Up" -and $_.NetAdapter.Name -notlike "et*" -and $_.NetAdapter.Name -notlike "easytier*"} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty IPv4DefaultGateway | Select-Object -ExpandProperty NextHop'
+      `Get-NetIPConfiguration | Where-Object {${PS_ADAPTER_FILTER_CLAUSE}} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty IPv4DefaultGateway | Select-Object -ExpandProperty NextHop`
     ])
     const match = typeof res === 'string' ? res.match(/\d+\.\d+\.\d+\.\d+/) : null
     return match ? match[0] : null

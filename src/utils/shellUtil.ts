@@ -12,7 +12,14 @@ import { invoke } from '@tauri-apps/api/core'
 import { join, resourceDir } from '@tauri-apps/api/path'
 import { attachConsole, debug, error, info, warn } from '@tauri-apps/plugin-log'
 import { Command, type SpawnOptions } from '@tauri-apps/plugin-shell'
-import { getCliDir, getCoreDir, getResourceDir, readFileContent } from './fileUtil'
+import { getCliDir, getCoreDir, getLogsDir, getResourceDir, readFileContent } from './fileUtil'
+import {
+  DEFAULT_LOG_COUNT,
+  DEFAULT_LOG_SIZE_MB,
+  normalizeLogLevel,
+  parsePositiveInt,
+  resolveLogDir
+} from './coreLogUtil'
 import { getPlatform, sleep } from './sysUtil'
 import * as toml from 'smol-toml'
 import { clearExitRoute } from './routeUtil'
@@ -21,14 +28,30 @@ import { t } from '@/utils/i18nUtil'
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
 attachConsole()
 
+// 内核日志兜底目录：<resource>/logs（保证与读取端 LogViewer/clearETLogs/routeUtil 同目录）；
+// 极端失败（非 Tauri 环境等）时退回相对 './logs' 由内核按进程 CWD 解析
+async function getDefaultLogDir(): Promise<string> {
+  try {
+    return await getLogsDir()
+  } catch {
+    return './logs'
+  }
+}
+
 /**
- * 从配置文件中读取日志配置
+ * 从配置文件中读取日志/端口相关配置（内核启动与服务安装共用）
+ *
+ * 日志目录统一归一化为绝对路径：配置为空或相对路径时回落 <resource>/logs。
+ * 内置内核（v2.6.x）忽略 TOML `[file_logger]` 段，其日志由本层翻译为 CLI 参数
+ * （--file-log-dir/level/size/count）传入；相对目录会随内核进程 CWD 漂移，
+ * 导致日志查看/清理/路由提取全部读不到（修复 H-02）。
  * @param configFileName 配置文件名
- * @returns 日志目录和日志级别
  */
 async function getConfigFromFile(configFileName: string): Promise<{
   logDir: string
   logLevel: string
+  sizeMb: number
+  count: number
   rpcPortal: string | undefined
   listeners: string[]
 }> {
@@ -37,19 +60,29 @@ async function getConfigFromFile(configFileName: string): Promise<{
     const configContent = (await readFileContent(CONFIG_PATH + '/' + configFileName)) as string
     const config = toml.parse(configContent) as any
 
-    // 获取日志配置，提供默认值
-    const logDir = config.file_logger?.dir || './log'
-    const logLevel = config.file_logger?.level || 'info'
+    // 获取日志配置（归一化目录/级别与轮转参数，非法值回落默认，避免内核启动 panic）
+    const logger = config.file_logger || {}
+    const logDir = await resolveLogDir(logger.dir, getDefaultLogDir)
+    const logLevel = normalizeLogLevel(logger.level)
+    const sizeMb = parsePositiveInt(logger.size_mb ?? logger.size, DEFAULT_LOG_SIZE_MB)
+    const count = parsePositiveInt(logger.count, DEFAULT_LOG_COUNT)
     // 获取 rpc_portal 配置（v2.5.0 起配置文件中的 rpc_portal 不再生效，需通过命令行参数传递）
     const rpcPortal = config.rpc_portal || undefined
     // 获取监听地址列表（如 ["tcp://0.0.0.0:11000"]）
     const listeners = config.listeners || []
 
-    return { logDir, logLevel, rpcPortal, listeners }
+    return { logDir, logLevel, sizeMb, count, rpcPortal, listeners }
   } catch (e) {
     error(`读取配置文件失败:${JSON.stringify(e)}`)
-    // 返回默认值
-    return { logDir: './log', logLevel: 'info', rpcPortal: undefined, listeners: [] }
+    // 返回默认值（日志目录仍尽力回落到应用 logs 目录）
+    return {
+      logDir: await getDefaultLogDir(),
+      logLevel: 'info',
+      sizeMb: DEFAULT_LOG_SIZE_MB,
+      count: DEFAULT_LOG_COUNT,
+      rpcPortal: undefined,
+      listeners: []
+    }
   }
 }
 
@@ -64,8 +97,8 @@ export async function buildCoreArgsWithLogConfig(
   configFileName: string,
   configPath: string
 ): Promise<string> {
-  const { logDir, logLevel, rpcPortal } = await getConfigFromFile(configFileName)
-  let args = `--file-log-dir "${logDir}" --file-log-level ${logLevel} --config-file "${configPath}"`
+  const { logDir, logLevel, sizeMb, count, rpcPortal } = await getConfigFromFile(configFileName)
+  let args = `--file-log-dir "${logDir}" --file-log-level ${logLevel} --file-log-size ${sizeMb} --file-log-count ${count} --config-file "${configPath}"`
   if (rpcPortal) {
     args += ` --rpc-portal ${rpcPortal}`
   }
@@ -77,7 +110,12 @@ export async function buildCoreArgsWithLogConfig(
  * @param program 程序路径
  * @param args 程序参数数组
  * @param options 执行选项（可选）
- * @returns Promise<string> 程序输出
+ * @returns Promise<any> 程序输出
+ *
+ * 返回契约（退出码是唯一成功依据，stderr 仅作诊断）：
+ * - 退出码 0 且 stdout 非空 → 返回 stdout 字符串（trim 后）
+ * - 退出码 0 但 stdout 为空 → 返回 { code: 0, stdout, stderr }
+ * - 退出码非 0 → 返回 { code, msg, stdout, stderr }（msg 为 stderr 优先的错误摘要）
  *
  * 使用示例:
  * ```
@@ -100,24 +138,21 @@ export async function executeCmd(
     })
     // 执行并等待完成
     const output = await command.execute()
-    const code = output.code || 1
-    const stderr = output.stderr || ''
+    // 注：output.code 为 null（信号终止等）时按 0 处理；不少 Windows 工具成功时也会向 stderr 输出进度/告警
+    const code = output.code ?? 0
     const stdout = output.stdout || ''
-    if (stderr || (code && code == 3)) {
-      if (stderr.includes('由于目标计算机积极拒绝') || code === 3) {
-        return {
-          code: code || 403,
-          msg: stderr.trim() || stdout.trim() || output
-        }
-      }
+    const stderr = output.stderr || ''
+    if (code !== 0) {
       warn(`执行参数:${JSON.stringify(args)}`)
-      warn(`执行程序失败:${stdout || stderr || '未知错误'}`)
+      warn(`执行程序失败(code=${code}):${stderr || stdout || '未知错误'}`)
       return {
-        code: code || 403,
-        msg: stderr.trim() || stdout.trim() || output
+        code,
+        msg: stderr.trim() || stdout.trim() || String(output),
+        stdout: stdout.trim(),
+        stderr: stderr.trim()
       }
     }
-    return stdout.trim() || output
+    return stdout.trim() || { code: 0, stdout: '', stderr: stderr.trim() }
   } catch (e: any) {
     error(`执行程序失败:${JSON.stringify(e)}`)
     throw e
@@ -201,7 +236,7 @@ export async function executeBack(
     return child.pid
   } catch (e: any) {
     error(`启动后台程序失败:${e}`)
-    throw error
+    throw e
   }
 }
 
@@ -297,7 +332,13 @@ export async function runEasyTierCore(configFileName: string): Promise<any> {
     const program = await getCoreDir()
 
     // 读取配置文件获取日志配置和 rpc_portal
-    const { logDir, logLevel, rpcPortal: tomlRpcPortal } = await getConfigFromFile(configFileName)
+    const {
+      logDir,
+      logLevel,
+      sizeMb,
+      count,
+      rpcPortal: tomlRpcPortal
+    } = await getConfigFromFile(configFileName)
 
     // 确定实际使用的 RPC 端口（双层冲突检测）
     let actualRpcPortal: string
@@ -323,9 +364,9 @@ export async function runEasyTierCore(configFileName: string): Promise<any> {
       '--file-log-level',
       logLevel,
       '--file-log-size',
-      '10',
+      `${sizeMb}`,
       '--file-log-count',
-      '10',
+      `${count}`,
       '--config-file',
       `${configPath}`,
       '--rpc-portal',
@@ -461,16 +502,6 @@ export async function killAllEasyTierCoreProcessUnix() {
   return await executeCmd('killall', ['easytier-core'])
 }
 
-// 测试是否有 wmic 命令
-export const testWMIC = async () => {
-  try {
-    await executeCmd('wmic', ['os'], { encoding: 'gbk' })
-    return true
-  } catch (_e: any) {
-    return false
-  }
-}
-
 /**
  * 获取正在运行的程序信息
  * @param {string} [programName] - 可选的程序名，用于模糊查询
@@ -515,15 +546,26 @@ export const getRunningProcesses = async (
     }
     executeCmd(program, args, { encoding })
       .then((res) => {
-        res = JSON.parse(res || '[]')
-        res = Array.isArray(res) ? res : []
-        const result = res.filter((r: any) => !r.name.includes('powershell.exe'))
-        if (result.length === 0) {
+        // 命令失败（返回 { code, msg }）或 grep 无匹配（Unix 下 grep 退出码 1）时视为无匹配进程
+        if (typeof res !== 'string') {
           resolve(processInfo)
           return
         }
         if (platform === 'windows') {
-          // 解析JSON 输出
+          // 解析 PowerShell 的 JSON 输出
+          // 注：ConvertTo-Json 在仅一条结果时输出单个对象而非数组，需归一化为数组
+          let parsed: any
+          try {
+            parsed = JSON.parse(res || '[]')
+          } catch {
+            parsed = []
+          }
+          const list = Array.isArray(parsed)
+            ? parsed
+            : parsed && typeof parsed === 'object'
+              ? [parsed]
+              : []
+          const result = list.filter((r: any) => !String(r.name || '').includes('powershell.exe'))
           result.forEach((p: any) => {
             if (p.commandLine && p.commandLine.includes(programName)) {
               const process = {
@@ -537,34 +579,31 @@ export const getRunningProcesses = async (
               processInfo.push(process)
             }
           })
-        } else if (platform === 'macos' || platform === 'linux') {
-          // 解析 macOS 和 Linux 的 ps 输出
-          const lines = result.trim().split('\n')
-          lines.forEach((line: string) => {
-            const parts = line.trim().split(/\s+/)
-            if (parts.length >= 4) {
-              const [comm, ...argsParts] = parts
-              const pidIndex = argsParts.findIndex((p) => !isNaN(parseInt(p, 10)))
-              if (pidIndex > -1) {
-                const commandLine = argsParts.slice(0, pidIndex).join(' ')
-                const pid = argsParts[pidIndex]
-                const rss = argsParts[pidIndex + 1]
-
-                if (commandLine.includes(programName)) {
-                  const process = {
-                    name: comm,
-                    commandLine: commandLine,
-                    path: comm, // ps 命令不直接提供可执行文件路径
-                    pid: parseInt(pid, 10),
-                    memory: parseInt(rss, 10) * 1024, // rss 单位是 KB
-                    fileName: programName
-                  }
-                  processInfo.push(process)
-                }
-              }
-            }
-          })
+          resolve(processInfo)
+          return
         }
+        // 解析 macOS 和 Linux 的 ps 文本输出（列固定为 comm,args,pid,rss，从行尾定位 pid/rss 最稳妥）
+        const lines = res.trim().split('\n')
+        lines.forEach((line: string) => {
+          const parts = line.trim().split(/\s+/)
+          if (parts.length >= 4) {
+            const rss = parts[parts.length - 1]
+            const pid = parts[parts.length - 2]
+            const comm = parts[0]
+            const commandLine = parts.slice(1, parts.length - 2).join(' ')
+            if (commandLine.includes(programName)) {
+              const process = {
+                name: comm,
+                commandLine: commandLine,
+                path: comm, // ps 命令不直接提供可执行文件路径
+                pid: parseInt(pid, 10),
+                memory: parseInt(rss, 10) * 1024, // rss 单位是 KB
+                fileName: programName
+              }
+              processInfo.push(process)
+            }
+          }
+        })
         resolve(processInfo)
       })
       .catch((error) => {
@@ -836,16 +875,20 @@ export const installServiceWithOfficialCli = async (
 
       // 读取配置文件获取日志配置和 rpc_portal
       // v2.5.0 起 rpc_portal 不再从配置文件读取，需通过 --rpc-portal 命令行参数传递
-      const { logDir, logLevel, rpcPortal } = await getConfigFromFile(configFileName)
+      const { logDir, logLevel, sizeMb, count, rpcPortal } = await getConfigFromFile(configFileName)
 
-      // 构建服务运行时的参数
-      // 格式: easytier-core --file-log-dir ./log --file-log-level info --config-file config.toml [--rpc-portal addr]
+      // 构建服务运行时的参数（logDir 为绝对路径，与服务进程 CWD 无关）
+      // 格式: easytier-core --file-log-dir <abs> --file-log-level info --file-log-size 10 --file-log-count 10 --config-file config.toml [--rpc-portal addr]
       args.push(
         '--',
         '--file-log-dir',
         `${logDir}`,
         '--file-log-level',
         logLevel,
+        '--file-log-size',
+        `${sizeMb}`,
+        '--file-log-count',
+        `${count}`,
         '--config-file',
         `${configPath}`
       )

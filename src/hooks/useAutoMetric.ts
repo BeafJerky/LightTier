@@ -11,15 +11,18 @@ import { executeCmd } from '@/utils/shellUtil'
 import { readFileContent } from '@/utils/fileUtil'
 import { CONFIG_PATH } from '@/constants/easytier'
 import { isAndroid } from '@/utils/platformUtil'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import { PS_ADAPTER_FILTER_CLAUSE } from '@/utils/sysUtil'
 import * as toml from 'smol-toml'
 
 // 模块级单例状态 — 跨视图共享
 const disabledAutoMetricAdapter = ref<string | null>(null)
 
 // 环境检测（非 Tauri 环境或 Android 静默跳过；自动跃点为 Windows 网卡概念）
+// 注：withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri() 检测（读 __TAURI_INTERNALS__）
 const isTauri = (): boolean => {
   try {
-    return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined && !isAndroid()
+    return isTauriRuntime() && !isAndroid()
   } catch {
     return false
   }
@@ -34,7 +37,8 @@ const getActiveNetworkAdapter = async (): Promise<string | null> => {
       [
         '-NoProfile',
         '-Command',
-        'Get-NetIPConfiguration | Where-Object {$_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq "Up" -and $_.NetAdapter.Name -notlike "et*" -and $_.NetAdapter.Name -notlike "easytier*"} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty NetAdapter | Select-Object -ExpandProperty Name'
+        // PS_ADAPTER_FILTER_CLAUSE 统一维护网卡筛选（含 et_* / easytier* 排除，见 sysUtil）
+        `Get-NetIPConfiguration | Where-Object {${PS_ADAPTER_FILTER_CLAUSE}} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty NetAdapter | Select-Object -ExpandProperty Name`
       ],
       { encoding: 'gbk' }
     )

@@ -1,10 +1,4 @@
 import { arch, hostname, locale, platform, type } from '@tauri-apps/plugin-os'
-import {
-  isPermissionGranted,
-  type Options,
-  requestPermission,
-  sendNotification
-} from '@tauri-apps/plugin-notification'
 import { getVersion } from '@tauri-apps/api/app'
 import { Command } from '@tauri-apps/plugin-shell'
 
@@ -54,25 +48,15 @@ export const sleep = (ms: number) => {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export const notify = async (
-  body: string,
-  title: string = 'EasyTier 管理器',
-  options?: Options
-) => {
-  // 通知权限
-  let permissionGranted = await isPermissionGranted()
-
-  // 如果没有，我们需要请求它
-  if (!permissionGranted) {
-    const permission = await requestPermission()
-    permissionGranted = permission === 'granted'
-  }
-
-  // 一旦获得许可，我们就可以发送通知
-  if (permissionGranted) {
-    sendNotification({ title, body, silent: true, ...options })
-  }
-}
+/**
+ * 上网网卡筛选子句（PowerShell Where-Object 条件，routeUtil / useAutoMetric 共用单一样式）
+ *
+ * 语义：IPv4 默认网关存在、网卡 Up、排除 EasyTier 虚拟网卡。
+ * 注意排除模式必须写 "et_*"（内核 v2.6.4 生成 et_<序号>_<随机4位>，见 easytier virtual_nic.rs）
+ * 而非 "et*"——PowerShell -like 大小写不敏感，"et*" 会连默认名为 Ethernet 的物理网卡一起排除。
+ */
+export const PS_ADAPTER_FILTER_CLAUSE =
+  '$_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq "Up" -and $_.NetAdapter.Name -notlike "et_*" -and $_.NetAdapter.Name -notlike "easytier*"'
 
 /**
  * 获取当前App的版本
