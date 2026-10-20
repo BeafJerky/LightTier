@@ -32,7 +32,13 @@ export const MANAGER_INFO_API = 'https://api.github.com/repos/BeafJerky/LIghtTie
 export const GITHUB_EASYTIER = 'https://github.com/EasyTier/EasyTier'
 export const GITHUB_DOWN_URL = '/releases/download'
 export const VERSION_PREFIX = 'v'
-export const EASYTIER_NAME = '/easytier-<%= osType %>-<%= osArch %>-<%= version %>.zip'
+/**
+ * 生成内核压缩包文件名（纯字符串拼接）。
+ * 禁止改用 lodash.template：其编译依赖 new Function，会被生产包严格 CSP（script-src 'self'）拦截，
+ * 且异常会导致文件名恒为空，下载/安装内核全部失效。
+ */
+export const getCoreFileName = (osType: string, osArch: string, version: string): string =>
+  `easytier-${osType}-${osArch}-${version}.zip`
 export const PREFIX_SVC = 'easytier-'
 export const PREFIX_SVC_WEB = 'easytierweb-'
 export const STUN_SERVER_URL =

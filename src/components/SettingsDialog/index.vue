@@ -694,14 +694,13 @@ import {
   CORE_PATH,
   GITHUB_EASYTIER,
   GITHUB_DOWN_URL,
-  EASYTIER_NAME,
+  getCoreFileName,
   BUILTIN_CORE_VERSION,
   MANAGER_REPO_URL,
   MANAGER_REPO_HOME
 } from '@/constants/easytier'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { resourceDir, join } from '@tauri-apps/api/path'
-import { template } from 'lodash-es'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -1073,17 +1072,12 @@ const handleClearLogs = async () => {
 }
 
 // === 核心管理 ===
-// 按当前所选版本拼出内核压缩包文件名（模板 EASYTIER_NAME）
+// 按当前所选版本拼出内核压缩包文件名（纯字符串拼接，避免 CSP 拦截 lodash.template 的 new Function）
 const updateCoreFileName = () => {
   try {
-    const tpl = template(EASYTIER_NAME)
-    // EASYTIER_NAME 以 '/' 开头，去掉前导斜杠，避免拼接 URL 时出现双斜杠（如 v2.5.0//easytier-...zip）
-    coreFileName.value = tpl({
-      osType: getOsType(),
-      osArch: getArch(),
-      version: coreVerSelect.value
-    }).replace(/^\//, '')
-  } catch {
+    coreFileName.value = getCoreFileName(getOsType(), getArch(), coreVerSelect.value)
+  } catch (e) {
+    console.error('生成内核文件名失败:', e)
     coreFileName.value = ''
   }
 }
