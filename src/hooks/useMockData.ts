@@ -368,22 +368,54 @@ export const useMockData = () => {
     }
   }
 
+  // 记录服务安装方式：detectServiceInstallMethod 依据该记录选择启动/停止/卸载实现
+  const saveServiceInstallMethod = (configFileName: string, installMethod: 'nssm' | 'official') => {
+    try {
+      localStorage.setItem(`service-config:${configFileName}`, JSON.stringify({ installMethod }))
+    } catch {
+      /* localStorage 不可用时忽略（仅影响方式探测） */
+    }
+  }
+  const clearServiceInstallMethod = (configFileName: string) => {
+    try {
+      localStorage.removeItem(`service-config:${configFileName}`)
+    } catch {
+      /* ignore */
+    }
+  }
+
   const getInstallService = () => {
     if (isMock) return mockInstallService
     return async (configFileName: string, options?: any) => {
       const { PREFIX_SVC } = await import('@/constants/easytier')
-      const { installServiceOnWindows, buildCoreArgsWithLogConfig } =
-        await import('@/utils/shellUtil')
       const { join, resourceDir } = await import('@tauri-apps/api/path')
       const { CONFIG_PATH } = await import('@/constants/easytier')
       const configPath = await join(await resourceDir(), CONFIG_PATH, configFileName + '.toml')
       const serviceName = PREFIX_SVC + configFileName
-      const args = await buildCoreArgsWithLogConfig(configFileName + '.toml', configPath)
-      const installOptions =
-        options?.username && options?.password
-          ? { username: options.username, password: options.password }
-          : undefined
-      return installServiceOnWindows(serviceName, args, installOptions) as Promise<boolean>
+      const installMethod: 'nssm' | 'official' =
+        options?.installMethod === 'official' ? 'official' : 'nssm'
+      let ok: boolean
+      if (installMethod === 'official') {
+        const { installServiceWithOfficialCli } = await import('@/utils/shellUtil')
+        ok = await installServiceWithOfficialCli(serviceName, configPath, configFileName, {
+          description: options?.description,
+          displayName: options?.displayName,
+          // 未开启开机自启时显式传 --disable-autostart true
+          disableAutostart: options?.enableAutostart === false,
+          coreVersion: options?.coreVersion
+        })
+      } else {
+        const { installServiceOnWindows, buildCoreArgsWithLogConfig } =
+          await import('@/utils/shellUtil')
+        const args = await buildCoreArgsWithLogConfig(configFileName + '.toml', configPath)
+        const installOptions =
+          options?.username && options?.password
+            ? { username: options.username, password: options.password }
+            : undefined
+        ok = await installServiceOnWindows(serviceName, args, installOptions)
+      }
+      if (ok) saveServiceInstallMethod(configFileName, installMethod)
+      return ok
     }
   }
 
@@ -391,8 +423,19 @@ export const useMockData = () => {
     if (isMock) return mockUninstallService
     return async (configFileName: string) => {
       const { PREFIX_SVC } = await import('@/constants/easytier')
-      const { uninstallServiceOnWindows } = await import('@/utils/shellUtil')
-      return uninstallServiceOnWindows(PREFIX_SVC + configFileName) as Promise<boolean>
+      const {
+        detectServiceInstallMethod,
+        uninstallServiceOnWindows,
+        uninstallServiceWithOfficialCli
+      } = await import('@/utils/shellUtil')
+      const serviceName = PREFIX_SVC + configFileName
+      const method = await detectServiceInstallMethod(serviceName)
+      const ok =
+        method === 'official'
+          ? await uninstallServiceWithOfficialCli(serviceName)
+          : await uninstallServiceOnWindows(serviceName)
+      if (ok) clearServiceInstallMethod(configFileName)
+      return ok
     }
   }
 
@@ -400,8 +443,13 @@ export const useMockData = () => {
     if (isMock) return mockStartService
     return async (configFileName: string) => {
       const { PREFIX_SVC } = await import('@/constants/easytier')
-      const { startServiceOnWindows } = await import('@/utils/shellUtil')
-      return startServiceOnWindows(PREFIX_SVC + configFileName) as Promise<boolean>
+      const { detectServiceInstallMethod, startServiceOnWindows, startServiceWithOfficialCli } =
+        await import('@/utils/shellUtil')
+      const serviceName = PREFIX_SVC + configFileName
+      const method = await detectServiceInstallMethod(serviceName)
+      if (method === 'official') return startServiceWithOfficialCli(serviceName)
+      if (method === 'nssm') return startServiceOnWindows(serviceName)
+      return false
     }
   }
 
@@ -409,8 +457,13 @@ export const useMockData = () => {
     if (isMock) return mockStopService
     return async (configFileName: string) => {
       const { PREFIX_SVC } = await import('@/constants/easytier')
-      const { stopServiceOnWindows } = await import('@/utils/shellUtil')
-      return stopServiceOnWindows(PREFIX_SVC + configFileName) as Promise<boolean>
+      const { detectServiceInstallMethod, stopServiceOnWindows, stopServiceWithOfficialCli } =
+        await import('@/utils/shellUtil')
+      const serviceName = PREFIX_SVC + configFileName
+      const method = await detectServiceInstallMethod(serviceName)
+      if (method === 'official') return stopServiceWithOfficialCli(serviceName)
+      if (method === 'nssm') return stopServiceOnWindows(serviceName)
+      return false
     }
   }
 

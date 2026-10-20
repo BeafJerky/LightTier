@@ -300,6 +300,14 @@
             </div>
           </div>
 
+          <!-- 版本适配档案：表单字段 / CLI / 服务参数均按已安装内核切换 -->
+          <div v-if="!isAndroidPlatform" class="sd-row">
+            <div class="sd-row-info">
+              <span class="sd-row-title">{{ t('newSettings.compatProfile') }}</span>
+              <span class="sd-row-desc">{{ compatProfileDesc }}</span>
+            </div>
+          </div>
+
           <!-- 核心路径（Android 内核编译期内置，无独立路径） -->
           <div v-if="!isAndroidPlatform" class="sd-row">
             <div class="sd-row-info">
@@ -370,7 +378,14 @@
                   ref="versionTriggerRef"
                   @click="versionDropdownOpen = !versionDropdownOpen"
                 >
-                  <span>{{ coreVerSelect }}</span>
+                  <span class="sd-select-value">
+                    <span>{{ coreVerSelect }}</span>
+                    <span
+                      class="sd-core-chip"
+                      :class="selectedCoreOption?.channel === 'prerelease' ? 'pre' : 'stable'"
+                      >{{ selectedChannelLabel }}</span
+                    >
+                  </span>
                   <svg
                     class="sd-select-arrow"
                     :class="{ open: versionDropdownOpen }"
@@ -391,7 +406,7 @@
                 <Teleport to="body">
                   <div
                     v-if="versionDropdownOpen"
-                    class="sd-select-dropdown sd-select-dropdown-fixed"
+                    class="sd-select-dropdown sd-select-dropdown-fixed sd-version-dropdown"
                     :style="dropdownStyle"
                   >
                     <div
@@ -401,22 +416,28 @@
                       :class="{ active: coreVerSelect === item.tag_name }"
                       @click="((coreVerSelect = item.tag_name), (versionDropdownOpen = false))"
                     >
-                      {{ item.tag_name }}
+                      <span class="sd-select-option-label">{{ item.tag_name }}</span>
+                      <span
+                        class="sd-core-chip"
+                        :class="item.channel === 'prerelease' ? 'pre' : 'stable'"
+                        >{{
+                          item.channel === 'prerelease'
+                            ? t('newSettings.channelPrerelease')
+                            : t('newSettings.channelStable')
+                        }}</span
+                      >
+                      <span v-if="item.builtin" class="sd-core-chip builtin">{{
+                        t('newSettings.builtinBadge')
+                      }}</span>
+                      <span
+                        v-if="item.tag_name === store.detectedCoreVersion"
+                        class="sd-core-chip installed"
+                        >{{ t('newSettings.installedBadge') }}</span
+                      >
                     </div>
                   </div>
                 </Teleport>
               </div>
-              <button
-                class="sd-btn sd-btn-ghost"
-                @click="handleRefreshVersions"
-                :disabled="refreshingVersions"
-              >
-                {{
-                  refreshingVersions
-                    ? t('newSettings.refreshing')
-                    : t('newSettings.refreshVersions')
-                }}
-              </button>
             </div>
             <div class="sd-core-install-actions">
               <button
@@ -491,10 +512,16 @@
                 />
                 <button
                   class="sd-lock-eye"
+                  type="button"
+                  @mousedown.prevent
                   @click="lockPwdVisible = !lockPwdVisible"
                   :title="
                     lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
                   "
+                  :aria-label="
+                    lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
+                  "
+                  :aria-pressed="lockPwdVisible"
                 >
                   <svg
                     v-if="lockPwdVisible"
@@ -526,6 +553,7 @@
               </div>
               <button
                 class="sd-btn sd-btn-danger"
+                type="button"
                 @click="handleClearLockPassword"
                 :disabled="!store.lockPassword"
                 >{{ t('newSettings.lockPasswordClear') }}</button
@@ -660,15 +688,13 @@ import { useStorage } from '@/hooks/web/useStorage'
 import { clearETLogs, clearLogs, downloadFile, openPath } from '@/utils/fileUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
 import { hashLockPassword } from '@/utils/lockUtil'
-import { runEasyTierCli } from '@/utils/shellUtil'
-import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
+import { CORE_VERSION_OPTIONS } from '@/constants/kernelCompat'
 import {
   CORE_PATH,
   GITHUB_EASYTIER,
   GITHUB_DOWN_URL,
   EASYTIER_NAME,
-  DEFAULT_VER_OPTIONS,
   BUILTIN_CORE_VERSION,
   MANAGER_REPO_URL,
   MANAGER_REPO_HOME
@@ -811,7 +837,11 @@ const handleOpenManagerReleases = async () => {
 
 // 关于页数据
 const appVersion = ref('...')
-const coreVersion = ref(t('newCommon.checking'))
+// 内核版本展示：优先用全局探测结果（规范化前原文），探测中显示占位
+const coreVersion = computed(() => {
+  if (store.coreVersionDetecting) return t('newCommon.checking')
+  return store.coreVersionRaw || t('newSettings.notInstalled')
+})
 
 // 核心版本下拉：点击外部收起
 const versionDropdownRef = ref<HTMLElement | null>(null)
@@ -884,12 +914,34 @@ const clearingLogs = ref(false)
 // 核心管理状态
 const checkingCore = ref(false)
 const corePath = ref('')
-// 默认选中与安装包内置 core 压缩包版本一致（首次安装免下载）
+// 可下载版本为固定列表（constants/kernelCompat.ts），默认选中内置版本（免下载）
+const coreVerOptions = CORE_VERSION_OPTIONS
 const coreVerSelect = ref(BUILTIN_CORE_VERSION)
-const coreVerOptions = ref<{ name: string; tag_name: string }[]>([...DEFAULT_VER_OPTIONS])
-const refreshingVersions = ref(false)
 const downloadingCore = ref(false)
 const coreFileName = ref('')
+const selectedCoreOption = computed(() =>
+  coreVerOptions.find((o) => o.tag_name === coreVerSelect.value)
+)
+// 切换目标版本时展示的渠道/内置标记（正式版与预览版的配置行为不同，需明确提示）
+const selectedChannelLabel = computed(() =>
+  selectedCoreOption.value?.channel === 'prerelease'
+    ? t('newSettings.channelPrerelease')
+    : t('newSettings.channelStable')
+)
+// 当前内核的适配档案说明：让用户确认切换后表单/命令会跟随版本变化
+const compatProfileDesc = computed(() => {
+  if (store.coreVersionDetecting) return t('newCommon.checking')
+  const caps = store.coreCaps
+  const version = store.detectedCoreVersion
+  if (!version) return t('newSettings.compatUnknown')
+  if (!caps) return t('newSettings.compatUnknown')
+  if (!caps.known) return t('newSettings.compatOutOfRange', { version })
+  return t('newSettings.compatKnown', {
+    version,
+    flags: caps.flags?.size ?? 0,
+    strict: caps.flagsStrict ? t('newSettings.compatStrict') : ''
+  })
+})
 
 // 5.10：镜像延迟测试
 const {
@@ -941,37 +993,23 @@ watch(visible, async (v) => {
     } catch {
       appVersion.value = t('newSettings.unknown')
     }
-    // Android：内核编译期内置，版本直接取内核编译版本；桌面：easytier-cli --version
-    if (isAndroidPlatform) {
-      try {
-        const ver = await coreApi.getCoreVersion()
-        coreVersion.value = ver ? `v${ver}` : t('newSettings.notInstalled')
-      } catch {
-        coreVersion.value = t('newSettings.notInstalled')
-      }
-    } else {
-      try {
-        const res = await runEasyTierCli(['--version'])
-        coreVersion.value = String(res).trim() || t('newSettings.notInstalled')
-      } catch {
-        coreVersion.value = t('newSettings.notInstalled')
-      }
+    // 内核版本探测走全局 store：桌面 easytier-cli -V / Android 编译期内置版本
+    try {
+      await store.detectCoreVersion()
+    } catch {
+      /* 探测失败按未安装处理，表单保持宽松展示 */
+    }
+    if (!isAndroidPlatform) {
       // 加载核心路径
       try {
         corePath.value = await join(await resourceDir(), CORE_PATH)
       } catch {
         corePath.value = t('newSettings.unknown')
       }
-      // 初始化核心版本列表
-      try {
-        const data = (await store.getCoreReleaseInfo()) as any[]
-        if (data && data.length > 0) {
-          coreVerOptions.value = data
-          coreVerSelect.value = data[0].tag_name
-        }
-      } catch {
-        /* ignore */
-      }
+      // 固定版本列表：已安装版本在列表内则默认选中它，否则回退内置版本
+      const installed = store.detectedCoreVersion
+      const match = coreVerOptions.find((o) => o.tag_name === installed)
+      coreVerSelect.value = match ? match.tag_name : BUILTIN_CORE_VERSION
       updateCoreFileName()
     }
   }
@@ -1055,14 +1093,11 @@ watch(coreVerSelect, () => {
   updateCoreFileName()
 })
 
-// 手动重新检测内核版本（cli -V；403 等异常值统一视为未安装）
+// 手动重新检测内核版本（403 等异常值在 store 内统一视为未安装）
 const handleCheckCore = async () => {
   checkingCore.value = true
   try {
-    const res = await runEasyTierCli(['-V'])
-    coreVersion.value = res && res !== 403 ? String(res).trim() : t('newSettings.notInstalled')
-  } catch {
-    coreVersion.value = t('newSettings.notInstalled')
+    await store.detectCoreVersion()
   } finally {
     checkingCore.value = false
   }
@@ -1085,23 +1120,6 @@ const handleOpenConfigPath = async () => {
     await openPath(await join(resDir, 'config'))
   } catch (e) {
     console.error(e)
-  }
-}
-
-// 从远端刷新内核版本列表（成功后默认选中最新版）
-const handleRefreshVersions = async () => {
-  refreshingVersions.value = true
-  try {
-    const data = (await store.refreshCoreReleaseInfo()) as any[]
-    if (data && data.length > 0) {
-      coreVerOptions.value = data
-      coreVerSelect.value = data[0].tag_name
-      toast.success(t('newSettings.versionUpdated'))
-    }
-  } catch (e) {
-    console.error('刷新版本列表失败:', e)
-  } finally {
-    refreshingVersions.value = false
   }
 }
 
@@ -1132,17 +1150,25 @@ const handleDownloadCore = async () => {
   }
 }
 
-// 安装所选版本内核（先确认，成功后重新检测版本）
+// 安装所选版本内核（切换前停止全部实例与服务，成功后重新检测版本）
 const handleInstallCore = async () => {
+  const target = coreVerSelect.value
+  const runningCount = store.runningList.length
+  const serviceHint = isAndroidPlatform ? '' : t('newSettings.installConfirmServiceHint')
   if (
-    !(await showConfirm(t('newSettings.installConfirmTitle'), t('newSettings.installConfirmMsg')))
+    !(await showConfirm(
+      t('newSettings.installConfirmTitle'),
+      t('newSettings.installConfirmMsg', { version: target, count: runningCount, serviceHint })
+    ))
   )
     return
-  const ok = await installCore(coreVerSelect.value)
+  const ok = await installCore(target)
   if (ok) {
-    toast.success(t('newSettings.installSuccess'))
-    // 重新检测版本
+    toast.success(t('newSettings.installSuccess', { version: target }))
+    // installCore 内部已重新探测；这里兜底刷新一次展示态
     await handleCheckCore()
+    // 切换后恢复自动运行循环的停止标记，允许后续手动启动新实例
+    store.setStopLoop(false)
   } else {
     toast.error(t('newSettings.installFail'))
   }
@@ -1544,6 +1570,59 @@ const handleInstallCore = async () => {
   background: var(--theme-bg-active, rgb(232 160 160 / 10%));
 }
 
+/* 内核版本下拉：固定列表需展示渠道/内置/已安装标记 */
+.sd-select-value {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+  min-width: 0;
+}
+
+.sd-version-dropdown {
+  min-width: 240px;
+}
+
+.sd-version-dropdown .sd-select-option {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.sd-select-option-label {
+  min-width: 52px;
+  font-family: var(--theme-font-body, 'Sora', monospace);
+}
+
+.sd-core-chip {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  border-radius: 999px;
+}
+
+.sd-core-chip.stable {
+  color: var(--theme-color-success, #7fba8a);
+  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+}
+
+.sd-core-chip.pre {
+  color: var(--theme-color-warning, #d9a441);
+  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 14%, transparent);
+}
+
+.sd-core-chip.builtin {
+  color: var(--theme-accent-primary, #d4a574);
+  background: color-mix(in srgb, var(--theme-accent-primary, #d4a574) 14%, transparent);
+}
+
+.sd-core-chip.installed {
+  color: var(--theme-text-primary, #4a3728);
+  background: var(--theme-border-light, #f5ede6);
+}
+
 /* 确认弹窗内容 */
 .sd-confirm-body {
   display: flex;
@@ -1799,14 +1878,14 @@ const handleInstallCore = async () => {
 }
 
 .sd-lock-input-bar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--theme-space-1);
 }
 
 .sd-lock-input {
-  width: 140px;
-  padding: var(--theme-space-1) var(--theme-space-3);
+  width: 160px;
+  padding: var(--theme-space-1) 30px var(--theme-space-1) var(--theme-space-3);
   font-family: var(--theme-font-body, 'Sora', sans-serif);
   font-size: 12px;
   color: var(--theme-text-primary, #4a3728);
@@ -1817,19 +1896,29 @@ const handleInstallCore = async () => {
   transition: border-color 0.15s;
 }
 
+/* WebView2/Edge 自带密码揭示按钮，会与自定义眼睛图标重复，隐藏之 */
+.sd-lock-input::-ms-reveal,
+.sd-lock-input::-ms-clear {
+  display: none;
+}
+
 .sd-lock-input:focus {
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 .sd-lock-eye {
+  position: absolute;
+  top: 50%;
+  right: 3px;
   display: flex;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   color: var(--theme-text-muted, #c8bdb2);
   cursor: pointer;
   background: none;
   border: none;
   border-radius: 50%;
+  transform: translateY(-50%);
   transition: all 0.15s;
   align-items: center;
   justify-content: center;

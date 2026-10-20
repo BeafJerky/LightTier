@@ -120,6 +120,11 @@ onMounted(async () => {
     console.error('Failed to emit frontend-ready event:', e)
   })
 
+  // 探测已安装内核版本（非阻塞）：表单/CLI/服务安装按此版本适配
+  easytierStore.detectCoreVersion().catch(() => {
+    /* 探测失败保留 null，按宽松策略展示全部字段 */
+  })
+
   // 检查是否需要锁定（首次启动）
   if (easytierStore.lockPassword && isFirstLoad.value) {
     lockNow()

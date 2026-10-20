@@ -1,4 +1,5 @@
 import type { EasyTierFormData, FormWebData } from '@/types/formTypes'
+import type { CoreFeature } from '@/constants/kernelCompat'
 
 const defaultFormData: EasyTierFormData | any = {
   hostname: '',
@@ -21,14 +22,14 @@ const defaultFormData: EasyTierFormData | any = {
   rpc_portal: '0.0.0.0:15888',
   rpc_portal_whitelist: undefined, // RPC 白名单
   socks5_proxy: undefined, // SOCKS5 代理（顶层）
-  local_private_key: undefined, // 安全模式本地私钥
-  local_public_key: undefined, // 安全模式本地公钥
-  credential: undefined, // 临时入网凭据
-  credential_file: undefined, // 凭据存储文件路径
+  credential_file: undefined, // 凭据存储文件路径（顶层，安全模式管理节点使用）
   tcp_whitelist: [],
   udp_whitelist: [],
   stun_servers: undefined, // STUN 服务器列表
   stun_servers_v6: undefined, // IPv6 STUN 服务器列表
+  ipv6_public_addr_provider: false, // 共享公网 IPv6 子网（v2.6.2+，顶层布尔字段）
+  ipv6_public_addr_auto: false, // 自动获取公网 IPv6 地址（v2.6.2+）
+  ipv6_public_addr_prefix: '', // 手动指定公网 IPv6 子网（v2.6.2+）
   console_logger: { level: undefined },
   file_logger: {
     level: 'error',
@@ -37,10 +38,7 @@ const defaultFormData: EasyTierFormData | any = {
     size: undefined, // 单个日志文件大小 MB，默认 100
     count: undefined // 最大日志文件数量，默认 10
   },
-  vpn_portal_config: {
-    client_cidr: '',
-    wireguard_listen: ''
-  },
+  vpn_portal_config: undefined, // VPN 门户（结构随内核版本变化，表单按原样透传，不设默认值）
   port_forward: [], // 端口转发
   flags: {
     default_protocol: 'tcp',
@@ -49,7 +47,6 @@ const defaultFormData: EasyTierFormData | any = {
     enable_encryption: true,
     encryption_algorithm: undefined, // 加密算法，默认 aes-gcm
     enable_ipv6: true,
-    disable_ipv6: undefined, // 禁用 IPv6
     mtu: undefined, // MTU，默认 1380/1360
     latency_first: true,
     enable_exit_node: false,
@@ -62,10 +59,7 @@ const defaultFormData: EasyTierFormData | any = {
     multi_thread: true,
     multi_thread_count: undefined, // 线程数，默认 2
     relay_all_peer_rpc: false,
-    ipv6_listener: undefined,
-    socks5: undefined,
     relay_network_whitelist: '*',
-    compression_algorithm: undefined,
     bind_device: true,
     disable_kcp_input: false,
     enable_kcp_proxy: false,
@@ -80,12 +74,7 @@ const defaultFormData: EasyTierFormData | any = {
     lazy_p2p: undefined, // 按需建立 P2P
     need_p2p: undefined, // 声明需要主动 P2P
     disable_upnp: undefined, // 禁用 UPnP/NAT-PMP 映射
-    no_listener: undefined, // 不监听任何端口
-    ipv6_public_addr_provider: undefined, // 共享公网 IPv6 子网
-    ipv6_public_addr_auto: undefined, // 自动获取公网 IPv6 地址
-    ipv6_public_addr_prefix: undefined, // 手动指定公网 IPv6 子网
     enable_udp_broadcast_relay: undefined, // 启用 UDP 广播中继
-    secure_mode: undefined, // 启用安全模式
     disable_relay_kcp: undefined, // 禁止转发 KCP 数据包
     disable_relay_quic: undefined, // 禁止转发 QUIC 数据包
     enable_relay_foreign_network_kcp: undefined, // 允许转发外部网络 KCP
@@ -104,36 +93,41 @@ export interface AdvancedFieldDef {
   tooltipKey?: string // i18n key，title 属性挂 tooltip
   secret?: boolean // 敏感字段：回显掩码、保存写回原值
   filePick?: boolean // 文本输入行带 📁 选择按钮（Tauri 文件选择）
+  secureMode?: boolean // true: 位于 [secure_mode] 表内；false/缺省: 顶层字段
+  feature?: CoreFeature // 所属内核功能：新增配置在当前内核不支持时隐藏，存量配置仅警告
 }
 
-// 安全模式（顶层字段，文本输入）
+/**
+ * 安全模式字段（EasyTier Core v2.6.4 规范）
+ * local_private_key / local_public_key 位于 [secure_mode] 表内；
+ * credential_file 为顶层字段（仅凭据管理节点使用）。
+ * 仅当表单中的安全模式开关启用时才渲染与落盘。
+ */
 export const SECURITY_FIELD_DEFS: AdvancedFieldDef[] = [
   {
     key: 'local_private_key',
     type: 'text',
     labelKey: 'newEdit.lblPrivateKey',
     tooltipKey: 'newEdit.tipPrivateKey',
-    secret: true
+    secret: true,
+    secureMode: true,
+    feature: 'secureMode'
   },
   {
     key: 'local_public_key',
     type: 'text',
     labelKey: 'newEdit.lblPublicKey',
-    tooltipKey: 'newEdit.tipPublicKey'
-  },
-  {
-    key: 'credential',
-    type: 'text',
-    labelKey: 'newEdit.lblCredential',
-    tooltipKey: 'newEdit.tipCredential',
-    secret: true
+    tooltipKey: 'newEdit.tipPublicKey',
+    secureMode: true,
+    feature: 'secureMode'
   },
   {
     key: 'credential_file',
     type: 'text',
     labelKey: 'newEdit.lblCredentialFile',
     tooltipKey: 'newEdit.tipCredentialFile',
-    filePick: true
+    filePick: true,
+    feature: 'secureMode'
   }
 ]
 
@@ -162,12 +156,6 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     type: 'switch',
     labelKey: 'newEdit.lblDisableUpnp',
     tooltipKey: 'newEdit.tipDisableUpnp'
-  },
-  {
-    key: 'no_listener',
-    type: 'switch',
-    labelKey: 'newEdit.lblNoListener',
-    tooltipKey: 'newEdit.tipNoListener'
   },
   {
     key: 'enable_udp_broadcast_relay',
@@ -200,12 +188,6 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     tooltipKey: 'newEdit.tipRelayForeignQuic'
   },
   {
-    key: 'secure_mode',
-    type: 'switch',
-    labelKey: 'newEdit.lblSecureMode',
-    tooltipKey: 'newEdit.tipSecureMode'
-  },
-  {
     key: 'disable_sym_hole_punching',
     type: 'switch',
     labelKey: 'newEdit.lblDisableSymHole',
@@ -218,12 +200,6 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     tooltipKey: 'newEdit.tipP2pOnly'
   },
   {
-    key: 'ipv6_public_addr_auto',
-    type: 'switch',
-    labelKey: 'newEdit.lblIpv6Auto',
-    tooltipKey: 'newEdit.tipIpv6Auto'
-  },
-  {
     key: 'accept_dns',
     type: 'switch',
     labelKey: 'newEdit.lblAcceptDns',
@@ -231,19 +207,21 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
   }
 ]
 
-// 高级选项（flags 内文本输入）
-export const ADVANCED_TEXT_DEFS: AdvancedFieldDef[] = [
+// 高级选项（顶层布尔开关；key 为顶层字段而非 flags）
+export const ADVANCED_TOP_SWITCH_DEFS: AdvancedFieldDef[] = [
   {
     key: 'ipv6_public_addr_provider',
-    type: 'text',
+    type: 'switch',
     labelKey: 'newEdit.lblIpv6Provider',
-    tooltipKey: 'newEdit.tipIpv6Provider'
+    tooltipKey: 'newEdit.tipIpv6Provider',
+    feature: 'ipv6PublicAddr'
   },
   {
-    key: 'ipv6_public_addr_prefix',
-    type: 'text',
-    labelKey: 'newEdit.lblIpv6Prefix',
-    tooltipKey: 'newEdit.tipIpv6Prefix'
+    key: 'ipv6_public_addr_auto',
+    type: 'switch',
+    labelKey: 'newEdit.lblIpv6Auto',
+    tooltipKey: 'newEdit.tipIpv6Auto',
+    feature: 'ipv6PublicAddr'
   }
 ]
 
@@ -255,13 +233,21 @@ export const ADVANCED_TOP_TEXT_DEFS: AdvancedFieldDef[] = [
     labelKey: 'newEdit.lblSocks5',
     tooltipKey: 'newEdit.tipSocks5'
   },
-  { key: 'stun_servers', type: 'text', labelKey: 'newEdit.lblStun', tooltipKey: 'newEdit.tipStun' }
+  { key: 'stun_servers', type: 'text', labelKey: 'newEdit.lblStun', tooltipKey: 'newEdit.tipStun' },
+  {
+    key: 'ipv6_public_addr_prefix',
+    type: 'text',
+    labelKey: 'newEdit.lblIpv6Prefix',
+    tooltipKey: 'newEdit.tipIpv6Prefix',
+    feature: 'ipv6PublicAddr'
+  }
 ]
 
 // 固定高级字段的全部 key（动态 Flags 编辑器需排除，避免同一 key 双处编辑）
 export const ADVANCED_FIELD_KEYS: string[] = [
   ...ADVANCED_FLAG_DEFS.map((f) => f.key),
-  ...ADVANCED_TEXT_DEFS.map((f) => f.key)
+  ...ADVANCED_TOP_SWITCH_DEFS.map((f) => f.key),
+  ...ADVANCED_TOP_TEXT_DEFS.map((f) => f.key)
 ]
 
 // 敏感字段掩码占位

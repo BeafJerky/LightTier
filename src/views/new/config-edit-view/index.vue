@@ -54,9 +54,8 @@ const goBack = () => {
 
 onMounted(async () => {
   if (dialogMode === 'add') {
-    // 与列表页新增入口一致的初始模板
-    tomlContent.value =
-      'hostname = ""\ninstance_name = ""\ndhcp = true\nrpc_portal = "0.0.0.0:15888"\n'
+    // 与列表页新增入口一致的初始模板（rpc_portal 自 v2.5.0 起不再写入配置）
+    tomlContent.value = 'hostname = ""\ninstance_name = ""\ndhcp = true\n'
   } else {
     if (!easyTierStore.configListLoaded) await easyTierStore.loadConfigFiles()
     const name = String(route.query.name || '')

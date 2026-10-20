@@ -95,13 +95,27 @@ interface Flags {
   ipv6_public_addr_auto?: boolean // 自动获取公网 IPv6 地址
   ipv6_public_addr_prefix?: string // 手动指定公网 IPv6 子网
   enable_udp_broadcast_relay?: boolean // 启用 UDP 广播中继
-  secure_mode?: boolean // 启用安全模式
   disable_relay_kcp?: boolean // 禁止转发 KCP 数据包
   disable_relay_quic?: boolean // 禁止转发 QUIC 数据包
   enable_relay_foreign_network_kcp?: boolean // 允许转发外部网络 KCP
   enable_relay_foreign_network_quic?: boolean // 允许转发外部网络 QUIC
   tld_dns_zone?: string // TLD DNS 区域
   ipv6_listener: string
+}
+
+/** 安全模式配置（顶层 [secure_mode] 表，EasyTier Core v2.6.4+） */
+interface SecureModeConfig {
+  enabled: boolean
+  local_private_key?: string // base64(X25519 私钥)
+  local_public_key?: string // base64(X25519 公钥)
+}
+
+/**
+ * LightTier 私有元数据（TOML [lighttier] 表）
+ * 官方内核忽略未知顶层表；禁止把应用私有字段写入 [flags]（v2.7.0+ 未知键会拒绝启动）
+ */
+interface LightTierConfig {
+  exit_route_enabled?: boolean // 启动后由 LightTier 接管退出节点流量（改写系统默认路由）
 }
 
 /** EasyTier 实例完整配置：flags 为平铺兼容字段，flags_struct 为结构化形式 */
@@ -118,7 +132,10 @@ interface EasyTierConfig {
   listeners: string
   exit_nodes: string[]
   external_node?: string // 外部节点
-  config_exit_nodes_route: boolean
+  /** @deprecated 旧版 LightTier 退出路由标记，仅兼容读取，迁移后写入 [lighttier] */
+  config_exit_nodes_route?: boolean
+  /** LightTier 私有元数据（官方内核忽略） */
+  lighttier?: LightTierConfig
   clear_log_on_run?: boolean
   peer: PeerConfig[]
   proxy_network: NetworkConfig[]
@@ -129,10 +146,8 @@ interface EasyTierConfig {
   vpn_portal_config: VpnPortalConfig
   routes: string[]
   socks5_proxy: string
-  local_private_key?: string // 安全模式本地私钥
-  local_public_key?: string // 安全模式本地公钥
-  credential?: string // 临时入网凭据
-  credential_file?: string // 凭据存储文件路径
+  secure_mode?: SecureModeConfig // 安全模式配置（[secure_mode] 表）
+  credential_file?: string // 凭据存储文件路径（顶层）
   tcp_whitelist?: string // TCP 白名单
   udp_whitelist?: string // UDP 白名单
   stun_server: string[] // STUN 服务器列表（保留兼容）
@@ -155,6 +170,7 @@ interface GithubVer {
   tag_name: string
   name: string
   prerelease: boolean
+  draft?: boolean
   created_at: string
   published_at: string
 }

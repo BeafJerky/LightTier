@@ -82,6 +82,25 @@
       <button class="ed-tab" :class="{ active: editMode === 'form' }" @click="switchToForm">{{
         t('newEdit.formEdit')
       }}</button>
+      <span v-if="store.detectedCoreVersion" class="ed-core-target">{{
+        t('newEdit.adaptedTo', { version: store.detectedCoreVersion })
+      }}</span>
+    </div>
+
+    <!-- 版本兼容提示：新建时错误会阻断启动，存量配置仅提示不丢字段 -->
+    <div
+      v-if="compatIssues.length"
+      class="ed-compat-banner"
+      :class="hasCompatError ? 'is-error' : 'is-warning'"
+    >
+      <div class="ed-compat-title">
+        {{ hasCompatError ? t('coreCompat.bannerError') : t('coreCompat.bannerWarning') }}
+      </div>
+      <ul class="ed-compat-list">
+        <li v-for="(issue, i) in compatIssues" :key="i">
+          {{ t('coreCompat.' + issue.code, issue.params || {}) }}
+        </li>
+      </ul>
     </div>
 
     <div class="ed-body">
@@ -141,10 +160,14 @@
                 </span>
               </div>
             </div>
-            <div class="ed-form-field">
-              <label class="ed-form-label">{{ t('newConfig.rpcPortal') }}</label>
+            <div v-if="showRpcPortal" class="ed-form-field">
+              <label class="ed-form-label" :title="unsupportedTitle('rpc_portal')"
+                >{{ t('newConfig.rpcPortal')
+                }}<span v-if="!rpcPortalSupported" class="ed-field-warn">⚠</span></label
+              >
               <input
                 class="ed-form-input"
+                :class="{ 'ed-input-unsupported': !rpcPortalSupported }"
                 v-model="formData.rpc_portal"
                 placeholder="0.0.0.0:15888"
               />
@@ -178,11 +201,9 @@
                 v-model="formPeers[i]"
                 placeholder="tcp://host:port"
               />
-              <button class="ed-tag-del" @click="formPeers.splice(i, 1)">✕</button>
+              <button class="ed-tag-del" @click="removePeer(i)">✕</button>
             </div>
-            <button class="ed-tag-add" @click="formPeers.push('')">{{
-              t('newEdit.addPeer')
-            }}</button>
+            <button class="ed-tag-add" @click="addPeer">{{ t('newEdit.addPeer') }}</button>
           </div>
         </div>
 
@@ -242,13 +263,122 @@
           </div>
         </div>
 
-        <!-- 5.6：安全模式（折叠分组，敏感字段掩码回显） -->
+        <!-- 5.6：高级选项（折叠分组，布尔开关 2 列 + 文本输入） -->
         <details class="ed-adv-collapse" open>
           <summary class="ed-form-section-title ed-adv-summary"
-            >🔒 {{ t('newEdit.securitySection') }}</summary
+            >✦ {{ t('newEdit.advancedSection') }}</summary
           >
           <div class="ed-form-grid">
-            <div class="ed-form-field" v-for="f in SECURITY_FIELD_DEFS" :key="f.key">
+            <div
+              class="ed-form-field"
+              :class="{ 'ed-field-unsupported': unsupportedFlagKeys.has(f.key) }"
+              v-for="f in visibleAdvancedFlagDefs"
+              :key="f.key"
+            >
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey)
+                }}<span
+                  v-if="unsupportedFlagKeys.has(f.key)"
+                  class="ed-field-warn"
+                  :title="unsupportedTitle(f.key)"
+                  >⚠</span
+                ></label
+              >
+              <div class="ed-form-switch-wrap">
+                <span
+                  class="ed-form-switch"
+                  :class="{ on: formData.flags?.[f.key] === true }"
+                  @click="toggleAdvancedFlag(f.key)"
+                >
+                  {{
+                    formData.flags?.[f.key] === true
+                      ? t('newConfig.dhcpEnabled')
+                      : t('newConfig.dhcpDisabled')
+                  }}
+                </span>
+              </div>
+            </div>
+            <div
+              class="ed-form-field"
+              :class="{ 'ed-field-unsupported': unsupportedTopKeys.has(f.key) }"
+              v-for="f in visibleTopSwitchDefs"
+              :key="f.key"
+            >
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey)
+                }}<span
+                  v-if="unsupportedTopKeys.has(f.key)"
+                  class="ed-field-warn"
+                  :title="unsupportedTitle(f.key)"
+                  >⚠</span
+                ></label
+              >
+              <div class="ed-form-switch-wrap">
+                <span
+                  class="ed-form-switch"
+                  :class="{ on: formData[f.key] === true }"
+                  @click="toggleTopSwitch(f.key)"
+                >
+                  {{
+                    formData[f.key] === true
+                      ? t('newConfig.dhcpEnabled')
+                      : t('newConfig.dhcpDisabled')
+                  }}
+                </span>
+              </div>
+            </div>
+            <div
+              class="ed-form-field"
+              :class="{ 'ed-field-unsupported': unsupportedTopKeys.has(f.key) }"
+              v-for="f in visibleTopTextDefs"
+              :key="f.key"
+            >
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey)
+                }}<span
+                  v-if="unsupportedTopKeys.has(f.key)"
+                  class="ed-field-warn"
+                  :title="unsupportedTitle(f.key)"
+                  >⚠</span
+                ></label
+              >
+              <input
+                v-if="f.key === 'stun_servers'"
+                class="ed-form-input"
+                v-model="formStunServers"
+                :placeholder="f.key"
+              />
+              <input v-else class="ed-form-input" v-model="formData[f.key]" :placeholder="f.key" />
+            </div>
+          </div>
+          <div v-if="isAddMode" class="ed-compat-note">
+            {{
+              store.detectedCoreVersion
+                ? t('newEdit.adaptedHint', { version: store.detectedCoreVersion })
+                : t('newEdit.adaptedUnknown')
+            }}
+          </div>
+        </details>
+
+        <!-- 安全模式：置于表单最底部，开启后才展开字段并写入 [secure_mode] 表 -->
+        <div v-if="securitySectionVisible" class="ed-form-section ed-secure-section">
+          <div class="ed-secure-head" :title="t('newEdit.tipSecureMode')">
+            <span class="ed-secure-title">🔒 {{ t('newEdit.securitySection') }}</span>
+            <span
+              class="ed-form-switch"
+              :class="{ on: secureModeEnabled }"
+              @click="secureModeEnabled = !secureModeEnabled"
+            >
+              {{ secureModeEnabled ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled') }}
+            </span>
+          </div>
+          <div v-if="secureModeEnabled" class="ed-form-grid">
+            <div
+              class="ed-form-field"
+              :class="{ 'ed-form-field-wide': f.filePick }"
+              v-for="f in SECURITY_FIELD_DEFS"
+              :key="f.key"
+            >
               <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
                 t(f.labelKey)
               }}</label>
@@ -280,52 +410,7 @@
               </div>
             </div>
           </div>
-        </details>
-
-        <!-- 5.6：高级选项（折叠分组，布尔开关 2 列 + 文本输入） -->
-        <details class="ed-adv-collapse" open>
-          <summary class="ed-form-section-title ed-adv-summary"
-            >✦ {{ t('newEdit.advancedSection') }}</summary
-          >
-          <div class="ed-form-grid">
-            <div class="ed-form-field" v-for="f in ADVANCED_FLAG_DEFS" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
-              <div class="ed-form-switch-wrap">
-                <span
-                  class="ed-form-switch"
-                  :class="{ on: formData.flags?.[f.key] === true }"
-                  @click="toggleAdvancedFlag(f.key)"
-                >
-                  {{
-                    formData.flags?.[f.key] === true
-                      ? t('newConfig.dhcpEnabled')
-                      : t('newConfig.dhcpDisabled')
-                  }}
-                </span>
-              </div>
-            </div>
-            <div class="ed-form-field" v-for="f in ADVANCED_TEXT_DEFS" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
-              <input class="ed-form-input" v-model="advFlags[f.key]" :placeholder="f.key" />
-            </div>
-            <div class="ed-form-field" v-for="f in ADVANCED_TOP_TEXT_DEFS" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
-              <input
-                v-if="f.key === 'stun_servers'"
-                class="ed-form-input"
-                v-model="formStunServers"
-                :placeholder="f.key"
-              />
-              <input v-else class="ed-form-input" v-model="formData[f.key]" :placeholder="f.key" />
-            </div>
-          </div>
-        </details>
+        </div>
       </div>
     </div>
 
@@ -366,6 +451,8 @@ import { onClickOutside } from '@vueuse/core'
 import { CodeEditor } from '@/components/CodeEditor'
 import * as toml from 'smol-toml'
 import { normalizeToml } from '@/utils/easyTierUtil'
+import { migrateLightTierConfig } from '@/utils/lighttierConfigUtil'
+import { isValidConfigName } from '@/utils/configNameUtil'
 import {
   buildConfigFormModel,
   parseConfigFormModel,
@@ -376,15 +463,24 @@ import {
   CONFIG_TEMPLATES,
   SECURITY_FIELD_DEFS,
   ADVANCED_FLAG_DEFS,
-  ADVANCED_TEXT_DEFS,
+  ADVANCED_TOP_SWITCH_DEFS,
   ADVANCED_TOP_TEXT_DEFS,
   type AdvancedFieldDef
 } from '@/constants/defaultData'
+import { useEasyTierStore } from '@/store/modules/easytier'
+import {
+  checkConfigCompat,
+  compareCoreVersion,
+  isCoreFeatureSupported,
+  isCoreFlagSupported
+} from '@/utils/kernelCompatUtil'
+import type { CoreFeature } from '@/constants/kernelCompat'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 
 const { t } = useI18n()
+const store = useEasyTierStore()
 
 // 非 Tauri 环境优雅降级（浏览器预览）；withGlobalTauri 已关闭，用 isTauri() 检测
 const isTauri = isTauriRuntime()
@@ -463,10 +559,11 @@ const formData = ref<FormData>({
   rpc_portal: '',
   flags: {}
 })
+// 表单未建模的顶层键/表（vpn_portal_config、[lighttier] 等），保存时原样透传
+const formPassthrough = ref<Record<string, any>>({})
 
-// 5.6：flags 兜底对象（模板 v-model 需非空）
-const advFlags = computed(() => formData.value.flags || {})
-
+// 5.6：安全模式开关（表单最底部；开启后才渲染安全字段并写入 [secure_mode] 表）
+const secureModeEnabled = ref(false)
 // 5.6：安全字段掩码回显（真实值备份在 secretBackup，保存时写回）
 const secretDisplays = ref<Record<string, string>>({})
 const secretBackup = ref<Record<string, string>>({})
@@ -477,6 +574,8 @@ const formStunServers = ref('')
 
 const formListeners = ref<string[]>([])
 const formPeers = ref<string[]>([])
+// 与 formPeers 索引对齐：保留 peer_public_key 等表单未建模字段
+const formPeerExtras = ref<Record<string, any>[]>([])
 const formRoutes = ref<string[]>([])
 const formExitNodes = ref<string[]>([])
 const formFlagsKeys = ref<string[]>([])
@@ -492,11 +591,14 @@ const parseFormData = (): boolean => {
   const model = parseConfigFormModel(tomlContent.value)
   if (!model) return false
   formData.value = { ...model.formData } as FormData
+  formPassthrough.value = { ...model.passthrough }
+  secureModeEnabled.value = model.secureModeEnabled
   secretDisplays.value = model.secretDisplays
   secretBackup.value = model.secretBackup
   formStunServers.value = model.stunServers
   formListeners.value = [...model.listeners]
   formPeers.value = [...model.peers]
+  formPeerExtras.value = model.peerExtras.map((e) => ({ ...e }))
   formRoutes.value = [...model.routes]
   formExitNodes.value = [...model.exitNodes]
   formFlagsKeys.value = [...model.flagsKeys]
@@ -509,11 +611,14 @@ const parseFormData = (): boolean => {
 // 当前表单状态 → 模型（供构建 TOML 使用）
 const collectFormModel = (): ConfigFormModel => ({
   formData: formData.value as Record<string, any>,
+  passthrough: formPassthrough.value,
   secretDisplays: secretDisplays.value,
   secretBackup: secretBackup.value,
+  secureModeEnabled: secureModeEnabled.value,
   stunServers: formStunServers.value,
   listeners: formListeners.value,
   peers: formPeers.value,
+  peerExtras: formPeerExtras.value,
   routes: formRoutes.value,
   exitNodes: formExitNodes.value,
   flagsKeys: formFlagsKeys.value,
@@ -523,11 +628,71 @@ const collectFormModel = (): ConfigFormModel => ({
 })
 
 // 表单模型 → TOML 文本：空值剔除、安全字段按掩码规则写回、flags 类型推断（bool/number/string）
-const buildFormToml = (): string => {
+// assignBackup=false 供兼容性预览等只读场景使用，避免计算属性写入状态
+const buildFormToml = (assignBackup = true): string => {
   const { toml: content, secretBackup: backup } = buildConfigFormModel(collectFormModel())
-  secretBackup.value = backup
+  if (assignBackup) secretBackup.value = backup
   return content
 }
+
+// ===== 内核版本适配 =====
+const isAddMode = computed(() => dialogMode.value === 'add')
+
+// 新建配置隐藏当前内核不支持的字段；编辑存量配置保留全部字段，仅做警告标记（不丢数据）
+const supportsFeature = (feature?: CoreFeature): boolean =>
+  !feature || !isAddMode.value || isCoreFeatureSupported(feature, store.coreCaps)
+const supportsFlag = (key: string): boolean =>
+  !isAddMode.value || isCoreFlagSupported(key, store.coreCaps)
+
+const visibleAdvancedFlagDefs = computed(() =>
+  ADVANCED_FLAG_DEFS.filter((f) => supportsFlag(f.key))
+)
+const visibleTopSwitchDefs = computed(() =>
+  ADVANCED_TOP_SWITCH_DEFS.filter((f) => supportsFeature(f.feature))
+)
+const visibleTopTextDefs = computed(() =>
+  ADVANCED_TOP_TEXT_DEFS.filter((f) => supportsFeature(f.feature))
+)
+const securitySectionVisible = computed(() => supportsFeature('secureMode'))
+const unsupportedFlagKeys = computed(
+  () =>
+    new Set(
+      ADVANCED_FLAG_DEFS.filter((f) => !isCoreFlagSupported(f.key, store.coreCaps)).map(
+        (f) => f.key
+      )
+    )
+)
+const unsupportedTopKeys = computed(
+  () =>
+    new Set(
+      [...ADVANCED_TOP_SWITCH_DEFS, ...ADVANCED_TOP_TEXT_DEFS]
+        .filter((f) => f.feature && !isCoreFeatureSupported(f.feature, store.coreCaps))
+        .map((f) => f.key)
+    )
+)
+// rpc_portal 自 v2.5.0 起不再从配置文件读取（需改走 CLI --rpc-portal）
+const rpcPortalSupported = computed(
+  () => !store.detectedCoreVersion || compareCoreVersion(store.detectedCoreVersion, 'v2.5.0') < 0
+)
+const showRpcPortal = computed(() => !isAddMode.value || rpcPortalSupported.value)
+const unsupportedTitle = (key: string) =>
+  t('newEdit.fieldUnsupported', {
+    version: store.detectedCoreVersion || t('newSettings.notInstalled'),
+    field: key
+  })
+
+// 兼容性提示：代码模式直接解析原文；表单模式先构建再解析（只读，不写 secretBackup）
+const compatIssues = computed(() => {
+  try {
+    const raw = editMode.value === 'form' ? buildFormToml(false) : tomlContent.value
+    const parsed = toml.parse(raw) as Record<string, any>
+    migrateLightTierConfig(parsed)
+    return checkConfigCompat(parsed, store.detectedCoreVersion)
+  } catch {
+    return []
+  }
+})
+const hasCompatError = computed(() => compatIssues.value.some((i) => i.level === 'error'))
 
 // 删除某行自定义 Flag（key/value 同步移除，保持两数组索引对齐）
 const removeFlag = (i: number) => {
@@ -535,11 +700,26 @@ const removeFlag = (i: number) => {
   formFlagsVals.value.splice(i, 1)
 }
 
+// 对等节点：URI 与额外字段（peer_public_key 等）同步增删，保持索引对齐
+const addPeer = () => {
+  formPeers.value.push('')
+  formPeerExtras.value.push({})
+}
+const removePeer = (i: number) => {
+  formPeers.value.splice(i, 1)
+  formPeerExtras.value.splice(i, 1)
+}
+
 // === 5.6 高级字段交互 ===
 const toggleAdvancedFlag = (key: string) => {
   if (!formData.value.flags) formData.value.flags = {}
   const flags = formData.value.flags
   flags[key] = flags[key] === true ? false : true
+}
+
+// 顶层布尔字段（如 ipv6_public_addr_provider）：false 时不落盘
+const toggleTopSwitch = (key: string) => {
+  formData.value[key] = formData.value[key] !== true
 }
 
 // 敏感字段输入：掩码未被修改时保持占位，用户输入即视为新值
@@ -630,11 +810,12 @@ const applyTemplate = (id: 'server' | 'client' | 'custom') => {
 
 // 校验配置名：非空、仅字母数字下划线连字符、新增时不得与现有配置重名
 const validateName = (): boolean => {
-  if (!newConfigName.value.trim()) {
+  newConfigName.value = newConfigName.value.trim()
+  if (!newConfigName.value) {
     nameError.value = t('newEdit.nameEmpty')
     return false
   }
-  if (!/^[a-zA-Z0-9_-]+$/.test(newConfigName.value)) {
+  if (!isValidConfigName(newConfigName.value)) {
     nameError.value = t('newEdit.nameInvalid')
     return false
   }
@@ -654,9 +835,10 @@ const handleSave = async () => {
     const rawContent = editMode.value === 'code' ? tomlContent.value : buildFormToml()
     let content = rawContent
     try {
-      content = toml.stringify(
-        normalizeToml(toml.parse(rawContent) as Record<string, any>, { mergeDefaults: false })
-      )
+      const parsed = toml.parse(rawContent) as Record<string, any>
+      // 旧版 LightTier 私有标记迁移到 [lighttier]，保存后不再污染 [flags]
+      migrateLightTierConfig(parsed)
+      content = toml.stringify(normalizeToml(parsed, { mergeDefaults: false }))
     } catch {
       /* 解析失败按原样保存 */
     }
@@ -823,6 +1005,71 @@ const handleImportToml = async () => {
   display: flex;
   gap: 6px;
   margin-bottom: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ed-core-target {
+  padding: 3px 10px;
+  margin-left: auto;
+  font-family: var(--theme-font-body, 'Sora', monospace);
+  font-size: 11px;
+  color: var(--theme-text-muted, #c8bdb2);
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  border-radius: var(--theme-radius-pill, 100px);
+}
+
+/* 版本兼容提示：error 阻断启动，warning 仅提示字段会被忽略 */
+.ed-compat-banner {
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px solid transparent;
+  border-radius: var(--theme-radius-md, 10px);
+}
+
+.ed-compat-banner.is-error {
+  color: var(--theme-accent-primary, #b4544f);
+  background: color-mix(in srgb, var(--theme-accent-primary, #b4544f) 8%, transparent);
+  border-color: color-mix(in srgb, var(--theme-accent-primary, #b4544f) 25%, transparent);
+}
+
+.ed-compat-banner.is-warning {
+  color: var(--theme-text-secondary, #8b7355);
+  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 8%, transparent);
+  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 22%, transparent);
+}
+
+.ed-compat-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.ed-compat-list {
+  padding-left: 18px;
+  margin: 0;
+}
+
+.ed-compat-note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.ed-field-warn {
+  margin-left: 4px;
+  color: var(--theme-color-warning, #d9a441);
+  cursor: help;
+}
+
+.ed-field-unsupported .ed-form-label {
+  color: var(--theme-color-warning, #d9a441);
+}
+
+.ed-input-unsupported {
+  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 45%, transparent);
 }
 
 .ed-tab {
@@ -1030,6 +1277,34 @@ const handleImportToml = async () => {
 
 .ed-adv-collapse:not([open]) .ed-adv-summary::before {
   content: '▸ ';
+}
+
+/* 安全模式：表单最底部，开关常显、字段按需展开 */
+.ed-secure-section {
+  padding-top: 4px;
+  border-top: 1px dashed var(--theme-border-light, #f5ede6);
+}
+
+.ed-secure-head {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--theme-border-light, #f5ede6);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ed-secure-title {
+  font-family: var(--theme-font-display, 'Quicksand', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.ed-form-field-wide {
+  grid-column: 1 / -1;
 }
 
 .ed-secret-row {

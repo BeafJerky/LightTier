@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const execute = vi.fn()
-  const create = vi.fn(() => ({ execute }))
+  const create = vi.fn((..._args: any[]) => ({ execute }))
   return { execute, create, platform: { current: 'windows' } }
 })
 
@@ -31,7 +31,33 @@ vi.mock('@/utils/sysUtil', async (importOriginal) => {
   return { ...mod, getPlatform: vi.fn(async () => mocks.platform.current) }
 })
 
-import { executeCmd, getRunningProcesses } from '@/utils/shellUtil'
+const fileMocks = vi.hoisted(() => ({
+  // rpc_portal 用于验证 v2.5.0+ 由 CLI 参数补传
+  readFileContent: vi.fn(async () => 'rpc_portal = "0.0.0.0:15888"\n'),
+  getResourceDir: vi.fn(async () => 'C:/res'),
+  getLogsDir: vi.fn(async () => 'C:/res/logs')
+}))
+
+vi.mock('@/utils/fileUtil', () => ({
+  readFileContent: fileMocks.readFileContent,
+  getResourceDir: fileMocks.getResourceDir,
+  getLogsDir: fileMocks.getLogsDir,
+  getCliDir: vi.fn(async () => 'C:/res/core'),
+  getCoreDir: vi.fn(async () => 'C:/res/core/easytier-core.exe')
+}))
+
+vi.mock('@tauri-apps/api/path', () => ({
+  join: vi.fn(async (...parts: string[]) => parts.join('/')),
+  resourceDir: vi.fn(async () => 'C:/res')
+}))
+
+import {
+  checkServiceWithOfficialCli,
+  executeCmd,
+  getRunningProcesses,
+  installServiceWithOfficialCli,
+  uninstallServiceWithOfficialCli
+} from '@/utils/shellUtil'
 
 beforeEach(() => {
   mocks.execute.mockReset()
@@ -138,5 +164,81 @@ describe('getRunningProcesses 平台解析（M-10）', () => {
     mocks.platform.current = 'macos'
     mocks.execute.mockResolvedValue({ code: 1, stdout: '', stderr: '' })
     await expect(getRunningProcesses('easytier-core')).resolves.toEqual([])
+  })
+})
+
+describe('官方 CLI 服务安装参数按内核版本适配', () => {
+  const install = (version: string, disableAutostart?: boolean) =>
+    installServiceWithOfficialCli('easytier-a', 'C:/res/config/a.toml', 'a.toml', {
+      coreVersion: version,
+      disableAutostart
+    })
+
+  it('v2.7.0+：core 参数通过 --core-args 传递且位于末尾，--disable-autostart 显式带 true', async () => {
+    mocks.execute.mockResolvedValue({ code: 0, stdout: 'success', stderr: '' })
+    await expect(install('v2.7.0', true)).resolves.toBe(true)
+    const program = mocks.create.mock.calls[0][0] as string
+    const args = mocks.create.mock.calls[0][1] as string[]
+    expect(program).toBe('easytier-cli')
+    expect(args.slice(0, 4)).toEqual(['service', '-n', 'easytier-a', 'install'])
+    expect(args).not.toContain('--')
+    expect(args).toContain('--disable-autostart')
+    expect(args[args.indexOf('--disable-autostart') + 1]).toBe('true')
+    // --core-args 必须是最后一个选项，其后全是 core 参数
+    const coreIdx = args.indexOf('--core-args')
+    expect(coreIdx).toBeGreaterThan(0)
+    expect(args.slice(coreIdx + 1)).toEqual([
+      '--file-log-dir',
+      'C:/res/logs',
+      '--file-log-level',
+      'info',
+      '--file-log-size',
+      '10',
+      '--file-log-count',
+      '10',
+      '--config-file',
+      'C:/res/config/a.toml',
+      '--rpc-portal',
+      '0.0.0.0:15888'
+    ])
+  })
+
+  it('v2.4.5~v2.6.4：core 参数作为 -- 之后的尾随位置参数', async () => {
+    mocks.execute.mockResolvedValue({ code: 0, stdout: 'success', stderr: '' })
+    await expect(install('v2.6.4')).resolves.toBe(true)
+    const args = mocks.create.mock.calls[0][1] as string[]
+    expect(args).not.toContain('--core-args')
+    const sep = args.indexOf('--')
+    expect(sep).toBeGreaterThan(0)
+    expect(args[sep + 1]).toBe('--file-log-dir')
+    // 未要求禁用自启时不传该选项
+    expect(args).not.toContain('--disable-autostart')
+  })
+
+  it('安装失败（非 0 退出码）返回 false', async () => {
+    mocks.execute.mockResolvedValue({ code: 5, stdout: '', stderr: 'denied' })
+    await expect(install('v2.6.4')).resolves.toBe(false)
+  })
+})
+
+describe('官方 CLI 服务名（-n）与旧版默认名回退', () => {
+  it('status 具名服务不存在时回退 CLI 默认名（兼容旧版安装）', async () => {
+    mocks.execute
+      .mockResolvedValueOnce({ code: 0, stdout: 'Service status: not installed', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'Service status: Running', stderr: '' })
+    await expect(checkServiceWithOfficialCli('easytier-a')).resolves.toBe('SERVICE_RUNNING')
+    expect(mocks.create.mock.calls[0][1]).toEqual(['service', '-n', 'easytier-a', 'status'])
+    expect(mocks.create.mock.calls[1][1]).toEqual(['service', 'status'])
+  })
+
+  it('卸载旧版默认名服务时回退为不带 -n 的命令', async () => {
+    mocks.execute
+      .mockResolvedValueOnce({ code: 0, stdout: 'not installed', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'Service status: stopped', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'uninstall success', stderr: '' })
+    await expect(uninstallServiceWithOfficialCli('easytier-a')).resolves.toBe(true)
+    const calls = mocks.create.mock.calls
+    expect(calls[1][1]).toEqual(['service', 'status'])
+    expect(calls[2][1]).toEqual(['service', 'uninstall'])
   })
 })

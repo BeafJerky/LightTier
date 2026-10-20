@@ -14,11 +14,16 @@ export const NSSM_NAME = 'nssm'
  * 配置文件名
  */
 export const CONFIG_FILE_NAME = 'data.json'
+/**
+ * LightTier 私有元数据段名（写入用户 TOML 的 [lighttier] 表）。
+ * 官方内核会忽略未知顶层表，因此应用私有字段必须放这里；
+ * 禁止写入 [flags]——EasyTier v2.7.0+ 对未知 flags 键会直接拒绝启动。
+ */
+export const LIGHTTIER_CONFIG_SECTION = 'lighttier'
 export const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 // export const MONITOR_LIST = 'https://easytier.linch.eu.org/api/getMonitorList'
 export const MONITOR_LIST = 'https://uptime.easytier.cn/api/nodes?page=1&per_page=50'
-export const CORE_INFO_API = 'https://api.github.com/repos/EasyTier/EasyTier/releases'
 // LightTier 仓库主页（“关于”页链接）与发布地址（“检查更新”读取 releases）
 // 注意：仓库名中 'I' 为大写（LIghtTier），GitHub URL 大小写不敏感，但实际仓库名如此
 export const MANAGER_REPO_HOME = 'https://github.com/BeafJerky/LIghtTier'
@@ -92,23 +97,8 @@ export const GITHUB_MIRROR_URL = [
 
 // 安装包内置的核心版本（resource/core 下预置对应压缩包，首次安装免下载）
 // 修改时需同步更新 src-tauri/resource/core/ 下的压缩包
+// 可下载版本固定列表见 constants/kernelCompat.ts 的 CORE_VERSION_OPTIONS
 export const BUILTIN_CORE_VERSION = 'v2.6.4'
-
-export const DEFAULT_VER_OPTIONS = [
-  // 第一项为默认选中版本，与安装包内置的 core 压缩包版本保持一致（首次安装免下载）
-  {
-    name: BUILTIN_CORE_VERSION,
-    tag_name: BUILTIN_CORE_VERSION
-  },
-  {
-    name: 'v2.6.0',
-    tag_name: 'v2.6.0'
-  },
-  {
-    name: 'v2.4.5',
-    tag_name: 'v2.4.5'
-  }
-]
 
 export const DEFAULT_STUN_SERVER = [
   'stun.nas.net:3478',

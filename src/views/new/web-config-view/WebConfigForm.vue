@@ -109,6 +109,7 @@ import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import type { FormWebData } from '@/types/formTypes'
 import DefaultData from '@/constants/defaultData'
+import { isValidConfigName } from '@/utils/configNameUtil'
 import { cloneDeep } from 'lodash-es'
 
 const { t } = useI18n()
@@ -165,10 +166,11 @@ const validate = (): boolean => {
   let ok = true
 
   if (props.mode === 'add') {
-    if (!form.value.configFileName?.trim()) {
+    form.value.configFileName = form.value.configFileName?.trim() || ''
+    if (!form.value.configFileName) {
       nameError.value = t('newWebForm.nameEmpty')
       ok = false
-    } else if (!/^[a-zA-Z0-9_-]+$/.test(form.value.configFileName)) {
+    } else if (!isValidConfigName(form.value.configFileName)) {
       nameError.value = t('newWebForm.nameInvalid')
       ok = false
     } else if (props.existingNames?.includes(form.value.configFileName)) {

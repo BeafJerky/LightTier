@@ -100,7 +100,12 @@ import { useCreamToast } from '@/hooks/useCreamToast'
 import { useI18n } from 'vue-i18n'
 import { useAutoMetric } from '@/hooks/useAutoMetric'
 import { useStartQueue } from '@/hooks/useStartQueue'
+import { useMockData } from '@/hooks/useMockData'
 import * as coreApi from '@/utils/coreApi'
+import * as toml from 'smol-toml'
+import { CONFIG_PATH } from '@/constants/easytier'
+import { checkConfigCompat } from '@/utils/kernelCompatUtil'
+import { migrateLightTierConfig } from '@/utils/lighttierConfigUtil'
 import { isAndroid } from '@/utils/platformUtil'
 
 defineOptions({ name: 'NewOverview' })
@@ -111,8 +116,32 @@ const { runningFileName, queueLength, isQueued, enqueue } = useStartQueue()
 
 const { show: toast } = useCreamToast()
 const { t } = useI18n()
+const { readFileContent, writeFileContent } = useMockData()
 // 自动跃点：启动前记录、停止后恢复
 const { beforeStart: autoMetricBeforeStart, afterStop: autoMetricAfterStop } = useAutoMetric()
+
+// 当前内核下该配置的兼容性错误（会阻止内核启动）；读取/解析失败时不做拦截
+const getCompatErrors = async (fileName: string) => {
+  try {
+    const raw = (await readFileContent(`${CONFIG_PATH}/${fileName}`)) as string
+    const cfg = toml.parse(raw) as Record<string, any>
+    // 旧版 LightTier 私有标记先迁移并落盘：v2.7.0 会把 flags._enable_exit_route 当作未知键拒绝启动
+    if (migrateLightTierConfig(cfg)) {
+      try {
+        await writeFileContent(`${CONFIG_PATH}/${fileName}`, toml.stringify(cfg))
+      } catch {
+        /* 回写失败不阻断校验，下次启动/编辑会再次尝试 */
+      }
+    }
+    return checkConfigCompat(cfg, easyTierStore.detectedCoreVersion).filter(
+      (i) => i.level === 'error'
+    )
+  } catch {
+    return []
+  }
+}
+const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
+  issues.map((i) => t(`coreCompat.${i.code}`, i.params || {})).join('\n')
 
 // 顶部统计：运行中 / 已停止 / 配置总数
 const runningCount = computed(() => easyTierStore.runningList.length)
@@ -170,11 +199,29 @@ const updateRunningList = async () => {
   }
 }
 
-// 启动配置：经启动队列串行执行（含端口预检、Android 停旧起新、失败回滚与提示）
-const startAction = async (item: RunningItem) => {
+// 启动配置：经启动队列串行执行（含版本兼容预检、端口预检、Android 停旧起新、失败回滚与提示）
+// auto=true 时用于冷启动自动运行：兼容错误只提示并跳过，不弹确认框
+const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => {
   if (!item.fileName) return
   // 入队串行启动：冲突/失败项跳过，不阻塞剩余队列
   await enqueue(item.fileName, async (fileName) => {
+    // 版本兼容预检：当前内核会拒绝的配置（如 v2.7.0 未知 flag）拦截启动
+    const compatErrors = await getCompatErrors(fileName)
+    if (compatErrors.length > 0) {
+      const issues = formatCompatIssues(compatErrors)
+      if (opts.auto) {
+        toast(
+          t('newOverview.compatAutoRunSkipped', { name: item.configFileName, issues }),
+          'warning',
+          7000
+        )
+        throw new Error('compat-blocked')
+      }
+      const confirmed = window.confirm(
+        t('newOverview.compatBlockConfirm', { name: item.configFileName, issues })
+      )
+      if (!confirmed) throw new Error('compat-cancelled')
+    }
     // 启动前端口预检：监听端口与运行中配置冲突时直接跳过并提示
     const conflicts = await coreApi.checkPortConflicts(fileName)
     if (conflicts.length > 0) {
@@ -291,7 +338,7 @@ onMounted(async () => {
       const target = easyTierStore.configList.find((c) => c.configFileName === targetFileName)
       if (target) {
         toast(t('newOverview.autoRunning'), 'success', 3000)
-        await startAction(target)
+        await startAction(target, { auto: true })
       }
     } catch (e) {
       console.warn('[AutoRun] 自动运行失败:', e)

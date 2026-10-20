@@ -336,7 +336,7 @@
  * config-view — 配置管理主页面（配置列表 + 详情面板，master-detail 布局）
  *
  * 核心流程：加载配置列表 → 选中卡片解析 TOML 详情 → 启动/停止内核实例 →
- * 退出节点路由开关（桌面专属，flags._enable_exit_route 驱动）与 Windows 服务管理。
+ * 退出节点路由开关（桌面专属，[lighttier].exit_route_enabled 驱动）与 Windows 服务管理。
  * 平台差异：
  * - 桌面：编辑/新增走弹窗（EditDialog / ServiceDialog），宽屏左右分栏并默认选中上次运行配置；
  * - Android：编辑/新增跳二级路由页面，窄屏列表与详情互斥展示，内核在应用进程内运行
@@ -347,7 +347,7 @@ import { CONFIG_PATH } from '@/constants/easytier'
 import {
   SECURITY_FIELD_DEFS,
   ADVANCED_FLAG_DEFS,
-  ADVANCED_TEXT_DEFS,
+  ADVANCED_TOP_SWITCH_DEFS,
   ADVANCED_TOP_TEXT_DEFS
 } from '@/constants/defaultData'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -369,8 +369,14 @@ import {
   checkExitRouteResidue,
   cleanExitRouteResidue
 } from '@/utils/routeUtil'
+import {
+  isExitRouteEnabled,
+  setExitRouteEnabled,
+  migrateLightTierConfig
+} from '@/utils/lighttierConfigUtil'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { checkConfigCompat } from '@/utils/kernelCompatUtil'
 
 defineOptions({ name: 'NewConfigView' })
 
@@ -406,7 +412,7 @@ const FLAG_LABEL_KEY_MAP: Record<string, string> = {}
 for (const def of [
   ...SECURITY_FIELD_DEFS,
   ...ADVANCED_FLAG_DEFS,
-  ...ADVANCED_TEXT_DEFS,
+  ...ADVANCED_TOP_SWITCH_DEFS,
   ...ADVANCED_TOP_TEXT_DEFS
 ]) {
   FLAG_LABEL_KEY_MAP[def.key] = def.labelKey
@@ -526,7 +532,18 @@ const loadConfigDetail = async (item: RunningItem) => {
   }
   try {
     const content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-    if (content) selectedDetail.value = toml.parse(content) as unknown as EasyTierConfig
+    if (content) {
+      const cfg = toml.parse(content) as Record<string, any>
+      // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
+      if (migrateLightTierConfig(cfg)) {
+        try {
+          await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+        } catch {
+          /* 回写失败不阻断详情展示 */
+        }
+      }
+      selectedDetail.value = cfg as unknown as EasyTierConfig
+    }
   } catch {
     selectedDetail.value = getDemoConfig(item.configFileName)
   }
@@ -551,11 +568,44 @@ const updateRunningList = async () => {
   }
 }
 
+// 配置在当前内核下的兼容性问题（error 会阻断启动；warning 仅供展示）
+const getConfigCompatIssues = async (fileName: string) => {
+  try {
+    const raw = (await readFileContent(`${CONFIG_PATH}/${fileName}`)) as string
+    const cfg = toml.parse(raw) as Record<string, any>
+    // 旧版 LightTier 私有标记先迁移并落盘：v2.7.0 会把 flags._enable_exit_route 当作未知键拒绝启动
+    if (migrateLightTierConfig(cfg)) {
+      try {
+        await writeFileContent(`${CONFIG_PATH}/${fileName}`, toml.stringify(cfg))
+      } catch {
+        /* 回写失败不阻断校验，下次启动/编辑会再次尝试 */
+      }
+    }
+    return checkConfigCompat(cfg, easyTierStore.detectedCoreVersion)
+  } catch {
+    return []
+  }
+}
+const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
+  issues.map((i) => t(`coreCompat.${i.code}`, i.params || {})).join('\n')
+
 // ===== 启动 / 停止 =====
 const startAction = async (item: RunningItem) => {
   if (!item.fileName || isStarting.value) return
   isStarting.value = true
   try {
+    // 版本兼容预检：旧内核忽略的字段仅警告；严格版本（v2.7.0+）的未知字段会拒绝启动
+    const errors = (await getConfigCompatIssues(item.fileName)).filter((i) => i.level === 'error')
+    if (errors.length) {
+      const confirmed = await showConfirm(
+        t('newConfig.compatBlockTitle'),
+        t('newConfig.compatBlockMsg', {
+          name: item.configFileName,
+          issues: formatCompatIssues(errors)
+        })
+      )
+      if (!confirmed) return
+    }
     // Android 单实例模型：已有其他配置运行时，二次确认后停旧起新
     if (isAndroidPlatform) {
       const current = easyTierStore.runningList.find(
@@ -713,6 +763,9 @@ const openEdit = async () => {
   }
   try {
     const raw = (await readFileContent(`${CONFIG_PATH}/${selectedConfig.value.fileName}`)) as string
+    // 必须先切回 edit：openAdd 会把模式置为 add，若不复位会导致后续编辑按“新建”处理
+    // （隐藏字段/重名校验/标题错误），也破坏“新建隐藏、存量警告”的版本适配策略
+    editDialogMode.value = 'edit'
     editConfigName.value = selectedConfig.value.configFileName
     editTomlContent.value = raw
     editVisible.value = true
@@ -748,8 +801,9 @@ const openAdd = () => {
   }
   editDialogMode.value = 'add'
   editConfigName.value = ''
-  editTomlContent.value =
-    'hostname = ""\ninstance_name = ""\ndhcp = true\nrpc_portal = "0.0.0.0:15888"\n'
+  // 初始模板不写 rpc_portal：v2.5.0 起该字段已从配置移除（桌面运行时由 CLI 参数注入，
+  // v2.4.5 也可在表单中手动开启）；避免新建配置即触发“字段已失效”警告
+  editTomlContent.value = 'hostname = ""\ninstance_name = ""\ndhcp = true\n'
   editVisible.value = true
 }
 
@@ -783,14 +837,8 @@ const deleteSelectedConfig = async () => {
 const isTauri = isTauriRuntime() && !isAndroidPlatform
 const isExitRouteBusy = ref(false)
 
-// 开关状态：优先 flags._enable_exit_route，缺失时降级读旧顶层字段 config_exit_nodes_route
-const exitRouteFlag = computed(() => {
-  const cfg = selectedDetail.value as any
-  if (!cfg) return false
-  const f = cfg.flags
-  if (f && '_enable_exit_route' in f) return f._enable_exit_route === true
-  return cfg.config_exit_nodes_route === true
-})
+// 开关状态：优先 [lighttier].exit_route_enabled，兼容旧 flags / 顶层标记
+const exitRouteFlag = computed(() => isExitRouteEnabled(selectedDetail.value as any))
 
 const exitRouteStatus = computed<'enabled' | 'disabled' | 'desktop'>(() => {
   if (!isTauri) return 'desktop'
@@ -802,24 +850,18 @@ const exitRouteStatusText = computed(() => {
   return t('newConfig.exitRouteDisabled')
 })
 
-// 持久化开关标记到配置 TOML 的 flags（统一写 flags._enable_exit_route）
+// 持久化开关标记到配置 TOML 的 [lighttier] 表（同时清除旧版 flags/顶层标记）
 const persistExitRouteFlag = async (enabled: boolean): Promise<boolean> => {
   const item = selectedConfig.value
   if (!item?.fileName) return false
   try {
     const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
     const cfg = toml.parse(raw) as any
-    if (!cfg.flags || typeof cfg.flags !== 'object') cfg.flags = {}
-    if (enabled) cfg.flags._enable_exit_route = true
-    else delete cfg.flags._enable_exit_route
+    setExitRouteEnabled(cfg, enabled)
     await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
     // 同步内存视图，避免开关状态与文件不一致
     const detail = selectedDetail.value as any
-    if (detail) {
-      if (!detail.flags || typeof detail.flags !== 'object') detail.flags = {}
-      if (enabled) detail.flags._enable_exit_route = true
-      else delete detail.flags._enable_exit_route
-    }
+    if (detail) setExitRouteEnabled(detail, enabled)
     return true
   } catch {
     return false
@@ -921,11 +963,7 @@ const openRouteCheck = async () => {
 }
 
 // 从文件读取配置并判断是否启用退出路由标记（启动时可能不是当前选中项）
-const isExitRouteEnabledInFile = (cfg: any): boolean => {
-  const f = cfg?.flags
-  if (f && '_enable_exit_route' in f) return f._enable_exit_route === true
-  return cfg?.config_exit_nodes_route === true
-}
+const isExitRouteEnabledInFile = (cfg: any): boolean => isExitRouteEnabled(cfg)
 
 // 启动成功后自动配置退出节点路由（仅当配置文件中启用了标记；可能不是当前选中项）
 const applyExitRouteAfterStart = async (item: RunningItem) => {
@@ -966,7 +1004,25 @@ const openServiceDialog = () => {
 // 服务安装完成回调：安装后刷新该配置的服务状态
 const handleServiceInstalled = async (configName: string, options: any) => {
   try {
-    const ok = await installService(configName, options)
+    // 服务会以当前内核启动该配置：存在版本错误时先提示，避免装完即失败
+    const errors = (await getConfigCompatIssues(`${configName}.toml`)).filter(
+      (i) => i.level === 'error'
+    )
+    if (errors.length) {
+      const confirmed = await showConfirm(
+        t('newConfig.compatBlockTitle'),
+        t('newConfig.compatBlockMsg', {
+          name: configName,
+          issues: formatCompatIssues(errors)
+        })
+      )
+      if (!confirmed) return
+    }
+    // 安装方式参数随当前内核版本适配（v2.7.0+ 使用 --core-args），避免重复探测
+    const ok = await installService(configName, {
+      ...options,
+      coreVersion: easyTierStore.detectedCoreVersion
+    })
     if (ok) {
       toast(t('newConfig.svcInstallSuccess'), 'success')
     } else {

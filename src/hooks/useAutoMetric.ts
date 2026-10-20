@@ -1,7 +1,8 @@
 /**
  * 网卡自动跃点（Automatic Metric）管理
  *
- * 场景：配置启用了 config_exit_nodes_route（接管出口流量）时，启动前将物理上网网卡的
+ * 场景：配置启用了退出节点流量接管（[lighttier].exit_route_enabled，兼容旧标记）时，
+ * 启动前将物理上网网卡的
  * 自动跃点关闭并调低 metric，避免出口流量绕行导致断网；实例停止后恢复。
  * 仅 Windows 桌面生效（非 Tauri 环境或 Android 静默跳过）；
  * disabledAutoMetricAdapter 为模块级单例，窗口关闭时尽力恢复。
@@ -13,6 +14,7 @@ import { CONFIG_PATH } from '@/constants/easytier'
 import { isAndroid } from '@/utils/platformUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { PS_ADAPTER_FILTER_CLAUSE } from '@/utils/sysUtil'
+import { isExitRouteEnabled } from '@/utils/lighttierConfigUtil'
 import * as toml from 'smol-toml'
 
 // 模块级单例状态 — 跨视图共享
@@ -95,14 +97,14 @@ const enableAutoMetric = async (adapterName: string): Promise<boolean> => {
 }
 
 export function useAutoMetric() {
-  // 启动前钩子：读取 TOML → 检查 config_exit_nodes_route → 禁用跃点
+  // 启动前钩子：读取 TOML → 检查 [lighttier].exit_route_enabled（兼容旧标记）→ 禁用跃点
   const beforeStart = async (fileName: string): Promise<void> => {
     if (!isTauri()) return
     try {
       const content = (await readFileContent(`${CONFIG_PATH}/${fileName}`)) as string
       if (!content) return
       const parsed = toml.parse(content) as any
-      if (!parsed.config_exit_nodes_route) return
+      if (!isExitRouteEnabled(parsed)) return
       const adapter = await getActiveNetworkAdapter()
       if (adapter && (await disableAutoMetric(adapter))) {
         disabledAutoMetricAdapter.value = adapter

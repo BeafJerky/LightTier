@@ -1,25 +1,24 @@
 import {
-  CORE_INFO_API,
   DEFAULT_STUN_SERVER,
-  DEFAULT_VER_OPTIONS,
   MANAGER_INFO_API,
   MONITOR_LIST,
   STUN_SERVER_URL,
   USER_AGENT
 } from '@/constants/easytier'
 import { useMockData } from '@/hooks/useMockData'
+import { parseCoreVersion, resolveCoreCapabilities } from '@/utils/kernelCompatUtil'
 import { resourceDir } from '@tauri-apps/api/path'
 import { fetch } from '@tauri-apps/plugin-http'
-import dayjs from 'dayjs'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 /**
  * EasyTier 全局状态
  *
  * 集中承载：
  * - 配置列表 / 运行列表（内核实例、Web 配置服务）
- * - 远端数据缓存（内核版本、STUN 服务器、公共共享节点、监控摘要）
+ * - 内核版本探测结果（表单、CLI、服务安装按版本适配的唯一依据）
+ * - 远端数据缓存（STUN 服务器、公共共享节点、监控摘要）
  * - 页面偏好设置（刷新频率、P2P 通知、锁屏密码等）
  *
  * 持久化：除 startQueue（运行时瞬时状态）外整体持久化到 localStorage；
@@ -70,13 +69,8 @@ export const useEasyTierStore = defineStore(
     const errRunNotify = ref(true)
     const defaultFormData = ref()
     const os = ref('windows')
-    const releaseInfo = ref([])
     const publicPeerList = ref([])
     const stunServerList = ref([])
-    const defaultStatus = JSON.stringify({
-      status: 'true',
-      date: dayjs().format('YYYYMMDD').toString()
-    })
     // 当前选择的列（存储prop值）
     const selectedColumns = ref(['rx_bytes', 'tx_bytes', 'nat_type'])
     // 默认服务安装方式
@@ -209,69 +203,37 @@ export const useEasyTierStore = defineStore(
       }
       configPath.value = await resourceDir()
     }
-    // 获取内核版本列表：本地缓存按天有效，过期或为空时请求 GitHub Releases（失败回退默认版本）
-    const getCoreReleaseInfo = async () => {
-      const localRes = JSON.parse(localStorage.getItem('releaseInfo') || '[]')
-      const isGet = JSON.parse(localStorage.getItem('releaseInfoIsGet') || defaultStatus)
-      const date = dayjs().format('YYYYMMDD').toString()
+    // ===== 内核版本探测 =====
+    // 已安装内核版本（规范化 vX.Y.Z）；null 表示未安装或无法识别。
+    // 该值决定表单字段可见性、CLI/服务参数格式等版本适配行为。
+    const detectedCoreVersion = ref<string | null>(null)
+    // 原始版本输出（如 easytier-cli 2.6.4），用于设置页原样展示
+    const coreVersionRaw = ref('')
+    const coreVersionDetecting = ref(false)
+    const coreCaps = computed(() => resolveCoreCapabilities(detectedCoreVersion.value))
 
-      if ((isGet.data !== date && isGet.status === 'false') || releaseInfo.value.length === 0) {
-        try {
-          const response = await fetch(CORE_INFO_API, {
-            method: 'GET',
-            headers: { 'User-Agent': USER_AGENT },
-            connectTimeout: 6000
-          })
-          if (response.ok) {
-            const text = await response.text()
-            releaseInfo.value = text ? JSON.parse(text) : []
-            // 如果成功获取到新数据，更新本地存储
-            localStorage.setItem('releaseInfo', JSON.stringify(releaseInfo.value))
-            localStorage.setItem(
-              'releaseInfoIsGet',
-              JSON.stringify({
-                status: 'true',
-                date
-              })
-            )
-          } else {
-            throw new Error(`HTTP error! status: ${response.status}`)
-          }
-        } catch (error) {
-          console.error('获取发布信息失败:', error)
-          console.error('DEFAULT_VER_OPTIONS:', DEFAULT_VER_OPTIONS)
-          releaseInfo.value = localRes.length > 0 ? localRes : DEFAULT_VER_OPTIONS
-          return releaseInfo.value
-        }
-      } else {
-        releaseInfo.value = localRes
-      }
-
-      return releaseInfo.value
+    // 写入探测结果：无法解析时置空（兼容旧版 403 等异常输出）
+    const applyCoreVersionRaw = (raw: unknown): string | null => {
+      const text = typeof raw === 'string' ? raw.trim() : ''
+      coreVersionRaw.value = text
+      detectedCoreVersion.value = parseCoreVersion(text)
+      return detectedCoreVersion.value
     }
 
-    // 强制刷新版本信息（供按钮调用）
-    const refreshCoreReleaseInfo = async () => {
+    /**
+     * 重新探测已安装内核版本（桌面 easytier-cli -V / Android 编译期版本）。
+     * 失败不抛出，返回 null，避免启动流程被内核缺失阻断。
+     */
+    const detectCoreVersion = async (): Promise<string | null> => {
+      if (coreVersionDetecting.value) return detectedCoreVersion.value
+      coreVersionDetecting.value = true
       try {
-        const response = await fetch(CORE_INFO_API, {
-          method: 'GET',
-          headers: { 'User-Agent': USER_AGENT },
-          connectTimeout: 10000
-        })
-        releaseInfo.value = await response.json()
-        const date = dayjs().format('YYYYMMDD').toString()
-        localStorage.setItem('releaseInfo', JSON.stringify(releaseInfo.value))
-        localStorage.setItem(
-          'releaseInfoIsGet',
-          JSON.stringify({
-            status: 'true',
-            date
-          })
-        )
-        return releaseInfo.value
-      } catch (error) {
-        console.error('刷新版本信息失败:', error)
-        return releaseInfo.value.length > 0 ? releaseInfo.value : DEFAULT_VER_OPTIONS
+        const { getCoreVersion } = await import('@/utils/coreApi')
+        return applyCoreVersionRaw(await getCoreVersion())
+      } catch {
+        return applyCoreVersionRaw('')
+      } finally {
+        coreVersionDetecting.value = false
       }
     }
 
@@ -486,8 +448,11 @@ export const useEasyTierStore = defineStore(
       setErrRunNotify,
       setOs,
       setConfigPath,
-      getCoreReleaseInfo,
-      refreshCoreReleaseInfo,
+      detectedCoreVersion,
+      coreVersionRaw,
+      coreVersionDetecting,
+      coreCaps,
+      detectCoreVersion,
       refreshManagerReleaseInfo,
       getPublicPeerList,
       getStunServers,

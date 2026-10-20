@@ -23,6 +23,7 @@ import {
 import { getPlatform, sleep } from './sysUtil'
 import * as toml from 'smol-toml'
 import { clearExitRoute } from './routeUtil'
+import { compareCoreVersion, parseCoreVersion } from './kernelCompatUtil'
 import { t } from '@/utils/i18nUtil'
 
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
@@ -97,11 +98,33 @@ export async function buildCoreArgsWithLogConfig(
   configFileName: string,
   configPath: string
 ): Promise<string> {
+  const args = await buildCoreArgsList(configFileName, configPath)
+  // 字符串形式供 nssm AppParameters 使用：路径可能含空格，统一加引号
+  return args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg)).join(' ')
+}
+
+/**
+ * 构建 easytier-core 启动参数数组（官方 CLI 的 --core-args 需要逐个参数传递）
+ * v2.5.0 起 rpc_portal 不再从配置文件读取，需通过 --rpc-portal 命令行参数传递
+ */
+export async function buildCoreArgsList(
+  configFileName: string,
+  configPath: string
+): Promise<string[]> {
   const { logDir, logLevel, sizeMb, count, rpcPortal } = await getConfigFromFile(configFileName)
-  let args = `--file-log-dir "${logDir}" --file-log-level ${logLevel} --file-log-size ${sizeMb} --file-log-count ${count} --config-file "${configPath}"`
-  if (rpcPortal) {
-    args += ` --rpc-portal ${rpcPortal}`
-  }
+  const args = [
+    '--file-log-dir',
+    logDir,
+    '--file-log-level',
+    logLevel,
+    '--file-log-size',
+    `${sizeMb}`,
+    '--file-log-count',
+    `${count}`,
+    '--config-file',
+    configPath
+  ]
+  if (rpcPortal) args.push('--rpc-portal', rpcPortal)
   return args
 }
 
@@ -687,7 +710,7 @@ export const installServiceOnWindows = async (
   serviceName: string,
   args: string,
   options?: { username?: string; password?: string }
-) => {
+): Promise<boolean> => {
   return new Promise(async (resolve) => {
     const appDirectory = await getResourceDir()
     // Windows 需要 .exe 扩展名；核心独立存放在 resource/core 下
@@ -833,18 +856,103 @@ export const stopServiceOnWindows = (serviceName: string) => {
 }
 
 /**
+ * 执行官方 CLI 的 service 子命令（v2.4.5+）
+ *
+ * 服务名是 Service 子命令的一级参数，必须放在动作之前：
+ *   easytier-cli service -n <name> <install|uninstall|status|start|stop>
+ * serviceName 传空串时沿用 CLI 默认服务名（env!("CARGO_PKG_NAME")），仅用于兼容
+ * 旧版 LightTier 安装的官方服务（当时未传 -n）。
+ */
+const runOfficialServiceCmd = (serviceName: string, action: string, extra: string[] = []) => {
+  const args = ['service']
+  if (serviceName) args.push('-n', serviceName)
+  args.push(action, ...extra)
+  return executeCmd('easytier-cli', args, { encoding: 'gbk' })
+}
+
+/** 解析 service status 输出：未安装 false / 运行中 SERVICE_RUNNING / 已停止 SERVICE_STOPPED */
+const parseOfficialServiceStatus = (res: any): string | boolean => {
+  if (typeof res === 'string') {
+    const lowerRes = res.toLowerCase()
+
+    // 首先检查未安装状态（优先级最高）
+    if (
+      lowerRes.includes('not installed') ||
+      lowerRes.includes('未安装') ||
+      lowerRes.includes('does not exist') ||
+      lowerRes.includes('不存在')
+    ) {
+      return false
+    }
+
+    // 检查运行状态
+    if (
+      lowerRes.includes('running') ||
+      lowerRes.includes('运行') ||
+      lowerRes.includes('started') ||
+      lowerRes.includes('active')
+    ) {
+      return 'SERVICE_RUNNING'
+    }
+
+    // 检查停止状态
+    if (
+      lowerRes.includes('stopped') ||
+      lowerRes.includes('停止') ||
+      lowerRes.includes('inactive')
+    ) {
+      return 'SERVICE_STOPPED'
+    }
+  }
+
+  // 检查返回对象的错误码
+  if (res && typeof res === 'object') {
+    // code 为 0 表示命令执行成功
+    if (res.code === 0) return 'SERVICE_STOPPED'
+    // 其他错误码表示服务不存在或命令失败
+    if (res.code !== undefined) return false
+  }
+
+  // 默认未安装
+  return false
+}
+
+/** 查询指定名称（空串=CLI 默认名）的官方服务状态 */
+const checkOfficialServiceStatus = async (serviceName: string): Promise<string | boolean> => {
+  try {
+    return parseOfficialServiceStatus(await runOfficialServiceCmd(serviceName, 'status'))
+  } catch (e: any) {
+    error(`官方CLI检查服务状态失败: ${e}`)
+    return false
+  }
+}
+
+/**
+ * 解析实际可操作的官方服务名：优先具名服务，回退旧版未传 -n 的默认名。
+ * @returns 服务名（空串表示 CLI 默认名）；两者都不存在时为 null
+ */
+const resolveOfficialServiceName = async (serviceName: string): Promise<string | null> => {
+  if ((await checkOfficialServiceStatus(serviceName)) !== false) return serviceName
+  if (serviceName && (await checkOfficialServiceStatus('')) !== false) return ''
+  return null
+}
+
+/**
  * 使用官方 easytier-cli 安装服务
+ * @param serviceName 服务名（-n）；按配置独立命名，与 NSSM 方案保持一致
  */
 export const installServiceWithOfficialCli = async (
-  _serviceName: string, // 注释：官方CLI不需要serviceName参数，但保留以兼容调用方
+  serviceName: string,
   configPath: string,
   configFileName: string,
   options: {
     description?: string
     displayName?: string
     disableAutostart?: boolean
+    /** 当前内核版本；缺省时现场执行 easytier-cli -V 探测 */
+    coreVersion?: string | null
   } = {}
-) => {
+): Promise<boolean> => {
   return new Promise(async (resolve) => {
     try {
       const appDirectory = await getResourceDir()
@@ -854,8 +962,8 @@ export const installServiceWithOfficialCli = async (
       const coreFileName = platform === 'windows' ? 'easytier-core.exe' : 'easytier-core'
       const corePath = await join(await resourceDir(), CORE_PATH, coreFileName)
 
-      // 构建命令参数
-      const args = ['service', 'install']
+      // 构建命令参数（服务名须位于动作之前：service -n <name> install）
+      const args = ['service', '-n', serviceName, 'install']
 
       if (options.description) {
         args.push('--description', options.description)
@@ -865,8 +973,9 @@ export const installServiceWithOfficialCli = async (
         args.push('--display-name', options.displayName)
       }
 
+      // 官方 CLI 的 --disable-autostart 为 Option<bool>，必须显式带 true/false
       if (options.disableAutostart) {
-        args.push('--disable-autostart')
+        args.push('--disable-autostart', 'true')
       }
 
       // 注意：Tauri Command.create 会将每个数组元素作为独立参数传递，不需要手动添加引号
@@ -875,27 +984,27 @@ export const installServiceWithOfficialCli = async (
 
       // 读取配置文件获取日志配置和 rpc_portal
       // v2.5.0 起 rpc_portal 不再从配置文件读取，需通过 --rpc-portal 命令行参数传递
-      const { logDir, logLevel, sizeMb, count, rpcPortal } = await getConfigFromFile(configFileName)
+      const configFile = configFileName.endsWith('.toml')
+        ? configFileName
+        : `${configFileName}.toml`
+      const coreArgs = await buildCoreArgsList(configFile, configPath)
 
-      // 构建服务运行时的参数（logDir 为绝对路径，与服务进程 CWD 无关）
-      // 格式: easytier-core --file-log-dir <abs> --file-log-level info --file-log-size 10 --file-log-count 10 --config-file config.toml [--rpc-portal addr]
-      args.push(
-        '--',
-        '--file-log-dir',
-        `${logDir}`,
-        '--file-log-level',
-        logLevel,
-        '--file-log-size',
-        `${sizeMb}`,
-        '--file-log-count',
-        `${count}`,
-        '--config-file',
-        `${configPath}`
-      )
-
-      // 如果配置了 rpc_portal，通过命令行参数传递
-      if (rpcPortal) {
-        args.push('--rpc-portal', rpcPortal)
+      // 核心参数传递方式随版本变化：
+      // - v2.4.5 ~ v2.6.4：`--` 之后的位置参数（trailing_var_arg）
+      // - v2.7.0+：`--core-args` 接收 1..N 个值，且必须是最后一个选项
+      let coreVersion = parseCoreVersion(options.coreVersion)
+      if (!coreVersion) {
+        try {
+          coreVersion = parseCoreVersion(await runEasyTierCli(['-V']))
+        } catch {
+          /* 探测失败按旧版位置参数处理 */
+        }
+      }
+      const namedCoreArgs = !!coreVersion && compareCoreVersion(coreVersion, 'v2.7.0') >= 0
+      if (namedCoreArgs) {
+        args.push('--core-args', ...coreArgs)
+      } else {
+        args.push('--', ...coreArgs)
       }
 
       // 执行安装
@@ -924,133 +1033,74 @@ export const installServiceWithOfficialCli = async (
 /**
  * 使用官方 easytier-cli 卸载服务
  */
-export const uninstallServiceWithOfficialCli = async (_serviceName: string) => {
-  return new Promise(async (resolve) => {
-    try {
-      const res: any = await executeCmd('easytier-cli', ['service', 'uninstall'], {
-        encoding: 'gbk'
-      })
-      info(`官方CLI卸载服务结果: ${JSON.stringify(res)}`)
+export const uninstallServiceWithOfficialCli = async (serviceName: string) => {
+  try {
+    const target = await resolveOfficialServiceName(serviceName)
+    if (target === null) return false
 
-      if (
-        res &&
-        (res.code === 0 ||
-          res.code === undefined ||
-          res.includes('success') ||
-          res.includes('卸载成功'))
-      ) {
-        resolve(true)
-        return
-      }
-      resolve(false)
-    } catch (e: any) {
-      error(`官方CLI卸载服务失败: ${e}`)
-      resolve(false)
-    }
-  })
+    const res: any = await runOfficialServiceCmd(target, 'uninstall')
+    info(`官方CLI卸载服务结果: ${JSON.stringify(res)}`)
+
+    return !!(
+      res &&
+      (res.code === 0 ||
+        res.code === undefined ||
+        res.includes('success') ||
+        res.includes('卸载成功'))
+    )
+  } catch (e: any) {
+    error(`官方CLI卸载服务失败: ${e}`)
+    return false
+  }
 }
 
 /**
  * 使用官方 easytier-cli 检查服务状态
+ * 具名服务不存在时回退 CLI 默认名（兼容旧版 LightTier 安装的官方服务）
  */
-export const checkServiceWithOfficialCli = async (_serviceName: string) => {
-  return new Promise(async (resolve) => {
-    try {
-      const res: any = await executeCmd('easytier-cli', ['service', 'status'], { encoding: 'gbk' })
-
-      if (typeof res === 'string') {
-        const lowerRes = res.toLowerCase()
-
-        // 首先检查未安装状态（优先级最高）
-        if (
-          lowerRes.includes('not installed') ||
-          lowerRes.includes('未安装') ||
-          lowerRes.includes('does not exist') ||
-          lowerRes.includes('不存在')
-        ) {
-          resolve(false) // 未安装
-          return
-        }
-
-        // 检查运行状态
-        if (
-          lowerRes.includes('running') ||
-          lowerRes.includes('运行') ||
-          lowerRes.includes('started') ||
-          lowerRes.includes('active')
-        ) {
-          resolve('SERVICE_RUNNING')
-          return
-        }
-
-        // 检查停止状态
-        if (
-          lowerRes.includes('stopped') ||
-          lowerRes.includes('停止') ||
-          lowerRes.includes('inactive')
-        ) {
-          resolve('SERVICE_STOPPED')
-          return
-        }
-      }
-
-      // 检查返回对象的错误码
-      if (res && typeof res === 'object') {
-        // code 为 0 表示命令执行成功
-        if (res.code === 0) {
-          resolve('SERVICE_STOPPED')
-          return
-        }
-        // 其他错误码表示服务不存在或命令失败
-        if (res.code !== undefined && res.code !== 0) {
-          resolve(false)
-          return
-        }
-      }
-
-      // 默认未安装
-      resolve(false)
-    } catch (e: any) {
-      error(`官方CLI检查服务状态失败: ${e}`)
-      resolve(false)
-    }
-  })
+export const checkServiceWithOfficialCli = async (serviceName: string) => {
+  const status = await checkOfficialServiceStatus(serviceName)
+  if (status !== false) return status
+  if (serviceName) return await checkOfficialServiceStatus('')
+  return false
 }
 
 /**
  * 使用官方 easytier-cli 启动服务
  */
 export const startServiceWithOfficialCli = async (serviceName: string) => {
-  return new Promise(async (resolve) => {
-    try {
-      await executeCmd('easytier-cli', ['service', 'start'], { encoding: 'gbk' })
-      await sleep(2000)
+  try {
+    const target = await resolveOfficialServiceName(serviceName)
+    if (target === null) return false
 
-      const status = await checkServiceWithOfficialCli(serviceName)
-      resolve(status === 'SERVICE_RUNNING')
-    } catch (e: any) {
-      error(`官方CLI启动服务失败: ${e}`)
-      resolve(false)
-    }
-  })
+    await runOfficialServiceCmd(target, 'start')
+    await sleep(2000)
+
+    // 按实际操作的服务名复查，避免回退探测把另一服务状态误算进来
+    return (await checkOfficialServiceStatus(target)) === 'SERVICE_RUNNING'
+  } catch (e: any) {
+    error(`官方CLI启动服务失败: ${e}`)
+    return false
+  }
 }
 
 /**
  * 使用官方 easytier-cli 停止服务
  */
 export const stopServiceWithOfficialCli = async (serviceName: string) => {
-  return new Promise(async (resolve) => {
-    try {
-      await executeCmd('easytier-cli', ['service', 'stop'], { encoding: 'gbk' })
-      await sleep(2000)
+  try {
+    const target = await resolveOfficialServiceName(serviceName)
+    if (target === null) return false
 
-      const status = await checkServiceWithOfficialCli(serviceName)
-      resolve(status === 'SERVICE_STOPPED')
-    } catch (e: any) {
-      error(`官方CLI停止服务失败: ${e}`)
-      resolve(false)
-    }
-  })
+    await runOfficialServiceCmd(target, 'stop')
+    await sleep(2000)
+
+    // 按实际操作的服务名复查，避免回退探测把另一服务状态误算进来
+    return (await checkOfficialServiceStatus(target)) === 'SERVICE_STOPPED'
+  } catch (e: any) {
+    error(`官方CLI停止服务失败: ${e}`)
+    return false
+  }
 }
 
 /**
@@ -1081,7 +1131,7 @@ export const detectServiceInstallMethod = async (
         return 'none'
       } else if (savedMethod === 'official') {
         const status = await checkServiceWithOfficialCli(serviceName)
-        if (status && status !== false) {
+        if (status) {
           return 'official'
         }
         // 如果服务已卸载，返回 none
@@ -1102,7 +1152,7 @@ export const detectServiceInstallMethod = async (
 
   // 再检查官方 CLI
   const officialStatus = await checkServiceWithOfficialCli(serviceName)
-  if (officialStatus && officialStatus !== false) {
+  if (officialStatus) {
     return 'official'
   }
 

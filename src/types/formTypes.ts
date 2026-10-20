@@ -79,12 +79,18 @@ interface Flags {
   ipv6_public_addr_auto?: boolean | undefined // 自动获取公网 IPv6 地址
   ipv6_public_addr_prefix?: string | undefined // 手动指定公网 IPv6 子网
   enable_udp_broadcast_relay?: boolean | undefined // 启用 UDP 广播中继
-  secure_mode?: boolean | undefined // 启用安全模式
   disable_relay_kcp?: boolean | undefined // 禁止转发 KCP 数据包
   disable_relay_quic?: boolean | undefined // 禁止转发 QUIC 数据包
   enable_relay_foreign_network_kcp?: boolean | undefined // 允许转发外部网络 KCP
   enable_relay_foreign_network_quic?: boolean | undefined // 允许转发外部网络 QUIC
   tld_dns_zone?: string | undefined // TLD DNS 区域
+}
+
+/** 安全模式配置（TOML 的 [secure_mode] 表，EasyTier Core v2.6.4+） */
+export interface SecureModeConfig {
+  enabled?: boolean
+  local_private_key?: string // base64(X25519 私钥)，留空则内核启动时随机生成
+  local_public_key?: string // base64(X25519 公钥)，通常由私钥派生
 }
 
 /** 配置编辑表单主数据结构（EditDialog / WebConfigForm 双向绑定的数据源） */
@@ -103,14 +109,15 @@ export interface EasyTierFormData {
   proxy_network: Partial<ProxyNetwork>[] | undefined | null
   exit_nodes: any[] | undefined
   external_node?: string | undefined // 外部节点（公共共享节点）
-  config_exit_nodes_route: any | undefined
+  /** @deprecated 旧版 LightTier 退出路由标记，仅兼容读取，迁移后写入 [lighttier] */
+  config_exit_nodes_route?: any | undefined
+  /** LightTier 私有元数据（TOML [lighttier] 表，官方内核忽略） */
+  lighttier?: LightTierConfig | undefined
   rpc_portal: string
   rpc_portal_whitelist?: string[] | undefined // RPC 门户白名单
   socks5_proxy?: string | undefined // SOCKS5 代理（顶层）
-  local_private_key?: string | undefined // 安全模式本地私钥
-  local_public_key?: string | undefined // 安全模式本地公钥
-  credential?: string | undefined // 临时入网凭据
-  credential_file?: string | undefined // 凭据存储文件路径
+  secure_mode?: SecureModeConfig | undefined // 安全模式（[secure_mode] 表）
+  credential_file?: string | undefined // 凭据存储文件路径（顶层）
   tcp_whitelist?: string | undefined // TCP 白名单
   udp_whitelist?: string | undefined // UDP 白名单
   stun_servers?: string[] | undefined // STUN 服务器列表

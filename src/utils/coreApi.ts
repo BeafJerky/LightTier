@@ -5,7 +5,8 @@
  * - Android：easytier 内核进程内运行（android/mod.rs 命令 + mobileVpn.ts VPN 编排）
  * - 浏览器 mock：复用 useMockData 的 mock 实现，pnpm dev 不受影响
  */
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { BUILTIN_CORE_VERSION } from '@/constants/easytier'
 import { useMockData } from '@/hooks/useMockData'
 import { isAndroid } from './platformUtil'
 import { startMobileVpn, stopMobileVpn, type RunningInstance } from './mobileVpn'
@@ -115,11 +116,13 @@ export const checkPortConflicts = async (fileName: string): Promise<PortConflict
   return base().checkPortConflicts(fileName)
 }
 
-/** 内核版本（Android：内置内核编译版本；桌面：easytier-cli -V） */
+/** 内核版本（Android：内置内核编译版本；桌面：easytier-cli -V；浏览器 mock：内置版本） */
 export const getCoreVersion = async (): Promise<string> => {
   if (isAndroid()) {
     return await invoke<string>('get_core_version')
   }
+  // 浏览器（pnpm dev）无 Tauri 运行时：返回内置版本，便于预览版本适配后的表单/提示
+  if (!isTauri()) return BUILTIN_CORE_VERSION
   const { runEasyTierCli } = await import('./shellUtil')
   const res = await runEasyTierCli(['-V'])
   return String(res).trim()
