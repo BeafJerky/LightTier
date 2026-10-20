@@ -1,11 +1,34 @@
-# Android 构建公共环境配置
+﻿# Android 构建公共环境配置
 # 使用环境变量 + 默认值模式，支持不同开发者机器
 # 用法: 在各构建脚本中 . "$PSScriptRoot\android-env.ps1"
 
 # 注意: 构建脚本经 Windows PowerShell 5.1 调用（见 lt-repack-all.ps1），不可使用 pwsh 7 专有的 ?? 运算符
 $script:ANDROID_NDK_HOME = if ($env:ANDROID_NDK_HOME) { $env:ANDROID_NDK_HOME } else { "D:\develop\Android\ndk\29.0.13846066" }
 $script:ANDROID_HOME     = if ($env:ANDROID_HOME)     { $env:ANDROID_HOME }     else { "D:\develop\Android" }
-$script:JAVA_HOME        = if ($env:JAVA_HOME)        { $env:JAVA_HOME }        else { "C:\Program Files\Java\jdk-17" }
+
+# AGP 8.11 要求 JDK 17+。系统 JAVA_HOME 可能指向旧版（如 1.8），
+# 直接采用会让 Gradle 以 Java 8 运行并在 buildSrc:compileKotlin 失败，因此先校验版本再回退默认 JDK。
+function Get-JavaMajorVersion([string]$JdkHome) {
+    $releaseFile = Join-Path $JdkHome "release"
+    if (-not (Test-Path $releaseFile)) { return 0 }
+    $match = Select-String -Path $releaseFile -Pattern '^JAVA_VERSION="([^"]+)"' | Select-Object -First 1
+    if (-not $match) { return 0 }
+    $parts = $match.Matches[0].Groups[1].Value.Split('.')
+    # 旧版命名 1.8.0_x 的首段为 1，真实主版本在第二段
+    if ($parts[0] -eq '1' -and $parts.Count -gt 1) { return [int]$parts[1] }
+    return [int]$parts[0]
+}
+
+$script:JAVA_HOME = $env:JAVA_HOME
+if (-not $script:JAVA_HOME -or (Get-JavaMajorVersion $script:JAVA_HOME) -lt 17) {
+    if ($script:JAVA_HOME) {
+        Write-Host "WARN: JAVA_HOME ($script:JAVA_HOME) 的 Java 版本低于 17（AGP 要求），回退默认 JDK"
+    }
+    $script:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+}
+if (-not (Test-Path (Join-Path $script:JAVA_HOME "bin\java.exe"))) {
+    Write-Host "WARN: 未找到可用的 JDK 17+：$script:JAVA_HOME，请将 JAVA_HOME 指向 JDK 17 或更新版本"
+}
 
 $script:NDK_BIN = "$script:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin"
 
