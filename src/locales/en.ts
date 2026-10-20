@@ -441,10 +441,10 @@ export default {
     configDir: 'Config Directory',
     downloadInstall: 'Core Download & Install',
     downloadInstallHint:
-      'Select a version to download; all running nodes will be stopped before installation',
+      'Select a version to download; all running nodes will be stopped before installation. Packages are kept for later reinstall',
     mirrorSource: 'Mirror Source',
     mirrorSourceDesc:
-      'Downloads use the selected source; the fastest source is picked automatically after probing',
+      'Probes and downloads use the real package of the selected version; the fastest reachable mirror is picked automatically',
     mirrorProbe: '⟳ Re-test',
     mirrorProbing: 'Probing…',
     mirrorOfficial: 'GitHub Official',
@@ -455,7 +455,12 @@ export default {
     channelStable: 'Stable',
     channelPrerelease: 'Preview',
     builtinBadge: 'Bundled',
+    downloadedBadge: 'Downloaded',
     installedBadge: 'Installed',
+    corePackageBuiltin: 'Bundled package is ready to install',
+    corePackageBuiltinMissing: 'Bundled package is missing; please download it again',
+    corePackageDownloaded: 'Selected package is downloaded and ready to install',
+    corePackageNotDownloaded: 'Selected package is not downloaded yet',
     compatProfile: 'Version profile',
     compatUnknown: 'No kernel detected; forms use the latest format',
     compatOutOfRange:

@@ -3,7 +3,7 @@ import { join } from '@tauri-apps/api/path'
 import { CORE_PATH, getCoreFileName } from '@/constants/easytier'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
-import { extractFile } from '@/utils/fileUtil'
+import { cleanCoreDirExceptPackages, extractFile } from '@/utils/fileUtil'
 import { stopAllNodes } from '@/utils/shellUtil'
 import { isAndroid } from '@/utils/platformUtil'
 import { getArch, getOsType } from '@/utils/sysUtil'
@@ -67,8 +67,10 @@ export const useCoreInstall = () => {
       // 按平台/架构生成压缩包文件名（与下载文件名一致；纯字符串拼接，避免 CSP 拦截 eval）
       const filename = getCoreFileName(getOsType(), getArch(), version)
       const zipPath = await join(CORE_PATH, filename)
-      // 工具函数基于 BaseDirectory.Resource，必须传相对路径，不能用 resourceDir() 拼绝对路径
-      const ok = await extractFile(zipPath, CORE_PATH)
+      // 工具函数基于 BaseDirectory.Resource，必须传相对路径，不能用 resourceDir() 拼绝对路径。
+      // extractFile 会先完成压缩包读取与安全校验，再回调清理旧内核文件（保留各版本 zip），
+      // 最后写入新内核；压缩包损坏时不会误删当前可用内核。
+      const ok = await extractFile(zipPath, CORE_PATH, false, cleanCoreDirExceptPackages)
       if (ok) {
         // 安装完成后重新探测版本，让表单/CLI/服务适配立即切换到新内核
         await store.detectCoreVersion()

@@ -39,10 +39,28 @@ export const VERSION_PREFIX = 'v'
  */
 export const getCoreFileName = (osType: string, osArch: string, version: string): string =>
   `easytier-${osType}-${osArch}-${version}.zip`
+/**
+ * 将 GitHub 原始地址包装为镜像加速地址。
+ * 镜像源只存前缀（如 https://ghfast.top/），实际请求需在其后拼接完整 GitHub URL；
+ * 官方源（含尾部斜杠）原样返回，空值回退官方地址。
+ */
+export const getMirrorUrl = (base: string, githubUrl: string): string => {
+  const normalized = (base || GITHUB_EASYTIER).replace(/\/+$/, '')
+  if (!normalized || normalized === GITHUB_EASYTIER) return githubUrl
+  return `${normalized}/${githubUrl}`
+}
+/** 内核压缩包下载地址：按所选加速源拼出真实资源地址（官方直链或镜像前缀 + GitHub URL） */
+export const getCoreDownloadUrl = (base: string, version: string, filename: string): string =>
+  getMirrorUrl(base, `${GITHUB_EASYTIER}${GITHUB_DOWN_URL}/${version}/${filename}`)
 export const PREFIX_SVC = 'easytier-'
 export const PREFIX_SVC_WEB = 'easytierweb-'
 export const STUN_SERVER_URL =
   'https://ghproxy.vip/https://gist.githubusercontent.com/mondain/b0ec1cf5f60ae726202e/raw/2d2b96b4508a38d342e0228d46eab84dad2398a3/public-stun-list.txt'
+/**
+ * GitHub 加速镜像前缀（下载时需拼接完整 GitHub URL，见 getMirrorUrl）。
+ * 仅保留实测可获取内核压缩包的源；已移除 gh.monlor.com（DNS 失效）、
+ * down.npee.cn（TLS 握手失败）、ghproxy.1888866.xyz（HTTP 525）。
+ */
 export const GITHUB_MIRROR_URL = [
   {
     value: 'https://wget.la/',
@@ -52,11 +70,6 @@ export const GITHUB_MIRROR_URL = [
   {
     value: 'https://gh-proxy.com/',
     label: 'https://gh-proxy.com/',
-    latency: null
-  },
-  {
-    value: 'https://gh.monlor.com/',
-    label: 'https://gh.monlor.com/',
     latency: null
   },
   {
@@ -85,18 +98,8 @@ export const GITHUB_MIRROR_URL = [
     latency: null
   },
   {
-    value: 'https://down.npee.cn/',
-    label: 'https://down.npee.cn/',
-    latency: null
-  },
-  {
     value: 'https://fastgit.cc/',
     label: 'https://fastgit.cc/',
-    latency: null
-  },
-  {
-    value: 'https://ghproxy.1888866.xyz/',
-    label: 'https://ghproxy.1888866.xyz/',
     latency: null
   }
 ]

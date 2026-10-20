@@ -371,6 +371,9 @@
             <div class="sd-core-install-hint">
               {{ t('newSettings.downloadInstallHint') }}
             </div>
+            <div class="sd-core-install-status" :class="{ ready: selectedCoreReady }">
+              {{ corePackageStatusText }}
+            </div>
             <div class="sd-core-install-actions">
               <div class="sd-select-wrapper" ref="versionDropdownRef">
                 <button
@@ -430,6 +433,11 @@
                         t('newSettings.builtinBadge')
                       }}</span>
                       <span
+                        v-else-if="downloadedCoreVersions.includes(item.tag_name)"
+                        class="sd-core-chip downloaded"
+                        >{{ t('newSettings.downloadedBadge') }}</span
+                      >
+                      <span
                         v-if="item.tag_name === store.detectedCoreVersion"
                         class="sd-core-chip installed"
                         >{{ t('newSettings.installedBadge') }}</span
@@ -450,7 +458,7 @@
               <button
                 class="sd-btn sd-btn-success"
                 @click="handleInstallCore"
-                :disabled="installingCore"
+                :disabled="installingCore || !selectedCoreReady"
               >
                 {{ installingCore ? t('newCommon.installing') : t('newSettings.installCore') }}
               </button>
@@ -685,20 +693,20 @@ import { useCoreInstall } from '@/hooks/useCoreInstall'
 import { useMirrorProbe, LATENCY_GOOD, LATENCY_BAD } from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useStorage } from '@/hooks/web/useStorage'
-import { clearETLogs, clearLogs, downloadFile, openPath } from '@/utils/fileUtil'
+import { clearETLogs, clearLogs, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
 import { hashLockPassword } from '@/utils/lockUtil'
 import { isAndroid } from '@/utils/platformUtil'
 import { CORE_VERSION_OPTIONS } from '@/constants/kernelCompat'
 import {
   CORE_PATH,
-  GITHUB_EASYTIER,
-  GITHUB_DOWN_URL,
+  getCoreDownloadUrl,
   getCoreFileName,
   BUILTIN_CORE_VERSION,
   MANAGER_REPO_URL,
   MANAGER_REPO_HOME
 } from '@/constants/easytier'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { resourceDir, join } from '@tauri-apps/api/path'
 
@@ -725,6 +733,16 @@ const { installing: installingCore, installCore } = useCoreInstall()
 const { t } = useI18n()
 // Android：内核编译期内置（无独立安装包/路径概念）
 const isAndroidPlatform = isAndroid()
+// 桌面 Tauri 运行时：浏览器预览不扫描本地内核目录（withGlobalTauri 已关闭，统一用 isTauri()）
+const isDesktopRuntime =
+  !isAndroidPlatform &&
+  (() => {
+    try {
+      return isTauriRuntime()
+    } catch {
+      return false
+    }
+  })()
 
 // 确认弹窗（替代原生 confirm）：将面板内确认操作 Promise 化，
 // resolveConfirm 返回用户选择；被其它方式关闭时按“取消”处理
@@ -921,6 +939,43 @@ const coreFileName = ref('')
 const selectedCoreOption = computed(() =>
   coreVerOptions.find((o) => o.tag_name === coreVerSelect.value)
 )
+// 已下载的内核安装包版本（扫描 resource/core 下的 zip；安装后仍保留）
+const downloadedCoreVersions = ref<string[]>([])
+const isSelectedCoreDownloaded = computed(() =>
+  downloadedCoreVersions.value.includes(coreVerSelect.value)
+)
+// 以本地 zip 实际存在为准（内置版本也可能因资源缺失/外部删除而不可安装）
+const selectedCoreReady = computed(() => isSelectedCoreDownloaded.value)
+const corePackageStatusText = computed(() => {
+  if (isSelectedCoreDownloaded.value) {
+    return selectedCoreOption.value?.builtin
+      ? t('newSettings.corePackageBuiltin')
+      : t('newSettings.corePackageDownloaded')
+  }
+  return selectedCoreOption.value?.builtin
+    ? t('newSettings.corePackageBuiltinMissing')
+    : t('newSettings.corePackageNotDownloaded')
+})
+
+// 扫描 core 目录，按当前平台/架构的压缩包名判断各版本下载状态
+const refreshDownloadedCores = async () => {
+  if (!isDesktopRuntime) return
+  try {
+    const files = new Set(await listFiles(CORE_PATH))
+    downloadedCoreVersions.value = coreVerOptions
+      .filter((o) => files.has(getCoreFileName(getOsType(), getArch(), o.tag_name)))
+      .map((o) => o.tag_name)
+  } catch (e) {
+    console.error('扫描内核安装包失败:', e)
+    downloadedCoreVersions.value = []
+  }
+}
+
+// 切到内核页时重新扫描，外部新增/删除安装包也能及时反映
+watch(activeTab, (tab) => {
+  if (tab === 'core') void refreshDownloadedCores()
+})
+
 // 切换目标版本时展示的渠道/内置标记（正式版与预览版的配置行为不同，需明确提示）
 const selectedChannelLabel = computed(() =>
   selectedCoreOption.value?.channel === 'prerelease'
@@ -951,9 +1006,13 @@ const {
   selectSource: mirrorSelect
 } = useMirrorProbe()
 
-// 测速全部镜像源，全部失败时给出提示
+// 测速全部镜像源（目标为所选版本的真实内核包），全部失败时给出提示
 const handleProbeMirrors = async () => {
-  await probeAll()
+  if (!coreFileName.value) {
+    toast.warning(t('newSettings.selectVersionFirst'))
+    return
+  }
+  await probeAll(coreVerSelect.value, coreFileName.value)
   if (mirrorSources.value.every((s) => s.latency === null)) {
     toast.warning(t('newSettings.mirrorProbeFail'))
   }
@@ -1010,6 +1069,7 @@ watch(visible, async (v) => {
       const match = coreVerOptions.find((o) => o.tag_name === installed)
       coreVerSelect.value = match ? match.tag_name : BUILTIN_CORE_VERSION
       updateCoreFileName()
+      await refreshDownloadedCores()
     }
   }
 })
@@ -1125,14 +1185,14 @@ const handleDownloadCore = async () => {
   }
   downloadingCore.value = true
   try {
-    // 5.10 必改：优先走用户选择的镜像源（无选择时回退官方直链），并规范化尾部斜杠
-    const mirrorSource = localStorage.getItem('mirror-source')
-    const base = (mirrorSource || GITHUB_EASYTIER).replace(/\/+$/, '')
-    const url = base + GITHUB_DOWN_URL + '/' + coreVerSelect.value + '/' + coreFileName.value
+    // 镜像前缀需要拼接完整 GitHub URL（官方源直链），与测速使用同一拼接规则
+    const url = getCoreDownloadUrl(mirrorSelected.value, coreVerSelect.value, coreFileName.value)
     toast.info(t('newSettings.downloadingHint'))
     const ok = await downloadFile(url)
     if (ok) {
       toast.success(t('newSettings.downloadSuccess'))
+      // 安装包保留在 core 目录，立即刷新“已下载”状态
+      await refreshDownloadedCores()
     } else {
       toast.error(t('newSettings.downloadFail'))
     }
@@ -1147,6 +1207,11 @@ const handleDownloadCore = async () => {
 // 安装所选版本内核（切换前停止全部实例与服务，成功后重新检测版本）
 const handleInstallCore = async () => {
   const target = coreVerSelect.value
+  // 只有内置包或已下载的 zip 才能安装（按钮已禁用，这里兜底提示）
+  if (!selectedCoreReady.value) {
+    toast.warning(t('newSettings.corePackageNotDownloaded'))
+    return
+  }
   const runningCount = store.runningList.length
   const serviceHint = isAndroidPlatform ? '' : t('newSettings.installConfirmServiceHint')
   if (
@@ -1617,6 +1682,11 @@ const handleInstallCore = async () => {
   background: var(--theme-border-light, #f5ede6);
 }
 
+.sd-core-chip.downloaded {
+  color: var(--theme-color-success, #7fba8a);
+  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+}
+
 /* 确认弹窗内容 */
 .sd-confirm-body {
   display: flex;
@@ -1748,6 +1818,29 @@ const handleInstallCore = async () => {
   font-size: 11px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
+}
+
+/* 所选版本安装包状态：已下载/内置为绿色，未下载提示先下载 */
+.sd-core-install-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--theme-color-warning, #d9a441);
+}
+
+.sd-core-install-status::before {
+  width: 6px;
+  height: 6px;
+  background: currentcolor;
+  border-radius: 50%;
+  content: '';
+  flex-shrink: 0;
+}
+
+.sd-core-install-status.ready {
+  color: var(--theme-color-success, #7fba8a);
 }
 
 .sd-core-install-actions {

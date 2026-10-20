@@ -288,6 +288,37 @@ export const deleteFileOrDir = async (path: string) => {
   await remove(path, { baseDir: getBaseDir(), recursive: true })
 }
 
+/** 内核包判定：core 目录下仅 .zip 安装包在切换版本时保留（供状态展示与离线重装） */
+export const isCorePackageFile = (name: string): boolean => /\.zip$/i.test(name)
+
+/**
+ * 安装前清理内核目录：保留各版本 .zip 安装包，删除旧内核可执行文件、DLL 与
+ * 未完成的下载临时文件，避免切换版本后残留旧组件。
+ * 返回 false 表示存在无法删除的条目（通常仍被进程占用），调用方应中止安装。
+ */
+export const cleanCoreDirExceptPackages = async (): Promise<boolean> => {
+  let ok = true
+  try {
+    const entries = await readDir(CORE_PATH, { baseDir: getBaseDir() })
+    for (const entry of entries) {
+      if (entry.isFile && isCorePackageFile(entry.name)) continue
+      try {
+        await remove(await join(CORE_PATH, entry.name), {
+          baseDir: getBaseDir(),
+          recursive: true
+        })
+      } catch (e: any) {
+        ok = false
+        error(`清理旧内核文件失败 ${entry.name}:${JSON.stringify(e)}`)
+      }
+    }
+  } catch (e: any) {
+    error(`列出内核目录失败:${JSON.stringify(e)}`)
+    return false
+  }
+  return ok
+}
+
 /**
  * 下载文件
  * @param fileUrl 文件URL
@@ -417,12 +448,14 @@ export async function openPath(path: string) {
  * @param zipPath 压缩文件路径（相对于 Resource 目录）
  * @param destPath 解压目标目录（相对于 Resource 目录）
  * @param keepDir   是否保留原路径
+ * @param beforeWrite 写入前回调（如清理旧内核文件）；返回 false 则中止解压
  * @returns Promise<boolean> 解压是否成功
  */
 export async function extractFile(
   zipPath: string,
   destPath: string,
-  keepDir: boolean = false
+  keepDir: boolean = false,
+  beforeWrite?: () => Promise<boolean>
 ): Promise<boolean> {
   try {
     // 读取zip文件内容  resource\easytier-windows-x86_64-v2.0.3.zip
@@ -440,10 +473,28 @@ export async function extractFile(
       error(`压缩包条目数超限(${paths.length} > ${MAX_EXTRACT_ENTRIES}):${zipPath}`)
       return false
     }
+    // 空包/仅目录的 zip 也属合法压缩格式，必须在清理旧内核前拒绝
+    if (!paths.some((p) => !p.endsWith('/'))) {
+      error(`压缩包不包含可释放的内核文件:${zipPath}`)
+      return false
+    }
     let totalBytes = 0
     for (const data of Object.values(files)) totalBytes += data.length
     if (totalBytes > MAX_EXTRACT_TOTAL_BYTES) {
       error(`压缩包解压后大小超限(${totalBytes} > ${MAX_EXTRACT_TOTAL_BYTES}):${zipPath}`)
+      return false
+    }
+    // 预校验全部条目：压缩包非法时直接中止，避免清理旧内核后又只写入部分文件
+    const unsafeEntry = paths.find((p) => !isSafeZipEntryPath(p))
+    if (unsafeEntry) {
+      error(`压缩包包含非法条目(${unsafeEntry})，已中止解压:${zipPath}`)
+      return false
+    }
+
+    // 待解压内容校验通过后再执行前置清理（如删除旧内核文件）：
+    // 压缩包缺失/损坏/非法时不会误删当前可用内核
+    if (beforeWrite && !(await beforeWrite())) {
+      error(`解压前置清理失败，已中止:${zipPath}`)
       return false
     }
 
@@ -453,6 +504,7 @@ export async function extractFile(
     // Unix 桌面解压出的内核二进制需补可执行位，先收集目标绝对路径，解压完成后统一 chmod
     const needExecBit = needsExecutableBit()
     const executables: string[] = []
+    let writeFailed = false
     // 写入解压后的文件
     for (const [filePath, fileData] of Object.entries(files)) {
       try {
@@ -488,8 +540,15 @@ export async function extractFile(
           executables.push(await join(await resourceDir(), targetPath))
         }
       } catch (e: any) {
+        writeFailed = true
         error(`处理文件 ${filePath} 时出错:${JSON.stringify(e)}`)
       }
+    }
+
+    // 任一内核文件写入失败都不能视为安装成功（旧文件已在写入前清理，保留 zip 便于重试）
+    if (writeFailed) {
+      error(`部分内核文件写入失败，安装未完成:${zipPath}`)
+      return false
     }
 
     // Unix 桌面：补可执行位（无执行位内核无法启动；失败则保留压缩包便于重试）
@@ -501,8 +560,7 @@ export async function extractFile(
       }
     }
 
-    // 删除zip文件（解压产物已就位，压缩包不再需要）
-    await deleteFileOrDir(zipPath)
+    // 保留 zip：设置页据此展示下载状态，并支持不重新下载直接切换/离线重装
     return true
   } catch (e: any) {
     error(`解压文件时出错:${JSON.stringify(e)}`)
