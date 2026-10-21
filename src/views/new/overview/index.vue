@@ -128,6 +128,9 @@ import { CONFIG_PATH } from '@/constants/easytier'
 import { checkConfigCompat } from '@/utils/kernelCompatUtil'
 import { migrateLightTierConfig } from '@/utils/lighttierConfigUtil'
 import { isAndroid } from '@/utils/platformUtil'
+import { isTauri } from '@tauri-apps/api/core'
+import { applyExitRouteFromFile, clearExitRoute } from '@/utils/routeUtil'
+import { useTrendBuffer } from '@/hooks/useTrendBuffer'
 
 defineOptions({ name: 'NewOverview' })
 
@@ -139,8 +142,28 @@ const { runningFileName, queueLength, isQueued, enqueue } = useStartQueue()
 const { show: toast } = useCreamToast()
 const { t } = useI18n()
 const { readFileContent, writeFileContent } = useMockData()
-// 自动跃点：启动前记录、停止后恢复
+// 自动跃点：启动前记录、停止后恢复（按配置名引用计数）
 const { beforeStart: autoMetricBeforeStart, afterStop: autoMetricAfterStop } = useAutoMetric()
+const { clearTrend } = useTrendBuffer()
+const isDesktopRuntime = isTauri() && !isAndroid()
+// 出口路由结果提示：仅主动启动/停止时提示，自动运行保持安静
+const notifyExitRouteResult = (
+  result: { ok: boolean; reason?: string; message?: string },
+  auto: boolean
+) => {
+  if (result.ok) {
+    if (!auto) toast(t('newConfig.exitRouteAutoApplied'), 'success')
+    return
+  }
+  if (result.reason === 'precondition') {
+    toast(t('newConfig.exitRoutePrecondition'), 'warning', 4000)
+  } else if (result.reason === 'no-exit') {
+    toast(t('newConfig.exitRouteNoExit'), 'warning')
+  } else if (result.reason === 'command') {
+    const detail = result.message ? `（${result.message}）` : ''
+    toast(t('newConfig.exitRouteFail') + detail, 'error', 5000)
+  }
+}
 
 // 当前内核下该配置的兼容性错误（会阻止内核启动）；读取/解析失败时不做拦截
 const getCompatErrors = async (fileName: string) => {
@@ -321,9 +344,14 @@ const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => 
       easyTierStore.setLastRunConfigName(item)
       await updateRunningList()
       toast(t('newCommon.startSuccess'), 'success')
+      // 概览页 / 冷启动自动运行：与其他入口一致地应用出口节点路由
+      if (isDesktopRuntime) {
+        const routeResult = await applyExitRouteFromFile(item.configFileName, fileName)
+        notifyExitRouteResult(routeResult, Boolean(opts.auto))
+      }
     } catch (e: any) {
-      // 失败自动回滚该配置的 AutoMetric 状态
-      await autoMetricAfterStop()
+      // 失败自动回滚该配置的 AutoMetric 状态（不影响其他配置的持有计数）
+      await autoMetricAfterStop(fileName)
       // 展示内核真实错误，便于定位（invoke 拒绝值可能是字符串或 Error）
       const detail = typeof e === 'string' ? e : e?.message
       const base = isAndroid() ? t('newOverview.startFailAndroid') : t('newOverview.startFailCore')
@@ -334,9 +362,10 @@ const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => 
   })
 }
 
-// 停止配置：Android 停 VPN+内核，桌面结束子进程；随后恢复网卡跃点
+// 停止配置：Android 停 VPN+内核，桌面结束子进程；成功后恢复网卡跃点并清理出口路由
 const stopAction = async (item: RunningItem) => {
   const running = easyTierStore.runningList.find((r) => r.configFileName === item.configFileName)
+  let stopped = true
   // Android：停 VPN + 内核实例（无 pid）；桌面：结束子进程
   if (isAndroid() || running?.pid) {
     const ok = await coreApi.stopConfig(running ?? item)
@@ -345,12 +374,24 @@ const stopAction = async (item: RunningItem) => {
       easyTierStore.removeRunningList(item.configFileName)
       toast(t('newCommon.stoppedSuccess'), 'success')
     } else {
+      stopped = false
       toast(t('newCommon.stoppedFail'), 'error')
     }
   } else {
     easyTierStore.removeRunningList(item.configFileName)
   }
-  await autoMetricAfterStop()
+  if (!stopped) return
+  await autoMetricAfterStop(item.fileName)
+  clearTrend(item.configFileName)
+  // 只清理当前配置持有的出口路由；失败时保留记录以便重试/残留检查
+  if (isDesktopRuntime) {
+    const routeResult = await clearExitRoute(item.configFileName)
+    if (routeResult.failed > 0) {
+      toast(t('newConfig.exitRouteFail'), 'error', 4000)
+    } else if (routeResult.cleared > 0) {
+      toast(t('newConfig.exitRouteAutoCleared'), 'success')
+    }
+  }
 }
 
 // 空态 CTA：Android 直接进入新增页，桌面打开配置页并自动弹出新增弹窗

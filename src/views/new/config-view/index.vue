@@ -452,8 +452,10 @@ import {
   setExitRoute,
   clearExitRoute,
   checkExitRouteResidue,
-  cleanExitRouteResidue
+  cleanExitRouteResidue,
+  applyExitRouteFromFile
 } from '@/utils/routeUtil'
+import { useTrendBuffer } from '@/hooks/useTrendBuffer'
 import {
   isExitRouteEnabled,
   setExitRouteEnabled,
@@ -478,6 +480,7 @@ const selectedDetail = ref<EasyTierConfig | null>(null)
 const { show: toast } = useCreamToast()
 // 自动跃点：启动前记录网卡状态、停止后恢复（配合退出节点路由避免默认路由缺失）
 const { beforeStart: autoMetricBeforeStart, afterStop: autoMetricAfterStop } = useAutoMetric()
+const { clearTrend } = useTrendBuffer()
 // 文件/服务操作统一从 useMockData 获取：Tauri 环境走真实实现，浏览器 Mock 环境自动降级
 const {
   readFileContent,
@@ -800,7 +803,7 @@ const startAction = async (item: RunningItem) => {
     // 5.9：若配置启用退出路由标记，启动成功后自动配置路由（仅桌面）
     if (isTauri) await applyExitRouteAfterStart(item)
   } catch (e: any) {
-    await autoMetricAfterStop()
+    await autoMetricAfterStop(item.fileName)
     // 展示内核真实错误，便于定位（invoke 拒绝值可能是字符串或 Error）
     const detail = typeof e === 'string' ? e : e?.message
     const base = isAndroidPlatform
@@ -812,9 +815,10 @@ const startAction = async (item: RunningItem) => {
   }
 }
 
-// 停止内核实例：Android 停 VPN+内核，桌面结束子进程；随后恢复跃点并清除退出节点路由
+// 停止内核实例：Android 停 VPN+内核，桌面结束子进程；成功后恢复跃点并清除该配置的退出路由
 const stopAction = async (item: RunningItem) => {
   const running = getRunningItem(item)
+  let stopped = true
   // Android：停 VPN + 内核实例（无 pid）；桌面：结束子进程
   if (isAndroidPlatform || running?.pid) {
     const ok = await coreApi.stopConfig(running ?? item)
@@ -823,14 +827,21 @@ const stopAction = async (item: RunningItem) => {
       easyTierStore.removeRunningList(item.configFileName)
       toast(t('newCommon.stoppedSuccess'), 'success')
     } else {
+      stopped = false
       toast(t('newCommon.stoppedFail'), 'error')
     }
   } else easyTierStore.removeRunningList(item.configFileName)
-  await autoMetricAfterStop()
-  // 5.9：停止后自动清除退出节点路由（不残留）
+  if (!stopped) return
+  await autoMetricAfterStop(item.fileName)
+  clearTrend(item.configFileName)
+  // 5.9：只清除当前配置持有的路由；失败时保留记录供重试/残留检查
   if (isTauri) {
-    const ok = await clearExitRoute()
-    if (ok) toast(t('newConfig.exitRouteAutoCleared'), 'success')
+    const routeResult = await clearExitRoute(item.configFileName)
+    if (routeResult.failed > 0) {
+      toast(t('newConfig.exitRouteFail'), 'error', 4000)
+    } else if (routeResult.cleared > 0) {
+      toast(t('newConfig.exitRouteAutoCleared'), 'success')
+    }
   }
 }
 
@@ -997,17 +1008,34 @@ onMounted(() => {
 // 删除配置
 const deleteSelectedConfig = async () => {
   if (!selectedConfig.value) return
+  const target = selectedConfig.value
+  // 运行中的配置不能直接删除：否则内核仍在运行但 UI 已无法停止，形成孤儿进程
+  if (easyTierStore.runningList.some((r) => r.configFileName === target.configFileName)) {
+    toast(t('newCommon.deleteBlockedRunning'), 'warning', 4000)
+    return
+  }
+  // 已安装 Windows 服务时先卸载，避免服务指向被删除的 TOML
+  const svcStatus = serviceStatusMap.value.get(target.configFileName)
+  if (svcStatus && svcStatus !== 'notInstalled') {
+    toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
+    return
+  }
   const ok = await showConfirm(
     t('newConfig.deleteTitle'),
-    t('newConfig.deleteMsg', { name: selectedConfig.value.configFileName })
+    t('newConfig.deleteMsg', { name: target.configFileName })
   )
   if (!ok) return
   try {
-    // 5.10：删除配置前若启用了出口路由，先清除系统路由（防残留）
-    if (isTauri && exitRouteFlag.value) {
-      await clearExitRoute()
+    // 删除配置前清除该配置持有的退出路由（失败则中止，避免留下无法追踪的残留）
+    if (isTauri) {
+      const routeResult = await clearExitRoute(target.configFileName)
+      if (!routeResult.ok) {
+        toast(t('newConfig.exitRouteFail'), 'error', 4000)
+        return
+      }
     }
-    await deleteFileOrDir(`${CONFIG_PATH}/${selectedConfig.value.fileName}`)
+    await deleteFileOrDir(`${CONFIG_PATH}/${target.fileName}`)
+    clearTrend(target.configFileName)
     toast(t('newCommon.deleteSuccess'), 'success')
     selectedConfig.value = null
     selectedDetail.value = null
@@ -1060,9 +1088,9 @@ const toggleExitRoute = async () => {
   isExitRouteBusy.value = true
   try {
     if (exitRouteFlag.value) {
-      // 停用：删除路由 + 移除标记
-      const ok = await clearExitRoute()
-      if (ok) {
+      // 停用：只清理当前配置的路由，失败时保留标记以便重试
+      const result = await clearExitRoute(selectedConfig.value.configFileName)
+      if (result.ok) {
         await persistExitRouteFlag(false)
         toast(t('newConfig.exitRouteCleared'), 'success')
       } else {
@@ -1149,23 +1177,18 @@ const openRouteCheck = async () => {
   }
 }
 
-// 从文件读取配置并判断是否启用退出路由标记（启动时可能不是当前选中项）
-const isExitRouteEnabledInFile = (cfg: any): boolean => isExitRouteEnabled(cfg)
-
-// 启动成功后自动配置退出节点路由（仅当配置文件中启用了标记；可能不是当前选中项）
+// 启动成功后自动配置退出节点路由（与概览页共用同一实现；可能不是当前选中项）
 const applyExitRouteAfterStart = async (item: RunningItem) => {
-  try {
-    const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-    const cfg = toml.parse(raw) as any
-    if (!isExitRouteEnabledInFile(cfg)) return
-    const res = await setExitRoute(cfg, item.configFileName)
-    if (res.ok) toast(t('newConfig.exitRouteAutoApplied'), 'success')
-    else if (res.reason === 'precondition')
-      toast(t('newConfig.exitRoutePrecondition'), 'warning', 4000)
-    else if (res.reason === 'no-exit') toast(t('newConfig.exitRouteNoExit'), 'warning')
-    else toast(t('newConfig.exitRouteFail'), 'error', 3000)
-  } catch {
-    /* 读取失败时静默跳过自动路由 */
+  const res = await applyExitRouteFromFile(item.configFileName, item.fileName)
+  if (res.ok) toast(t('newConfig.exitRouteAutoApplied'), 'success')
+  else if (res.reason === 'precondition')
+    toast(t('newConfig.exitRoutePrecondition'), 'warning', 4000)
+  else if (res.reason === 'no-exit') toast(t('newConfig.exitRouteNoExit'), 'warning')
+  else if (res.reason === 'command') {
+    const detail = res.message ? `（${res.message}）` : ''
+    toast(t('newConfig.exitRouteFail') + detail, 'error', 5000)
+  } else if (res.reason === 'read-failed') {
+    toast(t('newConfig.exitRouteFail'), 'error', 3000)
   }
 }
 
@@ -1231,6 +1254,7 @@ const handleStartService = async () => {
       ok ? 'success' : 'error'
     )
     await loadServiceStatus(selectedConfig.value.configFileName)
+    await updateRunningList()
   } catch {
     toast(t('newConfig.svcStartFail'), 'error')
   }
@@ -1242,8 +1266,11 @@ const handleStopService = async () => {
   try {
     const ok = await stopService(selectedConfig.value.configFileName)
     toast(ok ? t('newConfig.svcStopSuccess') : t('newConfig.svcStopFail'), ok ? 'success' : 'error')
-    toast(t('newConfig.svcStopHint'), 'success', 3000)
+    // 仅在真正停止后提示；失败时不再补一条“已停止”的成功 toast
+    if (ok) toast(t('newConfig.svcStopHint'), 'success', 3000)
     await loadServiceStatus(selectedConfig.value.configFileName)
+    // 服务启停会改变内核运行状态，统一刷新运行列表
+    await updateRunningList()
   } catch {
     toast(t('newConfig.svcStopFail'), 'error')
   }
