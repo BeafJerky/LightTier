@@ -316,11 +316,11 @@ import {
   getNatType,
   formatMetric
 } from '@/utils/easyTierUtil'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
-import { readFileContent, writeFileContent } from '@/utils/fileUtil'
-import { CONFIG_PATH, LOG_PATH } from '@/constants/easytier'
+import { readFileContent } from '@/utils/fileUtil'
+import { CONFIG_PATH } from '@/constants/easytier'
 import * as toml from 'smol-toml'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -340,65 +340,18 @@ const { show: toast } = useCreamToast()
 
 let isMounted = false
 
-// --- 日志写入文件（内存缓冲 + 批量 append，避免高频轮询下频繁 IO） ---
-let logBuffer = ''
-let logConfigName = ''
-let isFlushing = false
-// 记录带毫秒时间戳的诊断日志（追加到内存缓冲，由 flushLog 统一落盘）
-const log = (msg: string, data?: any) => {
-  const ts = new Date().toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    fractionalSecondDigits: 3
-  } as any)
-  const entry =
-    data !== undefined
-      ? `[${ts}] ${msg} → ${typeof data === 'string' ? data : JSON.stringify(data)}`
-      : `[${ts}] ${msg}`
-  logBuffer += entry + '\n'
-}
-const flushLog = async () => {
-  if (!logBuffer.trim() || isFlushing) return
-  isFlushing = true
-  const buffer = logBuffer
-  logBuffer = '' // 先清空再写入，避免并发竞态丢失新日志
-  const now = new Date()
-  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-  const cfgName = logConfigName || 'unknown'
-  const fileName = `${LOG_PATH}/monitor_${cfgName}_${dateStr}.log`
-  try {
-    await writeFileContent(fileName, buffer, { append: true })
-  } catch {
-    /* ignore */
-  }
-  isFlushing = false
-}
-
 // --- 页面可见性（后台标签页暂停轮询，恢复时立即补一次数据） ---
-const visibilityHandler = async () => {
+const visibilityHandler = () => {
   if (document.hidden) {
-    log('visibilitychange: hidden → stopPolling')
     stopPolling()
-  } else {
-    log('visibilitychange: visible')
-    const cfg = selectedConfig.value
-    if (cfg && runningSet.value.has(cfg.configFileName) && !isFetching) {
-      log('visibilityHandler: fetchMonitorData', { config: cfg.configFileName })
-      const data = await fetchMonitorData(cfg)
-      if (!isMounted || document.hidden) return
-      if (data && selectedConfig.value?.configFileName === cfg.configFileName) {
-        selectedData.value = data
-        handleSnapshotSuccess(cfg.configFileName, data)
-        recordTrend(cfg.configFileName, data)
-        consecutiveFailures.value = 0
-      }
-      if (!document.hidden) {
-        startPolling()
-      }
-    }
+    return
   }
+  const cfg = selectedConfig.value
+  if (!cfg || !runningSet.value.has(cfg.configFileName)) return
+  // 隐藏期间累计流量差分跨度可能长达数分钟：重置基线，避免恢复后出现失真低点
+  delete lastRateSample.value[cfg.configFileName]
+  // 只走 startPolling（内部立即拉取一次），不再手动 fetch，避免同一轮请求两次
+  startPolling()
 }
 
 // 页面加载态 / 当前选中实例（列表卡片数据）
@@ -417,7 +370,7 @@ interface MonitorSnapshot {
 const selectedData = ref<MonitorSnapshot | null>(null)
 
 // --- 5.16 趋势缓冲（每配置环形，随 refreshInterval 取样） ---
-const { getTrend, pushTrend } = useTrendBuffer()
+const { getTrend, pushTrend, clearTrend } = useTrendBuffer()
 // 缓冲为模块级非响应式结构：computed 只依赖 selectedConfig 无法感知原地 push，
 // 故用 ref + push 后手动替换引用（syncTrend）保证图表实时刷新
 const trendPoints = ref<TrendPoint[]>([])
@@ -516,9 +469,6 @@ const isTauriEnv = (): boolean => {
     return false
   }
 }
-
-// --- 并发拉取防护 ---
-let isFetching = false
 
 // --- Mock 同伴数据 ---
 const mockPeers: Record<string, PeerInfo[]> = {
@@ -754,7 +704,6 @@ const formatTime = (ts: number): string => {
 // --- 数据获取 ---
 // 初始化：加载配置列表与运行状态；桌面端自动选中上次运行配置（窄屏保持清单视图）
 const loadConfigs = async () => {
-  log('loadConfigs: start')
   loading.value = true
   try {
     // 如果 store 尚未加载，先加载
@@ -765,18 +714,15 @@ const loadConfigs = async () => {
 
     // 从运行中的配置（displayList）中选择，避免选中已停止的配置导致左侧无高亮卡片
     // 窄屏（移动端）默认展示清单，不自动进入详情，由用户点卡片跳转
-    if (window.innerWidth <= 900) {
-      log('loadConfigs: mobile, keep list view')
-    } else if (displayList.value.length > 0) {
+    if (window.innerWidth > 900 && displayList.value.length > 0) {
       const last = easyTierStore.getLastRunConfigName()
       const target = last
         ? displayList.value.find((c) => c.configFileName === last) || displayList.value[0]
         : displayList.value[0]
-      log('loadConfigs: auto-select', { target: target.configFileName, from: last || 'first' })
       selectConfig(target)
     }
   } catch (e) {
-    log('loadConfigs: error', e)
+    console.error('加载监控配置失败:', e)
   } finally {
     loading.value = false
   }
@@ -788,18 +734,13 @@ const refreshRuntimeState = async () => {
 }
 
 const updateRunningList = async () => {
-  log('updateRunningList: start')
   try {
     // 桌面：进程扫描；Android：进程内实例管理器（由 coreApi 分发）
     const names = easyTierStore.configList.map((c) => c.configFileName)
     const newList = await coreApi.getRunningList(names)
-    log(
-      'updateRunningList: matched running',
-      newList.map((r) => `${r.configFileName}(pid:${r.pid},rpc:${r.rpcPortal || 'N/A'})`)
-    )
     easyTierStore.setRunningList(newList)
   } catch (e) {
-    log('updateRunningList: error', e)
+    console.error('刷新运行状态失败:', e)
   }
 }
 
@@ -815,8 +756,12 @@ const queryWithRetry = async (
   isValid: (value: any) => boolean
 ): Promise<any> => {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await query()
-    if (isValid(result)) return result
+    try {
+      const result = await query()
+      if (isValid(result)) return result
+    } catch {
+      // CLI 调用失败（RPC 超时/进程退出）按未命中处理，仍重试一次
+    }
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 150))
   }
   return null
@@ -824,7 +769,6 @@ const queryWithRetry = async (
 
 const fetchMonitorData = async (item: RunningItem) => {
   const isTauri = isTauriEnv()
-  log('fetchMonitorData: start', { config: item.configFileName, isTauri })
   if (!isTauri) {
     // 非 Tauri 环境使用 mock
     const rawPeers = mockPeers[item.configFileName] || []
@@ -861,7 +805,7 @@ const fetchMonitorData = async (item: RunningItem) => {
         portForward = Array.isArray(parsed.port_forward) ? parsed.port_forward : []
       }
     } catch (e) {
-      log('fetchMonitorData: toml parse error', e)
+      console.error('解析监控配置失败:', e)
     }
 
     const [nodeInfo, peerList] = await Promise.all([
@@ -876,17 +820,8 @@ const fetchMonitorData = async (item: RunningItem) => {
     ])
     if (!nodeInfo || !peerList) {
       // 任一查询失败：本次快照不完整，直接丢弃（调用方保留上一份数据并计失败次数）
-      log('fetchMonitorData: incomplete snapshot → keep previous', {
-        nodeOk: !!nodeInfo,
-        peerOk: !!peerList
-      })
-      flushLog()
       return null
     }
-    log('fetchMonitorData: query result', {
-      nodeOk: !!nodeInfo,
-      peerCount: peerList.length
-    })
 
     // 从 TOML 缓存注入配置信息
     if (nodeInfo) {
@@ -900,11 +835,6 @@ const fetchMonitorData = async (item: RunningItem) => {
     if (nodeInfo?.stun_info?.udp_nat_type != null) {
       nodeInfo.stun_info._udp_nat_type = getNatType(nodeInfo.stun_info.udp_nat_type)
     }
-    log('fetchMonitorData: nodeInfo enriched', {
-      instance_name: nodeInfo?._instance_name,
-      network_name: nodeInfo?._network_name,
-      nat: nodeInfo?.stun_info?._udp_nat_type
-    })
     const rawPeers = peerList
 
     const processed = processPeerData(rawPeers)
@@ -920,27 +850,9 @@ const fetchMonitorData = async (item: RunningItem) => {
       rxTotal,
       avgLatency: calcAvgLatency(processed)
     }
-    log('fetchMonitorData: parsed', {
-      nodeInfo: !!nodeInfo,
-      peers: rawPeers.length,
-      remotePeers: remotePeers.length,
-      txTotal,
-      rxTotal
-    })
-    if (remotePeers.length > 0) {
-      const sample = remotePeers[0]
-      log('fetchMonitorData: peer sample', {
-        tx_bytes: sample.tx_bytes,
-        rx_bytes: sample.rx_bytes,
-        lat_ms: sample.lat_ms,
-        hostname: sample.hostname
-      })
-    }
-    flushLog()
     return snapshot
   } catch (e) {
-    log('fetchMonitorData: error', e)
-    flushLog()
+    console.error('获取监控数据失败:', e)
     return null
   }
 }
@@ -964,20 +876,19 @@ const handleSnapshotSuccess = (configName: string, snapshot: MonitorSnapshot) =>
 // --- 选中配置 ---
 // 切换选中实例：重置详情/失败计数与趋势，运行中则开始轮询，否则停轮询
 const selectConfig = (item: RunningItem) => {
-  logConfigName = item.configFileName
-  log('selectConfig', {
-    config: item.configFileName,
-    isRunning: runningSet.value.has(item.configFileName)
-  })
   selectedConfig.value = item
   syncTrend()
   selectedData.value = null
   consecutiveFailures.value = 0
+  // 切换/重新选中：丢弃旧的累计流量基线，首个新采样仅作为基线不画速率点
+  delete lastRateSample.value[item.configFileName]
   easyTierStore.setLastSelectedConfig(item)
 
   if (runningSet.value.has(item.configFileName)) {
+    selectedWasRunning = true
     startPolling()
   } else {
+    selectedWasRunning = false
     stopPolling()
   }
 }
@@ -1013,49 +924,40 @@ const retryPolling = () => {
 }
 
 // 开始轮询（先清理旧定时器；仅对运行中的选中实例生效）
+// pollGeneration：每次启停自增，丢弃切换配置/页面隐藏后仍在飞的旧请求结果，
+// 避免旧请求失败时把新配置的轮询计数推到上限并误停新轮询。
+let pollGeneration = 0
+// 全局在飞标记：只由请求自身置位/复位（stopPolling 不得清除），保证任意时刻只有一个查询
+let isFetching = false
 const startPolling = () => {
   stopPolling()
-  if (!selectedConfig.value) return
-  if (!runningSet.value.has(selectedConfig.value.configFileName)) return
-  log('startPolling', {
-    config: selectedConfig.value.configFileName,
-    interval: easyTierStore.refreshInterval || 3
-  })
+  const cfg = selectedConfig.value
+  if (!cfg) return
+  if (!runningSet.value.has(cfg.configFileName)) return
+  const gen = pollGeneration
 
   const doPoll = async () => {
-    if (isFetching) {
-      log('doPoll: skipped (isFetching)')
-      return
-    }
-    const cfg = selectedConfig.value
-    if (!cfg) return
-    log('doPoll: fetch start', { config: cfg.configFileName })
+    if (isFetching) return
     isFetching = true
     try {
       const data = await fetchMonitorData(cfg)
-      if (data && selectedConfig.value?.configFileName === cfg.configFileName) {
+      // 页面隐藏/切换配置后旧请求返回：直接丢弃，不影响新轮询状态
+      if (gen !== pollGeneration || !isMounted) return
+      if (selectedConfig.value?.configFileName !== cfg.configFileName) return
+      if (data) {
         selectedData.value = data
         handleSnapshotSuccess(cfg.configFileName, data)
         recordTrend(cfg.configFileName, data)
         consecutiveFailures.value = 0
       } else {
         consecutiveFailures.value++
-        log('doPoll: fetch failed', {
-          config: cfg.configFileName,
-          consecutiveFailures: consecutiveFailures.value
-        })
         if (consecutiveFailures.value >= MAX_FAILURES) {
           // 停止轮询但不丢弃最后快照，由 stale 横幅提示并允许手动重试
-          log('doPoll: max failures reached → stopPolling', { config: cfg.configFileName })
           stopPolling()
         }
       }
     } finally {
       isFetching = false
-      log('doPoll: fetch end', {
-        hasData: !!selectedData.value,
-        config: selectedConfig.value?.configFileName
-      })
     }
   }
 
@@ -1064,19 +966,44 @@ const startPolling = () => {
   pollTimer = setInterval(doPoll, (easyTierStore.refreshInterval || 3) * 1000)
 }
 
-// 停止轮询并复位并发标记
+// 停止轮询：代际自增使在飞请求作废；不清 isFetching，
+// 由请求自身复位，避免旧请求与新一代请求并发
 const stopPolling = () => {
-  isFetching = false
+  pollGeneration++
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
   }
 }
 
+// 运行状态变化（外部启停/服务变化）：重新运行 → 重置差分基线并恢复轮询；
+// 停止 → 停轮询并清空该配置趋势，避免停机前后的曲线被直接连起来。
+// selectedWasRunning 与 selectConfig 中的手动启停同步，避免选中配置时重复启动；
+// 关闭详情（selectedConfig 置空）不清趋势，重新打开时仍可看到本段运行历史。
+let selectedWasRunning = false
+watch(selectedRunning, (running) => {
+  const cfg = selectedConfig.value
+  if (!cfg) {
+    selectedWasRunning = false
+    return
+  }
+  if (running === selectedWasRunning) return
+  selectedWasRunning = running
+  if (running) {
+    delete lastRateSample.value[cfg.configFileName]
+    startPolling()
+  } else {
+    stopPolling()
+    delete lastRateSample.value[cfg.configFileName]
+    clearTrend(cfg.configFileName)
+    syncTrend()
+    consecutiveFailures.value = 0
+  }
+})
+
 // --- 生命周期 ---
 onMounted(() => {
   isMounted = true
-  log('onMounted')
   easyTierStore.registerPageRefresh(refreshRuntimeState)
   loadConfigs()
   document.addEventListener('visibilitychange', visibilityHandler)
@@ -1087,7 +1014,6 @@ onUnmounted(() => {
   stopPolling()
   easyTierStore.clearPageRefresh()
   document.removeEventListener('visibilitychange', visibilityHandler)
-  flushLog()
 })
 </script>
 
