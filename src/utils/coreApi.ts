@@ -6,7 +6,7 @@
  * - 浏览器 mock：复用 useMockData 的 mock 实现，pnpm dev 不受影响
  */
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { BUILTIN_CORE_VERSION } from '@/constants/easytier'
+import { DEFAULT_CORE_VERSION } from '@/constants/kernelCompat'
 import { useMockData } from '@/hooks/useMockData'
 import { isAndroid } from './platformUtil'
 import { startMobileVpn, stopMobileVpn, type RunningInstance } from './mobileVpn'
@@ -97,17 +97,20 @@ export const queryNode = async (item: RunningItem): Promise<any> => {
   return parseCliJson(res)
 }
 
-/** 查询对等节点列表（与 `easytier-cli --output json peer` 结构一致，首项为本地节点） */
-export const queryPeer = async (item: RunningItem): Promise<any[]> => {
+/**
+ * 查询对等节点列表（与 `easytier-cli --output json peer` 结构一致，首项为本地节点）
+ * @returns 节点数组；null 表示查询失败（CLI 偶发 RPC 超时），调用方应保留上一份快照
+ */
+export const queryPeer = async (item: RunningItem): Promise<any[] | null> => {
   if (isAndroid()) {
     const args = item.instanceId ? { instance_id: item.instanceId } : {}
     const res = await invoke('query_peer', args)
-    return Array.isArray(res) ? res : []
+    return Array.isArray(res) ? res : null
   }
   const { runEasyTierCli } = await import('./shellUtil')
   const res = await runEasyTierCli(['-p', desktopRpcPortal(item), '--output', 'json', 'peer'])
   const parsed = parseCliJson(res)
-  return Array.isArray(parsed) ? parsed : []
+  return Array.isArray(parsed) ? parsed : null
 }
 
 /** 启动前端口冲突预检（Android 单实例模型无并行配置，恒无冲突） */
@@ -116,13 +119,13 @@ export const checkPortConflicts = async (fileName: string): Promise<PortConflict
   return base().checkPortConflicts(fileName)
 }
 
-/** 内核版本（Android：内置内核编译版本；桌面：easytier-cli -V；浏览器 mock：内置版本） */
+/** 内核版本（Android：内置内核编译版本；桌面：easytier-cli -V；浏览器 mock：默认稳定版本） */
 export const getCoreVersion = async (): Promise<string> => {
   if (isAndroid()) {
     return await invoke<string>('get_core_version')
   }
-  // 浏览器（pnpm dev）无 Tauri 运行时：返回内置版本，便于预览版本适配后的表单/提示
-  if (!isTauri()) return BUILTIN_CORE_VERSION
+  // 浏览器（pnpm dev）无 Tauri 运行时：返回默认稳定版本，便于预览版本适配后的表单/提示
+  if (!isTauri()) return DEFAULT_CORE_VERSION
   const { runEasyTierCli } = await import('./shellUtil')
   const res = await runEasyTierCli(['-V'])
   return String(res).trim()

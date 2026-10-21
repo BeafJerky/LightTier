@@ -4,7 +4,6 @@
 # 必提交清单（勿误加忽略）：
 #   src-tauri/vendor/proc-macro-crate  Cargo path 依赖（Android 构建补丁源）
 #   tauri-plugin-vpnservice            Cargo path 依赖（Android VPN 插件）
-#   src-tauri/resource/core            内置 easytier 内核压缩包
 #   src-tauri/tools/protoc-fetch       构建工具源码（target 除外）
 #   src-tauri/gen/android              Android 工程（自带 .gitignore 处理产物）
 #   pnpm-lock.yaml                     依赖锁定，保证双端构建可复现

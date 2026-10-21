@@ -29,6 +29,9 @@
         "width": 1000,
         // 窗口高度（像素）
         "height": 650,
+        // 最小窗口尺寸：低于此值详情头部/工具栏无法完整承载
+        "minWidth": 900,
+        "minHeight": 600,
         // 是否可调整大小
         "resizable": true,
         // 是否全屏显示
@@ -76,11 +79,11 @@
     ],
     // 应用程序资源文件
     // 注意：Tauri 的 glob 不会递归展开被匹配到的目录，必须逐个列出子目录内容；
-    // 只写 resource/* 会导致 core/ 与 themes/ 未进入安装包（内置内核与外部主题失效）
+    // 只写 resource/* 会导致 themes/ 未进入安装包（外部主题失效）。
+    // 内核安装包不再随桌面安装包内置：resource/core 由应用在运行时按需下载/安装。
     "resources": [
       "resource/*",
-      "resource/themes/*",
-      "resource/core/*"
+      "resource/themes/*"
     ]
   },
   // 插件配置

@@ -10,27 +10,29 @@
  * 版本列表固定：新增/移除可下载版本时只改 CORE_VERSION_OPTIONS，
  * 字段差异通过「引入版本」表推导，避免为每个版本复制一份完整清单。
  */
-import { BUILTIN_CORE_VERSION } from '@/constants/easytier'
-
 export type CoreChannel = 'stable' | 'prerelease'
 
 export interface CoreVersionOption {
   tag_name: string
   channel: CoreChannel
-  /** 安装包内置版本（首次安装免下载） */
-  builtin?: boolean
 }
 
 /**
  * 设置页固定版本列表（仅官方发布过的版本）
  * v2.5.0 / v2.7.0 官方标记为 pre-release，但按产品要求保留在列表中并标注“预览”。
+ * 桌面安装包不再内置任何版本，全部按需下载安装。
  */
 export const CORE_VERSION_OPTIONS: CoreVersionOption[] = [
   { tag_name: 'v2.7.0', channel: 'prerelease' },
-  { tag_name: BUILTIN_CORE_VERSION, channel: 'stable', builtin: true },
+  { tag_name: 'v2.6.4', channel: 'stable' },
   { tag_name: 'v2.5.0', channel: 'prerelease' },
   { tag_name: 'v2.4.5', channel: 'stable' }
 ]
+
+/** 未检测到已安装内核时的默认下载版本：列表中最新的正式版 */
+export const DEFAULT_CORE_VERSION =
+  CORE_VERSION_OPTIONS.find((o) => o.channel === 'stable')?.tag_name ??
+  CORE_VERSION_OPTIONS[0].tag_name
 
 /** 兼容规则覆盖的最低/最高已知版本；超出范围时无法判断新增字段，走宽松回退 */
 export const CORE_VERSION_BASELINE = 'v2.4.5'

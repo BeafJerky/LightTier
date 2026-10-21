@@ -8,7 +8,7 @@ describe('getCoreFileName', () => {
     )
   })
 
-  it('与内置内核压缩包命名规则一致', () => {
+  it('与内核压缩包下载文件名规则一致', () => {
     expect(getCoreFileName('windows', 'x86_64', 'v2.6.4')).toBe(
       'easytier-windows-x86_64-v2.6.4.zip'
     )

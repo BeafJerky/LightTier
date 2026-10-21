@@ -61,7 +61,7 @@ tauri-plugin-prevent-default = "4"
 
 [target.'cfg(target_os = "android")'.dependencies]
 # EasyTier kernel embedded as a library (Android 10+ cannot spawn private-dir binaries).
-# Tag is aligned with the bundled desktop kernel version (BUILTIN_CORE_VERSION = v2.6.4).
+# Tag pins the in-process Android kernel version (desktop kernels are downloaded at runtime).
 easytier = { git = "https://github.com/EasyTier/EasyTier.git", tag = "v2.6.4" }
 # Vendored copy of EasyTier's tauri-plugin-vpnservice (see tauri-plugin-vpnservice/).
 tauri-plugin-vpnservice = { path = "../tauri-plugin-vpnservice" }

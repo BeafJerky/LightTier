@@ -2,7 +2,7 @@
  * 内核日志配置与路径工具（纯函数，无 Tauri 依赖，便于单测）
  *
  * 背景（修复 H-02，2026-10 校准）：
- * - 内置内核（v2.6.x）忽略 TOML `[file_logger]` 段（其 Config 结构里根本没有该字段），
+ * - v2.6.x 内核忽略 TOML `[file_logger]` 段（其 Config 结构里根本没有该字段），
  *   日志文件只会由 CLI 参数 `--file-log-dir/--file-log-level/--file-log-size/--file-log-count`
  *   控制，文件名固定为 `easytier.log`（CLI 无文件名字段）；
  * - 轮转为 Debian 风格：当前文件无后缀，历史文件为 `easytier.log.1/.2/...`（并非日期后缀）；
@@ -54,7 +54,7 @@ export const normalizeLogLevel = (value: unknown, fallback = 'info'): string => 
 /**
  * 从 logs 目录的文件列表中挑选当前配置要读取的日志文件：
  * 1. 旧版内核按配置名写 `{configName}.log`；
- * 2. 内置内核固定写 `easytier.log`（正在写入的当前文件）；
+ * 2. v2.6.x 内核固定写 `easytier.log`（正在写入的当前文件）；
  * 3. 兜底：轮转/日期后缀历史文件取字典序最大（仅有历史文件时仍可查看）；
  * 4. 全部缺失时仍返回 `easytier.log`，由调用方按读取失败处理。
  */

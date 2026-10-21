@@ -42,6 +42,16 @@ const getBaseDir = (): BaseDirectory =>
 const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024 // 单文件下载上限 200MB
 const MAX_EXTRACT_ENTRIES = 500 // 解压条目数上限
 const MAX_EXTRACT_TOTAL_BYTES = 500 * 1024 * 1024 // 解压后总大小上限 500MB
+// 下载进度上报节流：避免大包逐块触发高频 UI 更新
+const DOWNLOAD_PROGRESS_INTERVAL_MS = 80
+
+/** 下载进度：total 为 null 表示服务端未返回 Content-Length，只能展示已下载字节数 */
+export interface DownloadProgress {
+  received: number
+  total: number | null
+}
+
+type DownloadProgressCallback = (progress: DownloadProgress) => void
 
 /** Unix 桌面（linux/macos）：解压内核后需要补可执行位 */
 const needsExecutableBit = (): boolean => {
@@ -320,15 +330,92 @@ export const cleanCoreDirExceptPackages = async (): Promise<boolean> => {
 }
 
 /**
+ * 读取响应体并回报下载进度：优先流式读取（边下边校验大小上限），
+ * 环境不支持 ReadableStream 时退回一次性读取。返回 null 表示超出大小上限。
+ */
+const readBodyWithProgress = async (
+  response: Response,
+  total: number | null,
+  onProgress?: DownloadProgressCallback
+): Promise<Uint8Array | null> => {
+  let lastReportAt = 0
+  const emit = (received: number, force = false) => {
+    if (!onProgress) return
+    const now = Date.now()
+    if (!force && now - lastReportAt < DOWNLOAD_PROGRESS_INTERVAL_MS) return
+    lastReportAt = now
+    try {
+      onProgress({ received, total })
+    } catch {
+      /* 进度回调异常不应中断下载 */
+    }
+  }
+
+  // 无流式响应体：整包读取后一次回报（首帧仍先给出 0 进度）
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    emit(0, true)
+    const buffer = new Uint8Array(await response.arrayBuffer())
+    if (buffer.byteLength > MAX_DOWNLOAD_BYTES) {
+      error(`下载文件超过大小上限:${buffer.byteLength}`)
+      return null
+    }
+    emit(buffer.byteLength, true)
+    return buffer
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+  emit(0, true)
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      received += value.byteLength
+      // 实际包体上限边下边复核，避免无 Content-Length 时先落盘超大文件
+      if (received > MAX_DOWNLOAD_BYTES) {
+        error(`下载文件超过大小上限:${received}`)
+        await reader.cancel().catch(() => {})
+        return null
+      }
+      chunks.push(value)
+      emit(received)
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      /* 流已中止时忽略释放异常 */
+    }
+  }
+
+  const merged = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  emit(received, true)
+  return merged
+}
+
+/**
  * 下载文件
  * @param fileUrl 文件URL
+ * @param onProgress 下载进度回调（首帧为 0，流式读取期间约每 80ms 一次，结束时必有一次）
  * @returns 下载是否成功
  * 使用示例：
  * ```typescript
- * const success = await downloadFile('https://example.com/file.zip');
+ * const success = await downloadFile('https://example.com/file.zip', ({ received, total }) => {
+ *   console.log(total ? `${Math.round((received / total) * 100)}%` : received)
+ * });
  * ```
  */
-export async function downloadFile(fileUrl: string): Promise<boolean> {
+export async function downloadFile(
+  fileUrl: string,
+  onProgress?: DownloadProgressCallback
+): Promise<boolean> {
   try {
     // 协议层防线：仅允许 http/https（镜像源可自定义，不做域名白名单）
     let url: URL
@@ -379,12 +466,13 @@ export async function downloadFile(fileUrl: string): Promise<boolean> {
       return false
     }
 
-    // Content-Length 预检（存在时提前拒绝超限包体）
+    // Content-Length 预检（存在时提前拒绝超限包体）；缺失/为 0 时进度只展示已下载字节
     const contentLength = Number(response.headers.get('content-length') || 0)
     if (contentLength > MAX_DOWNLOAD_BYTES) {
       error(`下载文件超过大小上限(${contentLength} > ${MAX_DOWNLOAD_BYTES}):${fileUrl}`)
       return false
     }
+    const total = contentLength > 0 ? contentLength : null
 
     // 构建保存路径（核心独立存放在 resource/core 下）
     const savePath = await join(CORE_PATH, filename)
@@ -392,14 +480,10 @@ export async function downloadFile(fileUrl: string): Promise<boolean> {
     // 确保目录存在
     await checkDir(CORE_PATH)
 
-    // 获取二进制数据
-    const uint8Array = new Uint8Array(await response.arrayBuffer())
+    // 流式读取响应体并回报进度，同时做实际包体上限复核
+    const uint8Array = await readBodyWithProgress(response, total, onProgress)
+    if (!uint8Array) return false
 
-    // 实际包体上限复核（Content-Length 缺失/不实时兜底）
-    if (uint8Array.byteLength > MAX_DOWNLOAD_BYTES) {
-      error(`下载文件超过大小上限:${uint8Array.byteLength}`)
-      return false
-    }
     // zip 魔数校验（"PK"）：拒绝镜像站返回的 HTML 错误页等非压缩包内容，避免污染本地安装包
     if (!(uint8Array[0] === 0x50 && uint8Array[1] === 0x4b)) {
       error(`下载内容不是有效的 zip 包:${fileUrl}`)

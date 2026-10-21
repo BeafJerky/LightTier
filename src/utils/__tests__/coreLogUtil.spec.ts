@@ -92,7 +92,7 @@ describe('pickLogTarget（日志读取目标选择）', () => {
     )
   })
 
-  it('其次使用内置内核固定的 easytier.log（优先于轮转历史文件）', () => {
+  it('其次使用 v2.6.x 内核固定的 easytier.log（优先于轮转历史文件）', () => {
     expect(pickLogTarget(['easytier.log', 'easytier.log.1', 'easytier.log.2'], 'server')).toBe(
       'easytier.log'
     )

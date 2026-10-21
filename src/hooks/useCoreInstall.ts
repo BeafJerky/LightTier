@@ -9,8 +9,8 @@ import { isAndroid } from '@/utils/platformUtil'
 import { getArch, getOsType } from '@/utils/sysUtil'
 
 /**
- * 安装内核（从 resource/core 下的压缩包解压，内置包免下载）
- * 设置弹窗与首次引导屏共用。
+ * 安装内核（解压 resource/core 下已下载的内核压缩包）
+ * 设置弹窗使用；安装包不再随桌面应用内置，需先经设置页下载。
  *
  * 切换内核版本前必须停掉所有用旧内核启动的实例与服务：
  * - Windows 服务会占用 easytier-core.exe，运行中覆盖会导致解压失败；

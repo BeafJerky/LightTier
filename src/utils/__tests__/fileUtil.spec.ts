@@ -41,8 +41,15 @@ vi.mock('@tauri-apps/api/path', () => ({
 
 vi.mock('@/utils/platformUtil', () => ({ isAndroid: () => false }))
 
-import { readDir, remove } from '@tauri-apps/plugin-fs'
-import { cleanCoreDirExceptPackages, isCorePackageFile, isSafeZipEntryPath } from '@/utils/fileUtil'
+import { readDir, remove, rename, writeFile } from '@tauri-apps/plugin-fs'
+import { fetch } from '@tauri-apps/plugin-http'
+import {
+  cleanCoreDirExceptPackages,
+  downloadFile,
+  isCorePackageFile,
+  isSafeZipEntryPath,
+  type DownloadProgress
+} from '@/utils/fileUtil'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -130,5 +137,87 @@ describe('cleanCoreDirExceptPackages', () => {
     vi.mocked(remove).mockRejectedValueOnce(new Error('EBUSY'))
 
     await expect(cleanCoreDirExceptPackages()).resolves.toBe(false)
+  })
+})
+
+describe('downloadFile（流式进度）', () => {
+  const fileUrl = 'https://example.com/easytier-windows-x86_64-v2.7.0.zip'
+  const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4])
+
+  const mockResponse = (options: {
+    chunks?: Uint8Array[]
+    contentLength?: number | null
+    body?: boolean
+  }) => {
+    const headers = new Headers()
+    if (options.contentLength !== null) {
+      headers.set('content-length', String(options.contentLength ?? zipBytes.byteLength))
+    }
+    return {
+      ok: true,
+      headers,
+      body:
+        options.body === false
+          ? null
+          : new ReadableStream<Uint8Array>({
+              start(controller) {
+                for (const chunk of options.chunks ?? [zipBytes]) controller.enqueue(chunk)
+                controller.close()
+              }
+            }),
+      arrayBuffer: async () => zipBytes.buffer
+    } as unknown as Response
+  }
+
+  it('流式读取时回报起始与结束进度，并写入完整 zip', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse({ chunks: [zipBytes.subarray(0, 3), zipBytes.subarray(3)] }) as any
+    )
+    const progress: DownloadProgress[] = []
+
+    await expect(downloadFile(fileUrl, (p) => progress.push(p))).resolves.toBe(true)
+
+    expect(progress.length).toBeGreaterThanOrEqual(2)
+    expect(progress[0]).toEqual({ received: 0, total: zipBytes.byteLength })
+    expect(progress[progress.length - 1]).toEqual({
+      received: zipBytes.byteLength,
+      total: zipBytes.byteLength
+    })
+    expect(vi.mocked(writeFile).mock.calls[0][1]).toEqual(zipBytes)
+    expect(rename).toHaveBeenCalledTimes(1)
+  })
+
+  it('缺失 Content-Length 时 total 为 null，结束仍回报已下载字节数', async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse({ contentLength: null }) as any)
+    const progress: DownloadProgress[] = []
+
+    await expect(downloadFile(fileUrl, (p) => progress.push(p))).resolves.toBe(true)
+
+    expect(progress[0]).toEqual({ received: 0, total: null })
+    expect(progress[progress.length - 1]).toEqual({
+      received: zipBytes.byteLength,
+      total: null
+    })
+  })
+
+  it('响应体不可流式读取时回退整包读取并回报进度', async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse({ body: false }) as any)
+    const progress: DownloadProgress[] = []
+
+    await expect(downloadFile(fileUrl, (p) => progress.push(p))).resolves.toBe(true)
+
+    expect(progress).toEqual([
+      { received: 0, total: zipBytes.byteLength },
+      { received: zipBytes.byteLength, total: zipBytes.byteLength }
+    ])
+  })
+
+  it('非 zip 内容不落盘', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse({ chunks: [new TextEncoder().encode('<html>error</html>')] }) as any
+    )
+
+    await expect(downloadFile(fileUrl)).resolves.toBe(false)
+    expect(writeFile).not.toHaveBeenCalled()
   })
 })

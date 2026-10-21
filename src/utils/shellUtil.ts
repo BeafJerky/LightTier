@@ -43,7 +43,7 @@ async function getDefaultLogDir(): Promise<string> {
  * 从配置文件中读取日志/端口相关配置（内核启动与服务安装共用）
  *
  * 日志目录统一归一化为绝对路径：配置为空或相对路径时回落 <resource>/logs。
- * 内置内核（v2.6.x）忽略 TOML `[file_logger]` 段，其日志由本层翻译为 CLI 参数
+ * v2.6.x 内核忽略 TOML `[file_logger]` 段，其日志由本层翻译为 CLI 参数
  * （--file-log-dir/level/size/count）传入；相对目录会随内核进程 CWD 漂移，
  * 导致日志查看/清理/路由提取全部读不到（修复 H-02）。
  * @param configFileName 配置文件名
