@@ -160,23 +160,29 @@ const waitVpnRunning = async (timeoutMs: number) => {
 }
 
 /** 停止 VPN 服务（幂等）；stopInstance 为 true 时同时停掉内核实例（「停止配置」语义） */
-export const stopMobileVpn = async (stopInstance = true) => {
+export const stopMobileVpn = async (stopInstance = true): Promise<boolean> => {
   attachGen++ // 取消进行中的后台 VPN 接管
+  let vpnStopped = true
   try {
     await invoke('plugin:vpnservice|stop_vpn', {})
   } catch (e: any) {
+    vpnStopped = false
     warn(`停止 VPN 服务失败:${JSON.stringify(e)}`)
   }
-  onVpnServiceStop({})
+  // 停止失败时保留本地运行态，避免 UI 误报已停止
+  if (vpnStopped) onVpnServiceStop({})
 
+  let instanceStopped = true
   if (stopInstance) {
     try {
       await invoke('stop_instance', {})
       info('内核实例已停止')
     } catch (e: any) {
+      instanceStopped = false
       warn(`停止内核实例失败:${JSON.stringify(e)}`)
     }
   }
+  return vpnStopped && instanceStopped
 }
 
 // ---------- 配置与路由组装 ----------
@@ -189,7 +195,8 @@ const readNetworkConfig = async (configFileName: string): Promise<NetworkConfig>
   }
   const config = toml.parse(content) as any
   return {
-    noTun: config.no_tun === true,
+    // no_tun 属于 EasyTier 的 [flags] 段；顶层字段仅用于兼容历史误写配置
+    noTun: config.flags?.no_tun === true || config.no_tun === true,
     dhcp: config.dhcp === true,
     magicDns: config.enable_magic_dns === true,
     routes: Array.isArray(config.routes) ? config.routes : []

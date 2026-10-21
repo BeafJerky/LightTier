@@ -18,6 +18,13 @@ vi.mock('@tauri-apps/plugin-shell', () => ({
   Command: { create: mocks.create }
 }))
 
+const tauriMocks = vi.hoisted(() => ({ invoke: vi.fn(async (..._args: any[]) => 'ok') }))
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: tauriMocks.invoke,
+  isTauri: () => true
+}))
+
 vi.mock('@tauri-apps/plugin-log', () => ({
   attachConsole: vi.fn(),
   debug: vi.fn(),
@@ -35,13 +42,19 @@ const fileMocks = vi.hoisted(() => ({
   // rpc_portal 用于验证 v2.5.0+ 由 CLI 参数补传
   readFileContent: vi.fn(async () => 'rpc_portal = "0.0.0.0:15888"\n'),
   getResourceDir: vi.fn(async () => 'C:/res'),
-  getLogsDir: vi.fn(async () => 'C:/res/logs')
+  getLogsDir: vi.fn(async () => 'C:/res/logs'),
+  getKernelLogsDir: vi.fn(
+    async (name: string) => `C:/res/logs/kernel/${name.replace(/\.toml$/i, '')}`
+  ),
+  getWebKernelLogsDir: vi.fn(async () => 'C:/res/logs/kernel/__web__')
 }))
 
 vi.mock('@/utils/fileUtil', () => ({
   readFileContent: fileMocks.readFileContent,
   getResourceDir: fileMocks.getResourceDir,
   getLogsDir: fileMocks.getLogsDir,
+  getKernelLogsDir: fileMocks.getKernelLogsDir,
+  getWebKernelLogsDir: fileMocks.getWebKernelLogsDir,
   getCliDir: vi.fn(async () => 'C:/res/core'),
   getCoreDir: vi.fn(async () => 'C:/res/core/easytier-core.exe')
 }))
@@ -56,12 +69,16 @@ import {
   executeCmd,
   getRunningProcesses,
   installServiceWithOfficialCli,
+  runEasyTierCoreWeb,
   uninstallServiceWithOfficialCli
 } from '@/utils/shellUtil'
 
 beforeEach(() => {
   mocks.execute.mockReset()
   mocks.create.mockClear()
+  tauriMocks.invoke.mockReset()
+  // run_command 成功时 Rust 侧返回子进程 PID
+  tauriMocks.invoke.mockResolvedValue('4321')
   mocks.platform.current = 'windows'
 })
 
@@ -189,7 +206,7 @@ describe('官方 CLI 服务安装参数按内核版本适配', () => {
     expect(coreIdx).toBeGreaterThan(0)
     expect(args.slice(coreIdx + 1)).toEqual([
       '--file-log-dir',
-      'C:/res/logs',
+      'C:/res/logs/kernel/a',
       '--file-log-level',
       'info',
       '--file-log-size',
@@ -218,6 +235,46 @@ describe('官方 CLI 服务安装参数按内核版本适配', () => {
   it('安装失败（非 0 退出码）返回 false', async () => {
     mocks.execute.mockResolvedValue({ code: 5, stdout: '', stderr: 'denied' })
     await expect(install('v2.6.4')).resolves.toBe(false)
+  })
+})
+
+describe('Web 配置启动参数（F-12）', () => {
+  it('补齐文件日志参数并使用 Web 专用隔离目录', async () => {
+    await expect(runEasyTierCoreWeb('tcp://example.com:11010')).resolves.toBe(4321)
+    expect(tauriMocks.invoke).toHaveBeenCalledWith('run_command', {
+      program: 'C:/res/core/easytier-core.exe',
+      args: [
+        '--config-server',
+        'tcp://example.com:11010',
+        '--file-log-dir',
+        'C:/res/logs/kernel/__web__',
+        '--file-log-level',
+        'info',
+        '--file-log-size',
+        '10',
+        '--file-log-count',
+        '10'
+      ]
+    })
+  })
+
+  it('Web 日志目录获取失败时回落到相对 ./logs', async () => {
+    fileMocks.getWebKernelLogsDir.mockRejectedValueOnce(new Error('no fs'))
+    await runEasyTierCoreWeb('tcp://example.com:11010')
+    const args = tauriMocks.invoke.mock.calls[0][1].args as string[]
+    expect(args[args.indexOf('--file-log-dir') + 1]).toBe('./logs')
+  })
+
+  it('Rust 侧返回非 PID 内容时抛错（不得把失败当成功）', async () => {
+    tauriMocks.invoke.mockResolvedValueOnce('ok')
+    await expect(runEasyTierCoreWeb('tcp://example.com:11010')).rejects.toThrow()
+  })
+
+  it('Rust 侧拒绝（spawn 失败）时原样向上传播', async () => {
+    tauriMocks.invoke.mockRejectedValueOnce('启动进程失败: 文件不存在')
+    await expect(runEasyTierCoreWeb('tcp://example.com:11010')).rejects.toBe(
+      '启动进程失败: 文件不存在'
+    )
   })
 })
 

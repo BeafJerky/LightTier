@@ -12,7 +12,15 @@ import { invoke } from '@tauri-apps/api/core'
 import { join, resourceDir } from '@tauri-apps/api/path'
 import { attachConsole, debug, error, info, warn } from '@tauri-apps/plugin-log'
 import { Command, type SpawnOptions } from '@tauri-apps/plugin-shell'
-import { getCliDir, getCoreDir, getLogsDir, getResourceDir, readFileContent } from './fileUtil'
+import {
+  getCliDir,
+  getCoreDir,
+  getKernelLogsDir,
+  getLogsDir,
+  getResourceDir,
+  getWebKernelLogsDir,
+  readFileContent
+} from './fileUtil'
 import {
   DEFAULT_LOG_COUNT,
   DEFAULT_LOG_SIZE_MB,
@@ -29,10 +37,11 @@ import { t } from '@/utils/i18nUtil'
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
 attachConsole()
 
-// 内核日志兜底目录：<resource>/logs（保证与读取端 LogViewer/clearETLogs/routeUtil 同目录）；
-// 极端失败（非 Tauri 环境等）时退回相对 './logs' 由内核按进程 CWD 解析
-async function getDefaultLogDir(): Promise<string> {
+// 内核日志兜底目录：默认按配置隔离到 <resource>/logs/kernel/<scope>；
+// 无配置名时回退 logs 根目录；极端失败（非 Tauri 环境等）退回相对 './logs' 由内核按 CWD 解析
+async function getDefaultLogDir(configFileName?: string): Promise<string> {
   try {
+    if (configFileName) return await getKernelLogsDir(configFileName)
     return await getLogsDir()
   } catch {
     return './logs'
@@ -42,7 +51,8 @@ async function getDefaultLogDir(): Promise<string> {
 /**
  * 从配置文件中读取日志/端口相关配置（内核启动与服务安装共用）
  *
- * 日志目录统一归一化为绝对路径：配置为空或相对路径时回落 <resource>/logs。
+ * 日志目录统一归一化为绝对路径：配置为空或相对路径时按配置隔离到
+ * <resource>/logs/kernel/<scope>，避免多实例共写 easytier.log 造成交错与轮转互踩。
  * v2.6.x 内核忽略 TOML `[file_logger]` 段，其日志由本层翻译为 CLI 参数
  * （--file-log-dir/level/size/count）传入；相对目录会随内核进程 CWD 漂移，
  * 导致日志查看/清理/路由提取全部读不到（修复 H-02）。
@@ -63,7 +73,7 @@ async function getConfigFromFile(configFileName: string): Promise<{
 
     // 获取日志配置（归一化目录/级别与轮转参数，非法值回落默认，避免内核启动 panic）
     const logger = config.file_logger || {}
-    const logDir = await resolveLogDir(logger.dir, getDefaultLogDir)
+    const logDir = await resolveLogDir(logger.dir, () => getDefaultLogDir(configFileName))
     const logLevel = normalizeLogLevel(logger.level)
     const sizeMb = parsePositiveInt(logger.size_mb ?? logger.size, DEFAULT_LOG_SIZE_MB)
     const count = parsePositiveInt(logger.count, DEFAULT_LOG_COUNT)
@@ -75,9 +85,9 @@ async function getConfigFromFile(configFileName: string): Promise<{
     return { logDir, logLevel, sizeMb, count, rpcPortal, listeners }
   } catch (e) {
     error(`读取配置文件失败:${JSON.stringify(e)}`)
-    // 返回默认值（日志目录仍尽力回落到应用 logs 目录）
+    // 返回默认值（日志目录仍尽力回落到该配置的隔离目录）
     return {
-      logDir: await getDefaultLogDir(),
+      logDir: await getDefaultLogDir(configFileName),
       logLevel: 'info',
       sizeMb: DEFAULT_LOG_SIZE_MB,
       count: DEFAULT_LOG_COUNT,
@@ -348,8 +358,27 @@ export const checkPortConflicts = async (configFileName: string): Promise<PortCo
   return conflicts
 }
 
+/** 命令执行结果是否成功：字符串输出或 { code: 0 } 均视为成功（Unix kill 成功时 stdout 为空） */
+const isCommandSuccess = (res: unknown): boolean =>
+  typeof res === 'string' ||
+  (!!res && typeof res === 'object' && (res as { code?: number }).code === 0)
+
+/**
+ * 校验 Rust 侧 run_command 返回的进程号。
+ * 旧实现把失败字符串 / 403 当作成功返回，调用方会写入无效 pid 并显示“已启动”，
+ * 因此在边界统一收敛为“正整数 PID，否则抛错”，失败必须向 UI 传播。
+ */
+const parseSpawnedPid = (res: unknown): number => {
+  const pid = typeof res === 'number' ? res : Number(String(res ?? '').trim())
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error(t('newCommon.coreStartInvalidPid'))
+  }
+  return pid
+}
+
 // 运行 easytier-core 配置（自动分配 RPC 端口）
-export async function runEasyTierCore(configFileName: string): Promise<any> {
+// @returns 内核进程 PID；启动失败（含 spawn 失败/无效 PID）抛出异常
+export async function runEasyTierCore(configFileName: string): Promise<number> {
   try {
     const configPath = await join(await resourceDir(), CONFIG_PATH, configFileName)
     const program = await getCoreDir()
@@ -396,56 +425,83 @@ export async function runEasyTierCore(configFileName: string): Promise<any> {
       actualRpcPortal
     ]
 
-    const res = await invoke('run_command', {
+    const res = await invoke<string>('run_command', {
       program,
       args
     })
-    info(`运行结果：${res}, rpc-portal: ${actualRpcPortal}`)
-    return res
+    const pid = parseSpawnedPid(res)
+    info(`运行结果：${pid}, rpc-portal: ${actualRpcPortal}`)
+    return pid
   } catch (e) {
     error(`运行 easytier-core失败:${JSON.stringify(e)}`)
-    return 403
+    throw e
   }
 }
 
 // 运行 easytier-core web配置
-export async function runEasyTierCoreWeb(url: string): Promise<any> {
+// @returns 内核进程 PID；启动失败（含 spawn 失败/无效 PID）抛出异常
+export async function runEasyTierCoreWeb(url: string): Promise<number> {
   try {
     const program = await getCoreDir()
-    const res = await invoke('run_command', {
+    let logDir = './logs'
+    try {
+      logDir = await getWebKernelLogsDir()
+    } catch {
+      /* 非 Tauri 环境或目录创建失败时保留相对兜底 */
+    }
+    // Web 配置没有本地 TOML，统一使用默认日志策略，避免日志落到进程 CWD 或被关闭
+    const res = await invoke<string>('run_command', {
       program,
-      args: ['--config-server', `${url}`]
+      args: [
+        '--config-server',
+        `${url}`,
+        '--file-log-dir',
+        logDir,
+        '--file-log-level',
+        'info',
+        '--file-log-size',
+        `${DEFAULT_LOG_SIZE_MB}`,
+        '--file-log-count',
+        `${DEFAULT_LOG_COUNT}`
+      ]
     })
-    info(`运行结果：${res}`)
-    return res
+    const pid = parseSpawnedPid(res)
+    info(`运行结果：${pid}`)
+    return pid
   } catch (e) {
     error(`运行 easytier-core失败:${JSON.stringify(e)}`)
-    return 403
+    throw e
   }
 }
 
 // 运行 easytier-cli 配置
+// @returns CLI 输出；执行失败（spawn 失败/非 0 退出码）抛出异常
 export async function runEasyTierCli(args: string[]): Promise<any> {
   try {
     // 注：改用 Rust 侧 run_cli 会出现卡顿，故统一走 shell 执行
-    return await executeCmd('easytier-cli', args)
+    const res = await executeCmd('easytier-cli', args)
+    if (!isCommandSuccess(res)) {
+      throw new Error((res as { msg?: string })?.msg || 'easytier-cli 执行失败')
+    }
+    return res
   } catch (e) {
     error(`获取结果失败:${JSON.stringify(e)}`)
-    return 403
+    throw e
   }
 }
 
 // 经 Rust 侧 run_cli 调用本地 easytier-cli（与 runEasyTierCli 的 shell 路径互补）
-export async function runCmd(args: string[]): Promise<any> {
+// @returns CLI 输出；执行失败时抛出异常
+export async function runCmd(args: string[]): Promise<string> {
   try {
     const program = await getCliDir()
-    return await invoke('run_cli', {
+    return await invoke<string>('run_cli', {
       program,
       args
     })
   } catch (e) {
     error(`获取结果失败:${JSON.stringify(e)}`)
-    return 403
+    throw e
   }
 }
 
@@ -465,19 +521,29 @@ export async function runCmd(args: string[]): Promise<any> {
  * ```
  */
 export async function killProcess(pid: number, force: boolean = true): Promise<boolean> {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    warn(`终止进程失败：无效 PID(${pid})`)
+    return false
+  }
   try {
     const platform = await getPlatform()
+    let result: unknown
     // Windows 使用 taskkill 命令
     if (platform === 'windows') {
       const args = force ? ['/F', '/PID', pid.toString()] : ['/PID', pid.toString()]
-      const result = await executeCmd('taskkill', args, { encoding: 'gbk' })
-      debug(`强制终止进程 ${result}`)
+      result = await executeCmd('taskkill', args, { encoding: 'gbk' })
+      debug(`强制终止进程 ${JSON.stringify(result)}`)
     }
     // Unix-like 系统使用 kill 命令
     else {
       const signal = force ? '-9' : '-15' // SIGKILL vs SIGTERM
-      const result = await executeCmd('kill', [signal, pid.toString()])
-      debug(`强制终止进程 ${result}`)
+      result = await executeCmd('kill', [signal, pid.toString()])
+      debug(`强制终止进程 ${JSON.stringify(result)}`)
+    }
+    // 退出码非 0（进程不存在/权限不足）不能视为停止成功，否则 UI 会误报并掩盖残留进程
+    if (!isCommandSuccess(result)) {
+      warn(`终止进程 ${pid} 失败:${JSON.stringify(result)}`)
+      return false
     }
     info(`进程 ${pid} 已终止`)
     return true
@@ -505,10 +571,11 @@ export async function stopAllNodes() {
 
 // Linux/macOS 下使用 sudo 的示例
 export async function killProcessWithSudo(pid: number, force: boolean = false): Promise<boolean> {
+  if (!Number.isInteger(pid) || pid <= 0) return false
   try {
     const signal = force ? '-9' : '-15'
-    await executeCmd('sudo', ['kill', signal, pid.toString()])
-    return true
+    const result = await executeCmd('sudo', ['kill', signal, pid.toString()])
+    return isCommandSuccess(result)
   } catch (e: any) {
     error(`使用 sudo 终止进程 ${pid} 失败:${e}`)
     return false

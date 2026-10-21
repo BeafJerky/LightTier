@@ -21,6 +21,10 @@ use tauri_plugin_store::StoreExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+// 应用日志保留策略：4MB × 约 5 个文件（插件默认 40KB/KeepOne 几乎无法回溯）
+const APP_LOG_MAX_FILE_SIZE: u128 = 4 * 1024 * 1024;
+const APP_LOG_KEEP_FILES: usize = 5;
+
 // Android 平台：进程内内核集成（实例管理 + 进程内 RPC + TUN fd 注入）
 #[cfg(target_os = "android")]
 pub mod android;
@@ -113,55 +117,46 @@ fn normalize_path(p: &std::path::Path) -> String {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn run_cli(app: tauri::AppHandle, program: String, args: Vec<String>) -> String {
+fn run_cli(app: tauri::AppHandle, program: String, args: Vec<String>) -> Result<String, String> {
     // 桌面端：通过子进程执行命令并捕获输出
     #[cfg(not(mobile))]
     {
-        if let Err(e) = ensure_core_program_allowed(&app, &program) {
-            log::error!("run_cli rejected: {}", e);
-            return format!("Error: {}", e); // 返回错误信息
-        }
+        ensure_core_program_allowed(&app, &program)?;
         // DETACHED_PROCESS: 使进程在后台运行
         // const DETACHED_PROCESS: u32 = 0x00000008;
         let mut cmd = Command::new(&program);
         cmd.args(args);
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
-        // 尝试执行命令并捕获输出
-        return match cmd.output()
-        // 使用 output() 来获取输出
-        {
-            Ok(output) => {
-                // 将输出转换为字符串并返回
-                match String::from_utf8(output.stdout) {
-                    Ok(result) => result,
-                    Err(e) => format!("Error decoding output: {}", e), // 返回解码错误信息
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to execute process: {}", e);
-                format!("Error: {}", e) // 返回错误信息
-            }
-        };
+        // 使用 output() 执行并收集输出；spawn/等待失败直接作为命令错误返回
+        let output = cmd.output().map_err(|e| {
+            log::error!("Failed to execute process: {}", e);
+            format!("执行失败: {e}")
+        })?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            log::error!("run_cli exited with {:?}: {}", output.status.code(), stderr);
+            return Err(if stderr.is_empty() { stdout } else { stderr });
+        }
+        String::from_utf8(output.stdout)
+            .map_err(|e| format!("输出解码失败: {e}"))
     }
 
     // 移动端：不支持子进程调用
     #[cfg(mobile)]
     {
         let _ = (app, program, args);
-        return "Error: run_cli is not supported on mobile platform".to_string();
+        Err("run_cli is not supported on mobile platform".to_string())
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> String {
+fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> Result<String, String> {
     // 桌面端：通过子进程在后台启动命令
     #[cfg(not(mobile))]
     {
-        if let Err(e) = ensure_core_program_allowed(&app, &program) {
-            log::error!("run_command rejected: {}", e);
-            return format!("Error: {}", e); // 返回错误信息
-        }
+        ensure_core_program_allowed(&app, &program)?;
         // DETACHED_PROCESS: 使进程在后台运行
         // const DETACHED_PROCESS: u32 = 0x00000008;
         let mut cmd = Command::new(&program);
@@ -171,24 +166,19 @@ fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> Str
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
 
-        // 尝试执行命令并捕获错误
-        return match cmd.spawn() {
-            Ok(child) => {
-                let pid = child.id(); // 获取进程ID
-                pid.to_string() // 返回进程ID
-            }
-            Err(e) => {
-                log::error!("Failed to execute process: {}", e);
-                format!("Error: {}", e) // 返回错误信息
-            }
-        };
+        // spawn 失败必须作为错误返回，避免前端把 "Error: ..." 当成 PID
+        let child = cmd.spawn().map_err(|e| {
+            log::error!("Failed to execute process: {}", e);
+            format!("启动进程失败: {e}")
+        })?;
+        Ok(child.id().to_string())
     }
 
     // 移动端：不支持子进程调用
     #[cfg(mobile)]
     {
         let _ = (app, program, args);
-        return "Error: run_command is not supported on mobile platform".to_string();
+        Err("run_command is not supported on mobile platform".to_string())
     }
 }
 
@@ -316,12 +306,19 @@ pub fn run() {
             builder = builder.plugin(
                 tauri_plugin_log::Builder::new()
                     .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                    .max_file_size(APP_LOG_MAX_FILE_SIZE)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
+                        APP_LOG_KEEP_FILES,
+                    ))
                     .level(log::LevelFilter::Info)
                     .format(log_format)
                     .targets([
                         Target::new(TargetKind::Stdout),
-                        Target::new(TargetKind::LogDir {
-                            file_name: Some(format!("{}/{}", log_dir, env!("CARGO_PKG_NAME"))),
+                        // 用 Folder 指定 <exe>/logs，而不是把完整路径塞进 LogDir.file_name：
+                        // 后者的轮转清理扫描的是系统日志目录，会导致历史文件无限累积
+                        Target::new(TargetKind::Folder {
+                            path: log_dir.clone().into(),
+                            file_name: Some(env!("CARGO_PKG_NAME").to_string()),
                         }),
                         Target::new(TargetKind::Webview),
                     ])
@@ -332,6 +329,10 @@ pub fn run() {
             builder = builder.plugin(
                 tauri_plugin_log::Builder::new()
                     .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                    .max_file_size(APP_LOG_MAX_FILE_SIZE)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
+                        APP_LOG_KEEP_FILES,
+                    ))
                     .level(log::LevelFilter::Info)
                     .format(log_format)
                     .targets([
@@ -349,6 +350,10 @@ pub fn run() {
         builder = builder.plugin(
             tauri_plugin_log::Builder::new()
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .max_file_size(APP_LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(
+                    APP_LOG_KEEP_FILES,
+                ))
                 .level(log::LevelFilter::Info)
                 .format(log_format)
                 .targets([

@@ -248,7 +248,7 @@ export const useMockData = () => {
     }))
   }
 
-  const mockRunEasyTierCore = async (_configFileName: string): Promise<any> => {
+  const mockRunEasyTierCore = async (_configFileName: string): Promise<number> => {
     return new Promise((resolve) => {
       // 模拟启动耗时，便于观察 UI 加载态
       setTimeout(() => {
@@ -256,7 +256,8 @@ export const useMockData = () => {
         if (!mockRunningMap.value.has(name)) {
           mockRunningMap.value.set(name, ++mockPidCounter)
         }
-        resolve({ code: 0, msg: 'ok' })
+        // 与桌面 runEasyTierCore 契约一致：返回数值 PID
+        resolve(mockRunningMap.value.get(name)!)
       }, 800)
     })
   }
@@ -265,10 +266,10 @@ export const useMockData = () => {
     for (const [name, p] of mockRunningMap.value.entries()) {
       if (p === pid) {
         mockRunningMap.value.delete(name)
-        break
+        return true
       }
     }
-    return true
+    return false
   }
 
   const mockWriteFileContent = async (path: string, content: string): Promise<void> => {
@@ -582,24 +583,29 @@ export const useMockData = () => {
   const getReadWebConfigList = () => {
     if (isMock) return mockReadWebConfigList
     return async (): Promise<FormWebData[]> => {
-      const { readFileContent } = await import('@/utils/fileUtil')
+      const { readFileContent, fileExists } = await import('@/utils/fileUtil')
       const { CONFIG_PATH, CONFIG_FILE_NAME } = await import('@/constants/easytier')
-      const txt = (await readFileContent(CONFIG_PATH + '/' + CONFIG_FILE_NAME)) as string
-      if (!txt) return []
-      try {
-        return JSON.parse(txt) || []
-      } catch {
-        return []
+      const path = CONFIG_PATH + '/' + CONFIG_FILE_NAME
+      // 文件不存在 = 首次使用（合法空列表）；文件存在但读取/解析失败必须抛错，
+      // 否则上层会把“读取失败”当成空表并在下一次保存时整体覆盖（H-05）
+      if (!(await fileExists(path))) return []
+      const txt = (await readFileContent(path, { throwOnError: true })) as string
+      if (!txt.trim()) return []
+      const parsed = JSON.parse(txt)
+      if (!Array.isArray(parsed)) {
+        throw new Error('invalid_web_config_list')
       }
+      return parsed
     }
   }
 
   const getWriteWebConfigList = () => {
     if (isMock) return mockWriteWebConfigList
     return async (list: FormWebData[]): Promise<void> => {
-      const { writeFileContent } = await import('@/utils/fileUtil')
+      const { writeFileWithBackup } = await import('@/utils/fileUtil')
       const { CONFIG_PATH, CONFIG_FILE_NAME } = await import('@/constants/easytier')
-      await writeFileContent(CONFIG_PATH + '/' + CONFIG_FILE_NAME, JSON.stringify(list))
+      // 覆盖前保留上一份内容为 data.json.bak，写入失败/内容损坏时仍可人工恢复
+      await writeFileWithBackup(CONFIG_PATH + '/' + CONFIG_FILE_NAME, JSON.stringify(list))
     }
   }
 

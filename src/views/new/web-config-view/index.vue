@@ -581,6 +581,16 @@ const handleFormSaved = async (data: FormWebData, done: (ok: boolean) => void) =
 // 删除配置（二次确认；写回列表后刷新）
 const deleteConfig = async () => {
   if (!selectedConfig.value) return
+  // 进程/服务仍在使用时禁止删除，否则会留下无法从 UI 停止的孤儿进程或服务
+  if (isRunning(selectedConfig.value)) {
+    toast(t('newCommon.deleteBlockedRunning'), 'warning', 4000)
+    return
+  }
+  const svcStatus = serviceStatusMap.value.get(selectedConfig.value.configFileName)
+  if (svcStatus && svcStatus !== 'notInstalled') {
+    toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
+    return
+  }
   const ok = await showConfirm(
     t('newWebConfig.deleteTitle'),
     t('newWebConfig.deleteMsg', { name: selectedConfig.value.configFileName })
@@ -604,21 +614,35 @@ const deleteConfig = async () => {
 const startWeb = async (item: FormWebData) => {
   if (isStarting.value) return
   isStarting.value = true
+  let startedPid: number | null = null
   try {
+    // 先确认配置存储可读：读取失败时不启动进程，避免进程已起而 pid 无法落盘
+    const list = await readWebConfigList()
     const url = `${item.protocol}://${item.host}:${item.port}/${item.userName}`
     const pid = await runEasyTierCoreWeb(url)
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error(t('newCommon.coreStartInvalidPid'))
+    }
+    startedPid = pid
     // 更新 pid
-    const list = await readWebConfigList()
     const found = list.find((c) => c.configFileName === item.configFileName)
     if (found) {
       found.pid = pid
       found.status = 'running'
     }
     await writeWebConfigList(list)
+    // pid 已持久化，后续刷新失败不应回滚已成功启动的进程
+    startedPid = null
     toast(t('newCommon.startSuccess'), 'success')
     await refreshWebList()
-  } catch {
-    toast(t('newCommon.startFail'), 'error')
+  } catch (e: any) {
+    // 进程已启动但存储失败：回滚结束进程，避免留下 UI 无法管理的孤儿进程
+    if (startedPid) {
+      await killProcess(startedPid).catch(() => false)
+    }
+    const detail = typeof e === 'string' ? e : e?.message
+    const base = t('newCommon.startFail')
+    toast(detail ? `${base}（${detail}）` : base, 'error', 6000)
   } finally {
     isStarting.value = false
   }
@@ -712,7 +736,8 @@ const handleStopService = async () => {
       ok ? t('newWebConfig.svcStopSuccess') : t('newWebConfig.svcStopFail'),
       ok ? 'success' : 'error'
     )
-    toast(t('newWebConfig.svcStopHint'), 'success', 3000)
+    // 仅在成功时提示；失败时保留错误，不再追加“已停止”的成功文案
+    if (ok) toast(t('newWebConfig.svcStopHint'), 'success', 3000)
     await refreshWebList()
   } catch {
     toast(t('newWebConfig.svcStopFail'), 'error')

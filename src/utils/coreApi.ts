@@ -10,6 +10,7 @@ import { DEFAULT_CORE_VERSION } from '@/constants/kernelCompat'
 import { useMockData } from '@/hooks/useMockData'
 import { isAndroid } from './platformUtil'
 import { startMobileVpn, stopMobileVpn, type RunningInstance } from './mobileVpn'
+import { t } from '@/utils/i18nUtil'
 
 /** 非 Android 实现（Tauri 桌面走 shellUtil，浏览器走 mock；由 useMockData 分发） */
 let baseImpl: ReturnType<typeof useMockData> | null = null
@@ -48,7 +49,11 @@ export const startConfig = async (fileName: string): Promise<void> => {
     await startMobileVpn(fileName)
     return
   }
-  await base().runEasyTierCore(fileName)
+  const pid = await base().runEasyTierCore(fileName)
+  // 桌面实现已校验，这里再兜底一次：无有效 PID 视为启动失败，禁止上层写入运行态
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error(t('newCommon.coreStartInvalidPid'))
+  }
 }
 
 /**
@@ -57,8 +62,7 @@ export const startConfig = async (fileName: string): Promise<void> => {
  */
 export const stopConfig = async (item: RunningItem): Promise<boolean> => {
   if (isAndroid()) {
-    await stopMobileVpn(true)
-    return true
+    return await stopMobileVpn(true)
   }
   if (item.pid) {
     return base().killProcess(item.pid)
