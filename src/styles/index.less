@@ -1,39 +1,16 @@
-@import 'element-plus/theme-chalk/dark/css-vars.css';
-
 html,
 body,
 #app {
   background: var(--theme-bg, #faf6f2);
-  color: var(--el-text-color-primary);
+  color: var(--theme-text-primary, #4a3728);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizelegibility;
 }
 
-// 解决抽屉弹出时，body宽度变化的问题
-.el-popup-parent--hidden {
-  width: 100% !important;
-}
-
-.el-dialog {
-  border-radius: var(--app-card-radius);
-  overflow: hidden;
-  box-shadow: var(--theme-shadow-md, 0 18px 48px rgb(15 23 42 / 16%));
-
-  &__header {
-    border-bottom-color: var(--app-border-color) !important;
-  }
-
-  &__footer {
-    border-top-color: var(--app-border-color) !important;
-  }
-}
-
-.el-popover.el-popper,
-.el-dropdown__popper.el-popper {
-  border-color: var(--app-border-color);
-  border-radius: var(--app-card-radius);
-  box-shadow: var(--app-soft-shadow);
+// 加载遮罩宿主：为内部绝对定位的遮罩提供包含块
+.lt-loading-host {
+  position: relative;
 }
 
 // 只读屏可见：用于视觉隐藏但保留可访问名称的 label / 原生控件

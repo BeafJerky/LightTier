@@ -20,12 +20,12 @@
     "noUnusedParameters": true,
     "experimentalDecorators": true,
     "noImplicitAny": true,
-    // TODO: remove skipLibCheck after third-party lib types are fixed (element-plus, vueuse, unplugin, vue-i18n, etc.)
+    // TODO: remove skipLibCheck after third-party lib types are fixed (vueuse, unplugin, vue-i18n, etc.)
     "skipLibCheck": true,
     "paths": {
       "@/*": ["src/*"]
     },
-    "types": ["@intlify/unplugin-vue-i18n/types", "vite/client", "element-plus/global"]
+    "types": ["@intlify/unplugin-vue-i18n/types", "vite/client"]
   },
   "include": ["src", "types/**/*.d.ts", "vite.config.ts"]
 }

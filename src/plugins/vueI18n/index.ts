@@ -22,10 +22,7 @@ const createI18nOptions = async (): Promise<I18nOptions> => {
 
   setHtmlPageLang(locale.lang)
 
-  localeStore.setCurrentLocale({
-    lang: locale.lang
-    // elLocale: elLocal
-  })
+  localeStore.setCurrentLocale({ lang: locale.lang })
 
   return {
     legacy: false,

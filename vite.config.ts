@@ -7,7 +7,6 @@ import progress from 'vite-plugin-progress'
 import { ViteEjsPlugin } from 'vite-plugin-ejs'
 import ServerUrlCopy from 'vite-plugin-url-copy'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
-import { createStyleImportPlugin, ElementPlusResolve } from 'vite-plugin-style-import'
 import UnoCSS from 'unocss/vite'
 import { visualizer } from 'rollup-plugin-visualizer'
 import VueDevTools from 'vite-plugin-vue-devtools'
@@ -40,23 +39,6 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
             // 启用 Vue DevTools
             componentInspector: true
           }),
-      env.VITE_USE_ALL_ELEMENT_PLUS_STYLE === 'false'
-        ? createStyleImportPlugin({
-            resolves: [ElementPlusResolve()],
-            libs: [
-              {
-                libraryName: 'element-plus',
-                esModule: true,
-                resolveStyle: (name) => {
-                  if (name === 'click-outside') {
-                    return ''
-                  }
-                  return `element-plus/es/components/${name.replace(/^el-/, '')}/style/css`
-                }
-              }
-            ]
-          })
-        : undefined,
       VueI18nPlugin({
         runtimeOnly: true,
         compositionOnly: true,
@@ -108,9 +90,6 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('element-plus')) {
-                return 'element-plus'
-              }
               if (
                 id.includes('vue') ||
                 id.includes('pinia') ||
@@ -142,15 +121,7 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       }
     },
     optimizeDeps: {
-      include: [
-        'vue',
-        'vue-router',
-        'vue-types',
-        'element-plus/es/locale/lang/zh-cn',
-        'element-plus/es/locale/lang/en',
-        '@vueuse/core',
-        'dayjs'
-      ]
+      include: ['vue', 'vue-router', 'vue-types', 'naive-ui', '@vueuse/core', 'dayjs']
     },
     clearScreen: false,
     // Env variables starting with the item of `envPrefix` will be exposed in tauri's source code through `import.meta.env`.

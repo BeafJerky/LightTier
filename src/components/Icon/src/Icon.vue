@@ -1,15 +1,14 @@
 <script setup lang="ts">
 /**
- * Icon — 统一图标组件（基于 Iconify + Element Plus 容器）
+ * Icon — 统一图标组件（基于 Iconify + Naive UI 容器）
  *
  * 用法：<Icon icon="clarity:dashboard-line" :size="18" hover-color="..." />。
- * 特点：尺寸/颜色透传到 SVG，hoverColor 通过 CSS v-bind 注入实现悬停变色。
+ * 特点：尺寸/颜色由 NIcon 统一注入，hoverColor 通过 CSS v-bind 实现悬停变色。
  */
-import { computed } from 'vue'
-import { ElIcon } from 'element-plus'
+import { NIcon } from 'naive-ui'
 import { Icon } from '@iconify/vue'
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     // icon name（iconify 图标名，如 clarity:dashboard-line）
     icon: string
@@ -22,19 +21,12 @@ const props = withDefaults(
   }>(),
   { size: 16 }
 )
-
-const getIconifyStyle = computed(() => {
-  return {
-    fontSize: `${props.size}px`,
-    color: props.color
-  }
-})
 </script>
 
 <template>
-  <ElIcon :size="size" :color="color">
-    <Icon :icon="icon" :style="getIconifyStyle" class="lt-icon" />
-  </ElIcon>
+  <NIcon :size="size" :color="color">
+    <Icon :icon="icon" class="lt-icon" />
+  </NIcon>
 </template>
 
 <style lang="less" scoped>

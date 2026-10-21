@@ -41,10 +41,10 @@
 
     <template #footer>
       <div class="td-footer">
-        <el-button @click="handleReset">{{ t('newTheme.resetDefault') }}</el-button>
+        <n-button @click="handleReset">{{ t('newTheme.resetDefault') }}</n-button>
         <div>
-          <el-button @click="visible = false">{{ t('newCommon.cancel') }}</el-button>
-          <el-button type="primary" @click="handleApply">{{ t('newTheme.applyTheme') }}</el-button>
+          <n-button @click="visible = false">{{ t('newCommon.cancel') }}</n-button>
+          <n-button type="primary" @click="handleApply">{{ t('newTheme.applyTheme') }}</n-button>
         </div>
       </div>
     </template>
@@ -61,6 +61,7 @@
  * 改写为 :host 后注入；点击“应用主题”经 useThemeLoader 应用并持久化。
  */
 import { ref, watch, nextTick, onMounted } from 'vue'
+import { NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { systemDefaultTheme, useThemeLoader } from '@/hooks/useThemeLoader'
 import { useExternalThemes } from '@/hooks/useExternalThemes'

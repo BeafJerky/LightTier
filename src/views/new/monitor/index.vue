@@ -5,7 +5,8 @@
       <div class="nm-left-header">
         <div class="nm-left-label">{{ t('newMonitor.monitorLabel') }}</div>
       </div>
-      <div class="nm-left-scroll" v-loading="easyTierStore.configListLoading">
+      <div class="nm-left-scroll lt-loading-host">
+        <LoadingOverlay :show="easyTierStore.configListLoading" />
         <div
           v-for="item in displayList"
           :key="item.configFileName"
@@ -326,6 +327,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import TrendChart from '@/components/TrendChart/index.vue'
+import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { useTrendBuffer, type TrendPoint } from '@/hooks/useTrendBuffer'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'

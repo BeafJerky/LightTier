@@ -1,45 +1,46 @@
 <script setup lang="ts">
 /**
- * ConfigGlobal — Element Plus 全局配置容器（应用根级包裹）
+ * ConfigGlobal — Naive UI 全局配置容器（应用根级包裹）
  *
- * 统一注入：组件尺寸、命名空间（elNamespace）、当前语言包与消息并发上限，
- * 并通过 provide('configGlobal') 向子组件共享配置；挂载时初始化 CSS 主题变量。
+ * 统一注入：组件尺寸、当前语言包、明暗基础主题与主题变量覆盖；
+ * 挂载时初始化 CSS 主题变量。使用 abstract 模式避免额外 DOM 层级影响布局。
+ * 关闭 Naive 的 preflight：它会把 body 改成 14px / 1.6 行高，覆盖应用自身的
+ * 全局排版，导致迁移后整站文字观感变化；重置样式继续由 index.less 负责。
  */
-import { provide, computed, onMounted } from 'vue'
-import { propTypes } from '@/utils/propTypes'
-import { ComponentSize, ElConfigProvider } from 'element-plus'
+import { computed, provide } from 'vue'
+import { NConfigProvider, NNotificationProvider, dateEnUS, dateZhCN, enUS, zhCN } from 'naive-ui'
 import { useLocaleStore } from '@/store/modules/locale'
-import { useAppStore } from '@/store/modules/app'
-import { useDesign } from '@/hooks/web/useDesign'
+import { useNaiveTheme } from './naiveTheme'
 
-const { variables } = useDesign()
+const props = withDefaults(
+  defineProps<{
+    size?: 'default' | 'small' | 'large'
+  }>(),
+  { size: 'default' }
+)
 
-const appStore = useAppStore()
-
-const props = defineProps({
-  size: propTypes.oneOf<ComponentSize>(['default', 'small', 'large']).def('default')
-})
-
+// 保留 configGlobal 注入：Naive 无全局尺寸配置，尺寸由各组件显式声明
 provide('configGlobal', props)
 
-// 初始化所有主题色
-onMounted(() => {
-  appStore.setCssVarTheme()
-})
+const { naiveTheme, themeOverrides } = useNaiveTheme()
 
-// 多语言相关
 const localeStore = useLocaleStore()
-
-const currentLocale = computed(() => localeStore.currentLocale)
+const isEnglish = computed(() => localeStore.currentLocale.lang === 'en')
+const naiveLocale = computed(() => (isEnglish.value ? enUS : zhCN))
+const naiveDateLocale = computed(() => (isEnglish.value ? dateEnUS : dateZhCN))
 </script>
 
 <template>
-  <ElConfigProvider
-    :namespace="variables.elNamespace"
-    :locale="currentLocale.elLocale"
-    :message="{ max: 1 }"
-    :size="size"
+  <NConfigProvider
+    abstract
+    preflight-style-disabled
+    :theme="naiveTheme"
+    :theme-overrides="themeOverrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
   >
-    <slot></slot>
-  </ElConfigProvider>
+    <NNotificationProvider :max="3">
+      <slot></slot>
+    </NNotificationProvider>
+  </NConfigProvider>
 </template>

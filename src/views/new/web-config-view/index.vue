@@ -15,7 +15,8 @@
           >
         </div>
       </div>
-      <div class="nwc-left-scroll" v-loading="easyTierStore.webConfigListLoading">
+      <div class="nwc-left-scroll lt-loading-host">
+        <LoadingOverlay :show="easyTierStore.webConfigListLoading" />
         <div
           v-for="item in webConfigList"
           :key="item.configFileName"
@@ -341,6 +342,7 @@ import { useMockData } from '@/hooks/useMockData'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { openPath } from '@/utils/fileUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import WebConfigForm from './WebConfigForm.vue'
 import type { FormWebData } from '@/types/formTypes'
 

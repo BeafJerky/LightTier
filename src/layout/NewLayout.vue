@@ -861,7 +861,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 28px 0 0;
   z-index: 90;
-  background: var(--el-overlay-color, rgb(0 0 0 / 35%));
+  background: var(--theme-overlay, rgb(0 0 0 / 30%));
 }
 
 /* Android：无窗口拖拽条（不渲染），抽屉/遮罩顶部对齐安全区（状态栏下方） */

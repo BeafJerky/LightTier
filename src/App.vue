@@ -8,6 +8,7 @@
  */
 import { ConfigGlobal } from '@/components/ConfigGlobal'
 import OnboardingGuide from '@/components/OnboardingGuide/index.vue'
+import StartupTasks from '@/components/StartupTasks/index.vue'
 import { useDesign } from '@/hooks/web/useDesign'
 import { useAppStore } from '@/store/modules/app'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -230,6 +231,8 @@ onUnmounted(() => {
     </div>
     <!-- 首次引导屏：解锁后显示（锁屏优先级更高） -->
     <OnboardingGuide v-if="!isLocked && showOnboarding" @finish="showOnboarding = false" />
+    <!-- 启动后台任务：出口路由残留清理反馈（需在 NotificationProvider 内） -->
+    <StartupTasks />
   </ConfigGlobal>
 </template>
 

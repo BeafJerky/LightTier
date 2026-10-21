@@ -1,5 +1,20 @@
 /* 首屏加载动画（外部文件：CSP 下不能保留 inline <style>，否则 Tauri 会注入 style nonce，
-   使 'unsafe-inline' 失效并拦截 Monaco 等运行时注入的样式） */
+   使 'unsafe-inline' 失效并拦截 Monaco 等运行时注入的样式）。
+   配色与 theme.css 的奶油/暗色主题保持一致，避免启动瞬间闪出无关的蓝灰首屏。 */
+:root {
+  --lt-loading-bg: #fdf8f4;
+  --lt-loading-title: #4a3728;
+  --lt-loading-accent: #e8a0a0;
+  --lt-loading-accent-soft: #f0c4c4;
+}
+
+[data-theme='dark'] {
+  --lt-loading-bg: #0d1b2a;
+  --lt-loading-title: #e0e8f0;
+  --lt-loading-accent: #6ba8e0;
+  --lt-loading-accent-soft: #4a7fa8;
+}
+
 .app-loading {
   display: flex;
   width: 100%;
@@ -7,7 +22,7 @@
   justify-content: center;
   align-items: center;
   flex-direction: column;
-  background: #f0f2f5;
+  background: var(--lt-loading-bg);
 }
 
 .app-loading .app-loading-wrap {
@@ -23,8 +38,10 @@
 
 .app-loading .app-loading-title {
   margin-bottom: 30px;
+  font-family: 'Sora', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 20px;
-  font-weight: bold;
+  font-weight: 600;
+  color: var(--lt-loading-title);
   text-align: center;
 }
 
@@ -46,7 +63,7 @@
   position: absolute;
   width: 100%;
   height: 100%;
-  border: 4px solid #2d8cf0;
+  border: 4px solid var(--lt-loading-accent);
   border-bottom: 0;
   border-left-color: transparent;
   border-radius: 50%;
@@ -59,7 +76,7 @@
   left: calc(50% - 20px);
   width: 40px;
   height: 40px;
-  border: 4px solid #87bdff;
+  border: 4px solid var(--lt-loading-accent-soft);
   border-right: 0;
   border-top-color: transparent;
   border-radius: 50%;

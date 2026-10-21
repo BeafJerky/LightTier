@@ -18,7 +18,6 @@ declare global {
     readonly VITE_SOURCEMAP: string
     readonly VITE_OUT_DIR: string
     readonly VITE_USE_BUNDLE_ANALYZER: string
-    readonly VITE_USE_ALL_ELEMENT_PLUS_STYLE: string
     readonly VITE_USE_CSS_SPLIT: string
   }
 }

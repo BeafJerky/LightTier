@@ -274,7 +274,7 @@ onUnmounted(() => {
   display: flex;
   padding-top: var(--cd-overlay-top);
   overflow-y: auto;
-  background: var(--el-overlay-color, rgb(0 0 0 / 50%));
+  background: var(--theme-overlay, rgb(0 0 0 / 30%));
   inset: 0;
   align-items: flex-start;
   justify-content: center;

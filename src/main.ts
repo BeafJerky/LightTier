@@ -1,8 +1,8 @@
 /**
  * 应用入口
  *
- * 装配顺序：i18n → store → 全局组件 → Element Plus → 路由 → mount；
- * 挂载后异步执行不阻塞启动的后台任务（日志清理、出口路由残留清理）。
+ * 装配顺序：i18n → store → 全局组件 → 路由 → mount；
+ * 不阻塞启动的后台任务（出口路由残留清理）由 App 内的 StartupTasks 执行。
  * 启动设置（最小化到托盘 / 自动运行网络）不在本文件编排：
  * 前者由 App.vue 在窗口展示流程中处理，后者由 overview 页按 settings.autoRunNetwork 触发。
  */
@@ -19,9 +19,6 @@ import { setupStore } from '@/store'
 
 // 全局组件
 import { setupGlobCom } from '@/components'
-
-// 引入element-plus
-import { setupElementPlus } from '@/plugins/elementPlus'
 
 // 引入全局样式
 import '@/styles/index.less'
@@ -42,9 +39,7 @@ import { createApp } from 'vue'
 
 import App from './App.vue'
 
-import { cleanExitRouteResidue } from './utils/routeUtil'
 import { t } from './utils/i18nUtil'
-import { ElNotification } from 'element-plus'
 
 // 创建应用实例并完成全部装配
 const setupAll = async () => {
@@ -56,28 +51,9 @@ const setupAll = async () => {
 
   setupGlobCom(app)
 
-  setupElementPlus(app)
-
   setupRouter(app)
 
   app.mount('#app')
-
-  // 启动后台任务（不阻塞启动）
-  // 注：应用日志不再随启动清空（保留上次会话诊断信息），由插件按大小轮转并保留历史
-  Promise.all([
-    // 启动补清：上次异常退出残留的出口节点路由（崩溃/强杀不留残）
-    (async () => {
-      const res = await cleanExitRouteResidue()
-      if (!res.skipped && res.cleared > 0) {
-        ElNotification({
-          title: t('newCommon.exitRouteResidueAutoCleared'),
-          message: t('newConfig.exitRouteResidueCleared', { n: res.cleared }),
-          type: 'warning',
-          duration: 5000
-        })
-      }
-    })()
-  ]).catch((err) => console.error('后台任务执行失败:', err))
 }
 
 setupAll().catch((err) => {

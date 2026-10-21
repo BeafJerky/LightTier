@@ -22,8 +22,5 @@ VITE_APP_TITLE="LightTier"
 # 是否包分析
 VITE_USE_BUNDLE_ANALYZER=false
 
-# 是否全量引入element-plus样式
-VITE_USE_ALL_ELEMENT_PLUS_STYLE=true
-
 # 是否切割css
 VITE_USE_CSS_SPLIT=true

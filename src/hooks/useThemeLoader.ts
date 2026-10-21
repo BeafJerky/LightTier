@@ -28,6 +28,8 @@ export const systemDefaultTheme = (): string => (prefersDark() ? 'dark' : 'cream
 export const resolveDefaultTheme = (): string => readSavedTheme() || systemDefaultTheme()
 
 const currentTheme = ref(resolveDefaultTheme())
+// 主题应用版本号：即使主题名未变（重启恢复外部主题），也能通知依赖方重新读取计算样式
+const themeRevision = ref(0)
 
 export const useThemeLoader = () => {
   // 注入外部主题样式（先移除旧的，保证单实例）
@@ -54,6 +56,7 @@ export const useThemeLoader = () => {
       removeExternalTheme()
     }
     document.documentElement.setAttribute('data-theme', name)
+    themeRevision.value++
   }
 
   // 切换内置主题（不写 localStorage：用于「跟随系统」场景，避免被当成用户显式选择）
@@ -61,6 +64,7 @@ export const useThemeLoader = () => {
     removeExternalTheme()
     currentTheme.value = name
     document.documentElement.setAttribute('data-theme', name)
+    themeRevision.value++
   }
 
   // 重置回默认主题（清理存储与注入的样式）；返回实际生效的默认主题名
@@ -89,6 +93,7 @@ export const useThemeLoader = () => {
 
   return {
     currentTheme,
+    themeRevision,
     applyTheme,
     resetTheme,
     setBuiltinTheme,

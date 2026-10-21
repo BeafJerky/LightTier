@@ -2,21 +2,22 @@
  * 应用外观状态（组件尺寸 / 暗黑模式 / 灰色模式）
  *
  * - state 整体持久化（persist: true），刷新后保留外观设置
- * - Element Plus 主色由 theme.css 中 `--el-color-primary: var(--theme-accent-primary)`
- *   统一映射到当前主题，不再在 JS 中写死内联色值（内联变量会覆盖样式表映射）
+ * - 主题外观由 theme.css 的 --theme-* 变量驱动；组件库色板经 ConfigGlobal 映射，
+ *   JS 不再写死或内联组件库色值
  */
 // @ts-ignore
 // @ts-nocheck
 import { defineStore } from 'pinia'
 import { store } from '../index'
-import { ComponentSize } from 'element-plus'
 import { useDark } from '@vueuse/core'
 
+type AppComponentSize = 'default' | 'small' | 'large'
+
 interface AppState {
-  sizeMap: ComponentSize[]
+  sizeMap: AppComponentSize[]
   title: string
   isDark: boolean
-  currentSize: ComponentSize
+  currentSize: AppComponentSize
   greyMode: boolean
   theme: ThemeTypes
 }
@@ -30,7 +31,7 @@ export const useAppStore = defineStore('app', {
       currentSize: 'default', // 组件尺寸
       greyMode: false, // 是否开启灰色模式，用于特殊悼念日
       theme: {
-        // 主题色
+        // 历史备份字段：保留读写以兼容旧备份文件，不再参与实际主题渲染
         elColorPrimary: '#409eff'
       }
     }
@@ -42,10 +43,10 @@ export const useAppStore = defineStore('app', {
     getIsDark(): boolean {
       return this.isDark
     },
-    getCurrentSize(): ComponentSize {
+    getCurrentSize(): AppComponentSize {
       return this.currentSize
     },
-    getSizeMap(): ComponentSize[] {
+    getSizeMap(): AppComponentSize[] {
       return this.sizeMap
     },
     getGreyMode(): boolean {
@@ -59,7 +60,7 @@ export const useAppStore = defineStore('app', {
     setGreyMode(greyMode: boolean) {
       this.greyMode = greyMode
     },
-    // 切换暗黑模式：html 挂载 dark/light 类名（Element Plus 与自定义变量均依赖）
+    // 切换暗黑模式：同步 html 的 dark/light 类名（useDark 兼容层）
     setIsDark(isDark: boolean) {
       this.isDark = isDark
       if (this.isDark) {
@@ -69,22 +70,12 @@ export const useAppStore = defineStore('app', {
         document.documentElement.classList.add('light')
         document.documentElement.classList.remove('dark')
       }
-      this.setPrimaryLight()
     },
-    setCurrentSize(currentSize: ComponentSize) {
+    setCurrentSize(currentSize: AppComponentSize) {
       this.currentSize = currentSize
     },
     setTheme(theme: ThemeTypes) {
       this.theme = Object.assign(this.theme, theme)
-    },
-    // 兼容旧调用：主色变量已由 theme.css 按当前主题映射，JS 不再写内联色值
-    setCssVarTheme() {
-      this.setPrimaryLight()
-    },
-    // 旧版会在根节点内联写入 --el-color-primary 及其梯度，优先级高于 [data-theme] 映射，
-    // 导致切换主题后 Element Plus 仍为默认蓝色。现统一交给 theme.css 的 color-mix 派生。
-    setPrimaryLight() {
-      /* no-op：保留方法签名，避免历史调用点报错 */
     },
     // 初始化主题：同步 vueuse useDark 与 store 状态（App.vue onBeforeMount 调用）
     initTheme() {

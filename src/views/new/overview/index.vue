@@ -34,7 +34,8 @@
     </div>
 
     <div class="nd-section">
-      <div class="nd-grid" v-loading="easyTierStore.configListLoading">
+      <div class="nd-grid lt-loading-host">
+        <LoadingOverlay :show="easyTierStore.configListLoading" />
         <div
           v-for="cfg in displayList"
           :key="cfg.configFileName"
@@ -117,6 +118,7 @@ import { useEasyTierStore } from '@/store/modules/easytier'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useI18n } from 'vue-i18n'
 import { useAutoMetric } from '@/hooks/useAutoMetric'

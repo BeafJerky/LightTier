@@ -39,7 +39,8 @@
           </button>
         </div>
       </div>
-      <div class="nw-left-scroll" v-loading="easyTierStore.configListLoading">
+      <div class="nw-left-scroll lt-loading-host">
+        <LoadingOverlay :show="easyTierStore.configListLoading" />
         <div
           v-for="item in filteredConfigList"
           :key="item.configFileName"
@@ -444,6 +445,7 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { resourceDir, join } from '@tauri-apps/api/path'
 import { openPath } from '@/utils/fileUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import EditDialog from './EditDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
 import LogViewer from '@/components/LogViewer/index.vue'
