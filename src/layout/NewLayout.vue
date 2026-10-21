@@ -1040,12 +1040,18 @@ onBeforeUnmount(() => {
 }
 
 .cream-toast {
+  max-width: min(560px, calc(100vw - 32px));
   padding: var(--theme-space-3) var(--theme-space-6);
   font-family: var(--theme-font-body);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.5;
   color: var(--theme-text-primary);
-  white-space: nowrap;
+  text-align: center;
+  overflow-wrap: anywhere;
+
+  /* 长错误/路径/镜像地址必须换行，不能横向溢出窄窗口 */
+  white-space: normal;
   pointer-events: auto;
   background: var(--theme-bg-card);
   border-radius: var(--theme-radius-pill);

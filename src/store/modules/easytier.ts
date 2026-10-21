@@ -17,6 +17,23 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 /**
+ * 安全读取 localStorage 中的 JSON。
+ *
+ * 存储内容可能因手动编辑、旧版本残留或写入中断而损坏；
+ * 单键解析失败只回退默认值，不能让异常在启动阶段冒泡导致整页白屏。
+ */
+const readStoredJson = <T>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch (error) {
+    console.warn(`[easytier] localStorage "${key}" 解析失败，已回退默认值`, error)
+    return fallback
+  }
+}
+
+/**
  * EasyTier 全局状态
  *
  * 集中承载：
@@ -73,7 +90,7 @@ export const useEasyTierStore = defineStore(
     const errRunNotify = ref(true)
     const defaultFormData = ref()
     const os = ref('windows')
-    const publicPeerList = ref([])
+    const publicPeerList = ref<any[]>([])
     const stunServerList = ref([])
     // 当前选择的列（存储prop值）
     const selectedColumns = ref(['rx_bytes', 'tx_bytes', 'nat_type'])
@@ -119,8 +136,8 @@ export const useEasyTierStore = defineStore(
       fileListNoSuffix.value = list
     }
     const loadRunningList = () => {
-      const runningListStr = localStorage.getItem('runningList')
-      runningList.value = JSON.parse(runningListStr || '[]')
+      const stored = readStoredJson<RunningItem[]>('runningList', [])
+      runningList.value = Array.isArray(stored) ? stored : []
     }
     // 按配置文件名（不含 .toml 后缀）查运行记录
     const getRunningItem = (configFileName: string) => {
@@ -151,12 +168,12 @@ export const useEasyTierStore = defineStore(
       if (lastRunConfig.value) {
         return lastRunConfig.value.configFileName
       }
-      const storageConfigName = JSON.parse(localStorage.getItem('lastRunConfigName') || '{}')
-      if (Object.keys(storageConfigName).length !== 0) {
+      const storageConfigName = readStoredJson<RunningItem | null>('lastRunConfigName', null)
+      if (storageConfigName?.configFileName) {
         return storageConfigName.configFileName
       }
-      const storageSelectedConfig = JSON.parse(localStorage.getItem('lastSelectedConfig') || '{}')
-      if (Object.keys(storageSelectedConfig).length !== 0) {
+      const storageSelectedConfig = readStoredJson<RunningItem | null>('lastSelectedConfig', null)
+      if (storageSelectedConfig?.configFileName) {
         return storageSelectedConfig.configFileName
       }
       if (configList.value.length > 0) {
@@ -317,7 +334,8 @@ export const useEasyTierStore = defineStore(
         localStorage.setItem('publicPeerList', JSON.stringify(publicPeerList.value))
         return publicPeerList.value
       }
-      publicPeerList.value = JSON.parse(localStorage.getItem('publicPeerList') || '[]')
+      const cachedPeers = readStoredJson<unknown>('publicPeerList', [])
+      publicPeerList.value = Array.isArray(cachedPeers) ? cachedPeers : []
       return publicPeerList.value
     }
     // 清除远端临时缓存后同步重置内存副本（下次使用时会自然重新拉取远端数据）

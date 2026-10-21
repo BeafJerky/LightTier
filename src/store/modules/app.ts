@@ -1,15 +1,14 @@
 /**
- * 应用外观状态（组件尺寸 / 暗黑模式 / 灰色模式 / Element Plus 主色）
+ * 应用外观状态（组件尺寸 / 暗黑模式 / 灰色模式）
  *
  * - state 整体持久化（persist: true），刷新后保留外观设置
- * - setTheme / setCssVarTheme 把颜色写入 CSS 变量，组件样式统一用 var(--el-color-primary) 取值
+ * - Element Plus 主色由 theme.css 中 `--el-color-primary: var(--theme-accent-primary)`
+ *   统一映射到当前主题，不再在 JS 中写死内联色值（内联变量会覆盖样式表映射）
  */
 // @ts-ignore
 // @ts-nocheck
 import { defineStore } from 'pinia'
 import { store } from '../index'
-import { setCssVar, humpToUnderline } from '@/utils'
-import { mix } from '@/utils/color'
 import { ComponentSize } from 'element-plus'
 import { useDark } from '@vueuse/core'
 
@@ -78,24 +77,14 @@ export const useAppStore = defineStore('app', {
     setTheme(theme: ThemeTypes) {
       this.theme = Object.assign(this.theme, theme)
     },
-    // 把主题色写入 CSS 变量（驼峰 → 横杠命名）
+    // 兼容旧调用：主色变量已由 theme.css 按当前主题映射，JS 不再写内联色值
     setCssVarTheme() {
-      for (const key in this.theme) {
-        setCssVar(`--${humpToUnderline(key)}`, this.theme[key])
-      }
       this.setPrimaryLight()
     },
-    // 派生 Element Plus 主色的浅色/深色梯度变量（light-3 ~ light-9、dark-2）
+    // 旧版会在根节点内联写入 --el-color-primary 及其梯度，优先级高于 [data-theme] 映射，
+    // 导致切换主题后 Element Plus 仍为默认蓝色。现统一交给 theme.css 的 color-mix 派生。
     setPrimaryLight() {
-      if (this.theme.elColorPrimary) {
-        const elColorPrimary = this.theme.elColorPrimary
-        const color = this.isDark ? '#000000' : '#ffffff'
-        const lightList = [3, 5, 7, 8, 9]
-        lightList.forEach((v) => {
-          setCssVar(`--el-color-primary-light-${v}`, mix(color, elColorPrimary, v / 10))
-        })
-        setCssVar(`--el-color-primary-dark-2`, mix(color, elColorPrimary, 0.2))
-      }
+      /* no-op：保留方法签名，避免历史调用点报错 */
     },
     // 初始化主题：同步 vueuse useDark 与 store 状态（App.vue onBeforeMount 调用）
     initTheme() {

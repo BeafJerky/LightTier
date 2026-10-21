@@ -171,8 +171,10 @@
 }
 
 /* ==================== 通用 Element Plus 变量映射 ==================== */
-/* 所有主题共享，使 El 组件跟随 --theme-* 变量变化（包括外部暗色主题） */
-[data-theme] {
+/* 所有主题共享，使 El 组件跟随 --theme-* 变量变化（包括外部暗色主题）。
+   用 html[data-theme] 提高一级特异性：Element Plus 的 :root 变量可能在主题样式之后注入，
+   同特异性下会反超 [data-theme]，导致主色回落到默认蓝。 */
+html[data-theme] {
   --el-bg-color: var(--theme-bg-card);
   --el-bg-color-overlay: var(--theme-bg-card);
   --el-bg-color-page: var(--theme-bg);
@@ -192,6 +194,33 @@
   --el-dialog-title-font-size: 16px;
   --el-dialog-content-font-size: 14px;
   --el-color-primary: var(--theme-accent-primary);
+  /* 主色梯度由当前主题强调色派生：暗色主题混入卡片底色，避免亮色梯度发灰 */
+  --el-color-primary-light-3: color-mix(
+    in srgb,
+    var(--theme-accent-primary) 70%,
+    var(--theme-bg-card)
+  );
+  --el-color-primary-light-5: color-mix(
+    in srgb,
+    var(--theme-accent-primary) 50%,
+    var(--theme-bg-card)
+  );
+  --el-color-primary-light-7: color-mix(
+    in srgb,
+    var(--theme-accent-primary) 30%,
+    var(--theme-bg-card)
+  );
+  --el-color-primary-light-8: color-mix(
+    in srgb,
+    var(--theme-accent-primary) 20%,
+    var(--theme-bg-card)
+  );
+  --el-color-primary-light-9: color-mix(
+    in srgb,
+    var(--theme-accent-primary) 10%,
+    var(--theme-bg-card)
+  );
+  --el-color-primary-dark-2: color-mix(in srgb, var(--theme-accent-primary) 80%, #000000);
   --el-color-white: var(--theme-text-white);
   --el-color-black: #000000;
 }
