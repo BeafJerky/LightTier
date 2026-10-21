@@ -81,6 +81,8 @@ interface Flags {
   enable_udp_broadcast_relay?: boolean | undefined // 启用 UDP 广播中继
   disable_relay_kcp?: boolean | undefined // 禁止转发 KCP 数据包
   disable_relay_quic?: boolean | undefined // 禁止转发 QUIC 数据包
+  disable_relay_data?: boolean | undefined // 禁止转发数据包（v2.6.3+）
+  prefer_peer_relay?: boolean | undefined // 优先 Peer 中继（v2.7.0+）
   enable_relay_foreign_network_kcp?: boolean | undefined // 允许转发外部网络 KCP
   enable_relay_foreign_network_quic?: boolean | undefined // 允许转发外部网络 QUIC
   tld_dns_zone?: string | undefined // TLD DNS 区域

@@ -77,6 +77,8 @@ const defaultFormData: EasyTierFormData | any = {
     enable_udp_broadcast_relay: undefined, // 启用 UDP 广播中继
     disable_relay_kcp: undefined, // 禁止转发 KCP 数据包
     disable_relay_quic: undefined, // 禁止转发 QUIC 数据包
+    disable_relay_data: undefined, // 禁止转发数据包（v2.6.3+）
+    prefer_peer_relay: undefined, // 优先 Peer 中继（v2.7.0+）
     enable_relay_foreign_network_kcp: undefined, // 允许转发外部网络 KCP
     enable_relay_foreign_network_quic: undefined, // 允许转发外部网络 QUIC
     tld_dns_zone: undefined // TLD DNS 区域
@@ -94,7 +96,8 @@ export interface AdvancedFieldDef {
   secret?: boolean // 敏感字段：回显掩码、保存写回原值
   filePick?: boolean // 文本输入行带 📁 选择按钮（Tauri 文件选择）
   secureMode?: boolean // true: 位于 [secure_mode] 表内；false/缺省: 顶层字段
-  feature?: CoreFeature // 所属内核功能：新增配置在当前内核不支持时隐藏，存量配置仅警告
+  feature?: CoreFeature // 所属内核功能：当前内核不支持时归入“当前内核未兼容”栏
+  defaultValue?: boolean // 内核默认值（缺省 false）；用于缺省未写配置时的开关显示
 }
 
 /**
@@ -132,24 +135,90 @@ export const SECURITY_FIELD_DEFS: AdvancedFieldDef[] = [
 ]
 
 // 高级选项（flags 内布尔开关，2 列网格）
+// 覆盖内核 2.4.5 ~ 2.7.0 的全部布尔 flags；非布尔 flags 仍由“自定义 Flags”编辑。
+// defaultValue 与 EasyTier 内核 gen_default_flags() 保持一致：缺省未写时按内核默认显示。
 export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
   {
-    key: 'disable_quic_input',
+    key: 'bind_device',
     type: 'switch',
-    labelKey: 'newEdit.lblDisableQuicInput',
-    tooltipKey: 'newEdit.tipDisableQuicInput'
+    labelKey: 'newEdit.lblBindDevice',
+    tooltipKey: 'newEdit.tipBindDevice',
+    defaultValue: true
   },
   {
-    key: 'lazy_p2p',
+    key: 'enable_encryption',
     type: 'switch',
-    labelKey: 'newEdit.lblLazyP2p',
-    tooltipKey: 'newEdit.tipLazyP2p'
+    labelKey: 'newEdit.lblEnableEncryption',
+    tooltipKey: 'newEdit.tipEnableEncryption',
+    defaultValue: true
   },
   {
-    key: 'need_p2p',
+    key: 'enable_ipv6',
     type: 'switch',
-    labelKey: 'newEdit.lblNeedP2p',
-    tooltipKey: 'newEdit.tipNeedP2p'
+    labelKey: 'newEdit.lblEnableIpv6',
+    tooltipKey: 'newEdit.tipEnableIpv6',
+    defaultValue: true
+  },
+  {
+    key: 'latency_first',
+    type: 'switch',
+    labelKey: 'newEdit.lblLatencyFirst',
+    tooltipKey: 'newEdit.tipLatencyFirst'
+  },
+  {
+    key: 'multi_thread',
+    type: 'switch',
+    labelKey: 'newEdit.lblMultiThread',
+    tooltipKey: 'newEdit.tipMultiThread',
+    defaultValue: true
+  },
+  {
+    key: 'no_tun',
+    type: 'switch',
+    labelKey: 'newEdit.lblNoTun',
+    tooltipKey: 'newEdit.tipNoTun'
+  },
+  {
+    key: 'use_smoltcp',
+    type: 'switch',
+    labelKey: 'newEdit.lblUseSmoltcp',
+    tooltipKey: 'newEdit.tipUseSmoltcp'
+  },
+  {
+    key: 'enable_exit_node',
+    type: 'switch',
+    labelKey: 'newEdit.lblEnableExitNode',
+    tooltipKey: 'newEdit.tipEnableExitNode'
+  },
+  {
+    key: 'proxy_forward_by_system',
+    type: 'switch',
+    labelKey: 'newEdit.lblProxyForwardBySystem',
+    tooltipKey: 'newEdit.tipProxyForwardBySystem'
+  },
+  {
+    key: 'disable_p2p',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableP2p',
+    tooltipKey: 'newEdit.tipDisableP2p'
+  },
+  {
+    key: 'disable_udp_hole_punching',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableUdpHole',
+    tooltipKey: 'newEdit.tipDisableUdpHole'
+  },
+  {
+    key: 'disable_tcp_hole_punching',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableTcpHole',
+    tooltipKey: 'newEdit.tipDisableTcpHole'
+  },
+  {
+    key: 'disable_sym_hole_punching',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableSymHole',
+    tooltipKey: 'newEdit.tipDisableSymHole'
   },
   {
     key: 'disable_upnp',
@@ -164,16 +233,58 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     tooltipKey: 'newEdit.tipUdpBroadcastRelay'
   },
   {
+    key: 'p2p_only',
+    type: 'switch',
+    labelKey: 'newEdit.lblP2pOnly',
+    tooltipKey: 'newEdit.tipP2pOnly'
+  },
+  {
+    key: 'lazy_p2p',
+    type: 'switch',
+    labelKey: 'newEdit.lblLazyP2p',
+    tooltipKey: 'newEdit.tipLazyP2p'
+  },
+  {
+    key: 'need_p2p',
+    type: 'switch',
+    labelKey: 'newEdit.lblNeedP2p',
+    tooltipKey: 'newEdit.tipNeedP2p'
+  },
+  {
+    key: 'accept_dns',
+    type: 'switch',
+    labelKey: 'newEdit.lblAcceptDns',
+    tooltipKey: 'newEdit.tipAcceptDns'
+  },
+  {
+    key: 'relay_all_peer_rpc',
+    type: 'switch',
+    labelKey: 'newEdit.lblRelayAllPeerRpc',
+    tooltipKey: 'newEdit.tipRelayAllPeerRpc'
+  },
+  {
+    key: 'disable_kcp_input',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableKcpInput',
+    tooltipKey: 'newEdit.tipDisableKcpInput'
+  },
+  {
+    key: 'enable_kcp_proxy',
+    type: 'switch',
+    labelKey: 'newEdit.lblEnableKcpProxy',
+    tooltipKey: 'newEdit.tipEnableKcpProxy'
+  },
+  {
     key: 'disable_relay_kcp',
     type: 'switch',
     labelKey: 'newEdit.lblDisableRelayKcp',
     tooltipKey: 'newEdit.tipDisableRelayKcp'
   },
   {
-    key: 'disable_relay_quic',
+    key: 'disable_relay_data',
     type: 'switch',
-    labelKey: 'newEdit.lblDisableRelayQuic',
-    tooltipKey: 'newEdit.tipDisableRelayQuic'
+    labelKey: 'newEdit.lblDisableRelayData',
+    tooltipKey: 'newEdit.tipDisableRelayData'
   },
   {
     key: 'enable_relay_foreign_network_kcp',
@@ -182,28 +293,40 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     tooltipKey: 'newEdit.tipRelayForeignKcp'
   },
   {
+    key: 'disable_quic_input',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableQuicInput',
+    tooltipKey: 'newEdit.tipDisableQuicInput'
+  },
+  {
+    key: 'enable_quic_proxy',
+    type: 'switch',
+    labelKey: 'newEdit.lblEnableQuicProxy',
+    tooltipKey: 'newEdit.tipEnableQuicProxy'
+  },
+  {
+    key: 'disable_relay_quic',
+    type: 'switch',
+    labelKey: 'newEdit.lblDisableRelayQuic',
+    tooltipKey: 'newEdit.tipDisableRelayQuic'
+  },
+  {
     key: 'enable_relay_foreign_network_quic',
     type: 'switch',
     labelKey: 'newEdit.lblRelayForeignQuic',
     tooltipKey: 'newEdit.tipRelayForeignQuic'
   },
   {
-    key: 'disable_sym_hole_punching',
+    key: 'prefer_peer_relay',
     type: 'switch',
-    labelKey: 'newEdit.lblDisableSymHole',
-    tooltipKey: 'newEdit.tipDisableSymHole'
+    labelKey: 'newEdit.lblPreferPeerRelay',
+    tooltipKey: 'newEdit.tipPreferPeerRelay'
   },
   {
-    key: 'p2p_only',
+    key: 'private_mode',
     type: 'switch',
-    labelKey: 'newEdit.lblP2pOnly',
-    tooltipKey: 'newEdit.tipP2pOnly'
-  },
-  {
-    key: 'accept_dns',
-    type: 'switch',
-    labelKey: 'newEdit.lblAcceptDns',
-    tooltipKey: 'newEdit.tipAcceptDns'
+    labelKey: 'newEdit.lblPrivateMode',
+    tooltipKey: 'newEdit.tipPrivateMode'
   }
 ]
 

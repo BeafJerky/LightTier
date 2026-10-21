@@ -134,6 +134,53 @@ export const isCoreFeatureSupported = (
 export const isCoreFlagSupported = (flag: string, caps: CoreCapabilities | null): boolean =>
   caps?.flags ? caps.flags.has(flag) : true
 
+/** 当前内核不支持的配置项（来自配置文件原文，供表单锁定展示与原样保留） */
+export interface UnsupportedConfigEntries {
+  flags: Record<string, unknown>
+  topLevel: Record<string, unknown>
+}
+
+/**
+ * 收集配置文件中存在、但当前内核版本不支持/已移除的配置项。
+ *
+ * - flags：仅在内核白名单可判定时收集（未知版本视为全部支持，避免误锁）
+ * - 顶层字段：按引入版本与移除版本判断；rpc_portal 由 LightTier 转 CLI 参数，桌面端仍生效，不锁定
+ * - 返回值只包含原值，不参与任何表单转换；调用方应在保存时原样写回
+ */
+export const collectUnsupportedConfigEntries = (
+  config: unknown,
+  caps: CoreCapabilities | null
+): UnsupportedConfigEntries => {
+  const result: UnsupportedConfigEntries = { flags: {}, topLevel: {} }
+  if (!isPlainObject(config) || !caps) return result
+
+  if (isPlainObject(config.flags) && caps.flags) {
+    Object.entries(config.flags).forEach(([key, value]) => {
+      if (!caps.flags!.has(key)) result.flags[key] = value
+    })
+  }
+
+  // 早于引入版本：字段存在即归入未兼容
+  CORE_TOP_LEVEL_FIELD_GROUPS.forEach(({ fields, since }) => {
+    if (compareCoreVersion(caps.version, since) >= 0) return
+    fields.forEach((field) => {
+      if (field in config) result.topLevel[field] = config[field]
+    })
+  })
+
+  // 从某版本起被移除：配置文件中的旧值不再生效
+  CORE_TOP_LEVEL_FIELD_REMOVED.forEach(({ fields, since }) => {
+    if (compareCoreVersion(caps.version, since) < 0) return
+    fields.forEach((field) => {
+      // rpc_portal 由 LightTier 转为 CLI 参数，桌面端仍生效；不能归入“未兼容”
+      if (field === 'rpc_portal') return
+      if (field in config) result.topLevel[field] = config[field]
+    })
+  })
+
+  return result
+}
+
 /**
  * 配置兼容性检查
  * @param config 已解析的 TOML 对象

@@ -39,6 +39,10 @@ export interface ConfigFormModel {
   flagsVals: string[]
   networkName: string
   networkSecret: string
+  /** 当前内核不支持的 flags：只读展示、保存时原样写回，不进入自定义 Flags 编辑 */
+  lockedFlags?: Record<string, any>
+  /** 当前内核不支持/已移除的顶层字段：只读展示、保存时原样写回 */
+  lockedTopLevel?: Record<string, any>
 }
 
 /**
@@ -92,7 +96,9 @@ export const emptyFormModel = (): ConfigFormModel => ({
   flagsKeys: [],
   flagsVals: [],
   networkName: '',
-  networkSecret: ''
+  networkSecret: '',
+  lockedFlags: {},
+  lockedTopLevel: {}
 })
 
 /**
@@ -286,6 +292,8 @@ export const buildConfigFormModel = (
   })
   model.flagsKeys.forEach((k, i) => {
     if (!k.trim() || k === 'secure_mode') return
+    // 固定高级字段由开关/输入框单一来源写入，避免自定义行重复覆盖
+    if (ADVANCED_FIELD_KEYS.includes(k)) return
     const raw = model.flagsVals[i]
     if (raw === '' || raw === undefined || raw === null) flags[k] = true
     else if (raw === 'true') flags[k] = true
@@ -293,7 +301,11 @@ export const buildConfigFormModel = (
     else if (/^-?\d+(\.\d+)?$/.test(raw)) flags[k] = Number(raw)
     else flags[k] = raw
   })
+  // 当前内核不支持的 flags：最后写入，保证表单编辑不会修改其值
+  Object.assign(flags, model.lockedFlags || {})
   if (Object.keys(flags).length) data.flags = flags
   else delete data.flags
+  // 当前内核不支持的顶层字段：最后覆盖，保持配置文件原值（含显式 false/空结构）
+  Object.assign(data, model.lockedTopLevel || {})
   return { toml: toml.stringify(data), secretBackup }
 }

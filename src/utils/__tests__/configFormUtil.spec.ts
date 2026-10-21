@@ -166,7 +166,9 @@ describe('configFormUtil', () => {
     expect(m.secureModeEnabled).toBe(true)
     // secure_mode 已迁移，不再作为自定义 Flag 编辑
     expect(m.flagsKeys).not.toContain('secure_mode')
-    expect(m.flagsKeys).toContain('latency_first')
+    // latency_first 已升级为高级开关，不再出现在自定义 Flags 行
+    expect(m.flagsKeys).not.toContain('latency_first')
+    expect((m.formData.flags as any).latency_first).toBe(true)
     const parsed = roundTrip(content)
     expect(parsed.secure_mode).toMatchObject({
       enabled: true,
@@ -259,7 +261,8 @@ describe('configFormUtil', () => {
     const content = ['[flags]', '_enable_exit_route = true', 'latency_first = true'].join('\n')
     const m = parseConfigFormModel(content)!
     expect(m.flagsKeys).not.toContain('_enable_exit_route')
-    expect(m.flagsKeys).toContain('latency_first')
+    expect(m.flagsKeys).not.toContain('latency_first')
+    expect((m.formData.flags as any).latency_first).toBe(true)
     const parsed = roundTrip(content)
     expect(parsed.lighttier).toEqual({ exit_route_enabled: true })
     expect(parsed.flags?._enable_exit_route).toBeUndefined()
@@ -325,6 +328,34 @@ describe('configFormUtil', () => {
     expect(m.flagsKeys).not.toContain('disable_quic_input')
     // 固定字段在 formData.flags 中保留
     expect((m.formData.flags as any).disable_quic_input).toBe(true)
+  })
+
+  it('lockedFlags / lockedTopLevel 最后写入：覆盖同名字段并保留显式 false', () => {
+    const model = emptyFormModel()
+    // 模拟 EditDialog 将未兼容项从表单剔除后交给构建
+    model.formData.flags = { bind_device: false }
+    model.lockedFlags = { bind_device: true, prefer_peer_relay: false, future_flag: 'v' }
+    model.lockedTopLevel = {
+      secure_mode: { enabled: true, local_public_key: 'PUB' },
+      tcp_stun_servers: ['stun.example.com'],
+      source: ''
+    }
+    const { toml: built } = buildConfigFormModel(model)
+    const parsed = toml.parse(built) as any
+    expect(parsed.flags.bind_device).toBe(true)
+    expect(parsed.flags.prefer_peer_relay).toBe(false)
+    expect(parsed.flags.future_flag).toBe('v')
+    expect(parsed.secure_mode).toEqual({ enabled: true, local_public_key: 'PUB' })
+    expect(parsed.tcp_stun_servers).toEqual(['stun.example.com'])
+    // 原值为空字符串也不因表单清洗被删除
+    expect(parsed.source).toBe('')
+  })
+
+  it('仅有 lockedFlags 时也能写出 [flags] 表', () => {
+    const model = emptyFormModel()
+    model.lockedFlags = { future_flag: false }
+    const { toml: built } = buildConfigFormModel(model)
+    expect((toml.parse(built) as any).flags).toEqual({ future_flag: false })
   })
 
   it('完整往返：解析→构建→再解析，关键字段保持一致', () => {

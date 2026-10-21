@@ -269,50 +269,26 @@
             >✦ {{ t('newEdit.advancedSection') }}</summary
           >
           <div class="ed-form-grid">
-            <div
-              class="ed-form-field"
-              :class="{ 'ed-field-unsupported': unsupportedFlagKeys.has(f.key) }"
-              v-for="f in visibleAdvancedFlagDefs"
-              :key="f.key"
-            >
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
-                >{{ t(f.labelKey)
-                }}<span
-                  v-if="unsupportedFlagKeys.has(f.key)"
-                  class="ed-field-warn"
-                  :title="unsupportedTitle(f.key)"
-                  >⚠</span
-                ></label
-              >
+            <div class="ed-form-field" v-for="f in visibleAdvancedFlagDefs" :key="f.key">
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
+                t(f.labelKey)
+              }}</label>
               <div class="ed-form-switch-wrap">
                 <span
                   class="ed-form-switch"
-                  :class="{ on: formData.flags?.[f.key] === true }"
-                  @click="toggleAdvancedFlag(f.key)"
+                  :class="{ on: isAdvancedFlagOn(f) }"
+                  @click="toggleAdvancedFlag(f)"
                 >
                   {{
-                    formData.flags?.[f.key] === true
-                      ? t('newConfig.dhcpEnabled')
-                      : t('newConfig.dhcpDisabled')
+                    isAdvancedFlagOn(f) ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
                   }}
                 </span>
               </div>
             </div>
-            <div
-              class="ed-form-field"
-              :class="{ 'ed-field-unsupported': unsupportedTopKeys.has(f.key) }"
-              v-for="f in visibleTopSwitchDefs"
-              :key="f.key"
-            >
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
-                >{{ t(f.labelKey)
-                }}<span
-                  v-if="unsupportedTopKeys.has(f.key)"
-                  class="ed-field-warn"
-                  :title="unsupportedTitle(f.key)"
-                  >⚠</span
-                ></label
-              >
+            <div class="ed-form-field" v-for="f in visibleTopSwitchDefs" :key="f.key">
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
+                t(f.labelKey)
+              }}</label>
               <div class="ed-form-switch-wrap">
                 <span
                   class="ed-form-switch"
@@ -327,21 +303,10 @@
                 </span>
               </div>
             </div>
-            <div
-              class="ed-form-field"
-              :class="{ 'ed-field-unsupported': unsupportedTopKeys.has(f.key) }"
-              v-for="f in visibleTopTextDefs"
-              :key="f.key"
-            >
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
-                >{{ t(f.labelKey)
-                }}<span
-                  v-if="unsupportedTopKeys.has(f.key)"
-                  class="ed-field-warn"
-                  :title="unsupportedTitle(f.key)"
-                  >⚠</span
-                ></label
-              >
+            <div class="ed-form-field" v-for="f in visibleTopTextDefs" :key="f.key">
+              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
+                t(f.labelKey)
+              }}</label>
               <input
                 v-if="f.key === 'stun_servers'"
                 class="ed-form-input"
@@ -360,7 +325,7 @@
           </div>
         </details>
 
-        <!-- 安全模式：置于表单最底部，开启后才展开字段并写入 [secure_mode] 表 -->
+        <!-- 安全模式：位于未兼容栏之前，开启后才展开字段并写入 [secure_mode] 表 -->
         <div v-if="securitySectionVisible" class="ed-form-section ed-secure-section">
           <div class="ed-secure-head" :title="t('newEdit.tipSecureMode')">
             <span class="ed-secure-title">🔒 {{ t('newEdit.securitySection') }}</span>
@@ -376,7 +341,7 @@
             <div
               class="ed-form-field"
               :class="{ 'ed-form-field-wide': f.filePick }"
-              v-for="f in SECURITY_FIELD_DEFS"
+              v-for="f in visibleSecurityFieldDefs"
               :key="f.key"
             >
               <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
@@ -411,6 +376,26 @@
             </div>
           </div>
         </div>
+
+        <!-- 当前内核未兼容：配置文件中有、但当前内核不支持/已移除的配置项（只读，保存原样保留） -->
+        <details v-if="lockedEntries.length" class="ed-adv-collapse ed-locked-collapse">
+          <summary class="ed-form-section-title ed-adv-summary">
+            ⚠ {{ t('newEdit.unsupportedSection') }} ({{ lockedEntries.length }})
+          </summary>
+          <div class="ed-locked-hint">
+            {{
+              store.detectedCoreVersion
+                ? t('newEdit.unsupportedHint', { version: store.detectedCoreVersion })
+                : t('newEdit.adaptedUnknown')
+            }}
+          </div>
+          <div class="ed-locked-list">
+            <div class="ed-locked-row" v-for="entry in lockedEntries" :key="entry.key">
+              <span class="ed-locked-key">{{ entry.key }}</span>
+              <span class="ed-locked-value">{{ entry.value }}</span>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -470,11 +455,11 @@ import {
 import { useEasyTierStore } from '@/store/modules/easytier'
 import {
   checkConfigCompat,
+  collectUnsupportedConfigEntries,
   compareCoreVersion,
   isCoreFeatureSupported,
   isCoreFlagSupported
 } from '@/utils/kernelCompatUtil'
-import type { CoreFeature } from '@/constants/kernelCompat'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
@@ -561,6 +546,9 @@ const formData = ref<FormData>({
 })
 // 表单未建模的顶层键/表（vpn_portal_config、[lighttier] 等），保存时原样透传
 const formPassthrough = ref<Record<string, any>>({})
+// 当前内核不支持/已移除的配置项：只读展示，构建 TOML 时最后原样写回（表单无法修改）
+const formLockedFlags = ref<Record<string, any>>({})
+const formLockedTop = ref<Record<string, any>>({})
 
 // 5.6：安全模式开关（表单最底部；开启后才渲染安全字段并写入 [secure_mode] 表）
 const secureModeEnabled = ref(false)
@@ -590,6 +578,43 @@ const formDataNetworkSecret = ref('')
 const parseFormData = (): boolean => {
   const model = parseConfigFormModel(tomlContent.value)
   if (!model) return false
+  formLockedFlags.value = {}
+  formLockedTop.value = {}
+  try {
+    // 以原文为准收集当前内核不支持的配置项：从可编辑表单剔除，改为只读展示 + 原样写回
+    const raw = toml.parse(tomlContent.value) as Record<string, any>
+    migrateLightTierConfig(raw)
+    const locked = collectUnsupportedConfigEntries(raw, store.coreCaps)
+    formLockedFlags.value = locked.flags
+    formLockedTop.value = locked.topLevel
+    const lockedFlagKeys = new Set(Object.keys(locked.flags))
+    if (lockedFlagKeys.size) {
+      if (model.formData.flags) {
+        lockedFlagKeys.forEach((key) => delete model.formData.flags[key])
+      }
+      const keptIndexes = model.flagsKeys
+        .map((_, i) => i)
+        .filter((i) => !lockedFlagKeys.has(model.flagsKeys[i]))
+      model.flagsKeys = keptIndexes.map((i) => model.flagsKeys[i])
+      model.flagsVals = keptIndexes.map((i) => model.flagsVals[i])
+    }
+    const lockedTopKeys = new Set(Object.keys(locked.topLevel))
+    if (lockedTopKeys.size) {
+      lockedTopKeys.forEach((key) => {
+        delete model.formData[key]
+        delete model.passthrough[key]
+      })
+      // 安全模式表不可用时整段隐藏，避免编辑了写入时又被锁定值覆盖
+      if (lockedTopKeys.has('secure_mode') || lockedTopKeys.has('credential_file')) {
+        model.secureModeEnabled = false
+        delete model.secretDisplays.local_private_key
+        delete model.secretBackup.local_private_key
+        delete model.formData.local_public_key
+      }
+    }
+  } catch {
+    /* parseConfigFormModel 已成功解析，忽略重复解析异常 */
+  }
   formData.value = { ...model.formData } as FormData
   formPassthrough.value = { ...model.passthrough }
   secureModeEnabled.value = model.secureModeEnabled
@@ -624,7 +649,9 @@ const collectFormModel = (): ConfigFormModel => ({
   flagsKeys: formFlagsKeys.value,
   flagsVals: formFlagsVals.value,
   networkName: formDataNetworkName.value,
-  networkSecret: formDataNetworkSecret.value
+  networkSecret: formDataNetworkSecret.value,
+  lockedFlags: formLockedFlags.value,
+  lockedTopLevel: formLockedTop.value
 })
 
 // 表单模型 → TOML 文本：空值剔除、安全字段按掩码规则写回、flags 类型推断（bool/number/string）
@@ -638,38 +665,46 @@ const buildFormToml = (assignBackup = true): string => {
 // ===== 内核版本适配 =====
 const isAddMode = computed(() => dialogMode.value === 'add')
 
-// 新建配置隐藏当前内核不支持的字段；编辑存量配置保留全部字段，仅做警告标记（不丢数据）
-const supportsFeature = (feature?: CoreFeature): boolean =>
-  !feature || !isAddMode.value || isCoreFeatureSupported(feature, store.coreCaps)
-const supportsFlag = (key: string): boolean =>
-  !isAddMode.value || isCoreFlagSupported(key, store.coreCaps)
+// 当前内核不支持的字段一律不渲染可编辑控件：
+// 新建时隐藏；编辑时若配置文件中存在，则归入底部只读“当前内核未兼容”栏
+const lockedTopKeys = computed(() => new Set(Object.keys(formLockedTop.value)))
+const supportsDef = (f: AdvancedFieldDef): boolean =>
+  (!f.feature || isCoreFeatureSupported(f.feature, store.coreCaps)) &&
+  !lockedTopKeys.value.has(f.key)
 
 const visibleAdvancedFlagDefs = computed(() =>
-  ADVANCED_FLAG_DEFS.filter((f) => supportsFlag(f.key))
+  ADVANCED_FLAG_DEFS.filter((f) => isCoreFlagSupported(f.key, store.coreCaps))
 )
-const visibleTopSwitchDefs = computed(() =>
-  ADVANCED_TOP_SWITCH_DEFS.filter((f) => supportsFeature(f.feature))
+const visibleTopSwitchDefs = computed(() => ADVANCED_TOP_SWITCH_DEFS.filter(supportsDef))
+const visibleTopTextDefs = computed(() => ADVANCED_TOP_TEXT_DEFS.filter(supportsDef))
+const visibleSecurityFieldDefs = computed(() =>
+  SECURITY_FIELD_DEFS.filter((f) => !lockedTopKeys.value.has(f.key))
 )
-const visibleTopTextDefs = computed(() =>
-  ADVANCED_TOP_TEXT_DEFS.filter((f) => supportsFeature(f.feature))
-)
-const securitySectionVisible = computed(() => supportsFeature('secureMode'))
-const unsupportedFlagKeys = computed(
+const securitySectionVisible = computed(
   () =>
-    new Set(
-      ADVANCED_FLAG_DEFS.filter((f) => !isCoreFlagSupported(f.key, store.coreCaps)).map(
-        (f) => f.key
-      )
-    )
+    isCoreFeatureSupported('secureMode', store.coreCaps) && !lockedTopKeys.value.has('secure_mode')
 )
-const unsupportedTopKeys = computed(
-  () =>
-    new Set(
-      [...ADVANCED_TOP_SWITCH_DEFS, ...ADVANCED_TOP_TEXT_DEFS]
-        .filter((f) => f.feature && !isCoreFeatureSupported(f.feature, store.coreCaps))
-        .map((f) => f.key)
-    )
-)
+
+// 未兼容配置项只读展示（flags 加前缀区分顶层字段）
+const formatLockedValue = (value: unknown): string => {
+  if (typeof value === 'string') return value || '""'
+  if (value === undefined) return 'undefined'
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+const lockedEntries = computed(() => [
+  ...Object.entries(formLockedFlags.value).map(([key, value]) => ({
+    key: `flags.${key}`,
+    value: formatLockedValue(value)
+  })),
+  ...Object.entries(formLockedTop.value).map(([key, value]) => ({
+    key,
+    value: formatLockedValue(value)
+  }))
+])
 // rpc_portal 自 v2.5.0 起不再从配置文件读取（需改走 CLI --rpc-portal）
 const rpcPortalSupported = computed(
   () => !store.detectedCoreVersion || compareCoreVersion(store.detectedCoreVersion, 'v2.5.0') < 0
@@ -711,10 +746,20 @@ const removePeer = (i: number) => {
 }
 
 // === 5.6 高级字段交互 ===
-const toggleAdvancedFlag = (key: string) => {
+// 缺省未写时按内核默认值显示（如 bind_device 默认开启）；
+// 切回默认值时删除该键，保持配置文件简洁
+const isAdvancedFlagOn = (f: AdvancedFieldDef): boolean => {
+  const value = formData.value.flags?.[f.key]
+  if (value === undefined || value === null) return f.defaultValue === true
+  return value === true
+}
+
+const toggleAdvancedFlag = (f: AdvancedFieldDef) => {
   if (!formData.value.flags) formData.value.flags = {}
   const flags = formData.value.flags
-  flags[key] = flags[key] === true ? false : true
+  const next = !isAdvancedFlagOn(f)
+  if (next === (f.defaultValue === true)) delete flags[f.key]
+  else flags[f.key] = next
 }
 
 // 顶层布尔字段（如 ipv6_public_addr_provider）：false 时不落盘
@@ -838,7 +883,17 @@ const handleSave = async () => {
       const parsed = toml.parse(rawContent) as Record<string, any>
       // 旧版 LightTier 私有标记迁移到 [lighttier]，保存后不再污染 [flags]
       migrateLightTierConfig(parsed)
-      content = toml.stringify(normalizeToml(parsed, { mergeDefaults: false }))
+      const normalized = normalizeToml(parsed, { mergeDefaults: false })
+      if (editMode.value === 'form') {
+        // 未兼容配置项在清洗后再写回一次：防止空值清洗等步骤改动其原值
+        if (Object.keys(formLockedFlags.value).length) {
+          const flags =
+            normalized.flags && typeof normalized.flags === 'object' ? normalized.flags : {}
+          normalized.flags = { ...flags, ...formLockedFlags.value }
+        }
+        Object.assign(normalized, formLockedTop.value)
+      }
+      content = toml.stringify(normalized)
     } catch {
       /* 解析失败按原样保存 */
     }
@@ -1277,6 +1332,56 @@ const handleImportToml = async () => {
 
 .ed-adv-collapse:not([open]) .ed-adv-summary::before {
   content: '▸ ';
+}
+
+/* 当前内核未兼容：表单最后方，默认收起，只读展示 */
+.ed-locked-collapse {
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 5%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-color-warning, #d9a441) 35%, transparent);
+  border-radius: var(--theme-radius-md, 10px);
+}
+
+.ed-locked-collapse .ed-form-section-title {
+  margin-bottom: 8px;
+  color: var(--theme-color-warning, #d9a441);
+  border-bottom-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 25%, transparent);
+}
+
+.ed-locked-hint {
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.ed-locked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ed-locked-row {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--theme-bg-card, #fff) 55%, transparent);
+  border-radius: var(--theme-radius-sm, 6px);
+  align-items: baseline;
+}
+
+.ed-locked-key {
+  color: var(--theme-color-warning, #d9a441);
+  word-break: break-all;
+  flex-shrink: 0;
+}
+
+.ed-locked-value {
+  color: var(--theme-text-secondary, #7a6e5e);
+  word-break: break-all;
 }
 
 /* 安全模式：表单最底部，开关常显、字段按需展开 */

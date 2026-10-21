@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   checkConfigCompat,
+  collectUnsupportedConfigEntries,
   compareCoreVersion,
   isCoreFlagSupported,
   isCoreFeatureSupported,
@@ -91,6 +92,68 @@ describe('kernelCompatUtil / 能力推导', () => {
   it('未知版本下功能判断宽松放行（显示字段，不隐藏）', () => {
     expect(isCoreFeatureSupported('secureMode', null)).toBe(true)
     expect(isCoreFlagSupported('anything', null)).toBe(true)
+  })
+})
+
+describe('kernelCompatUtil / 未兼容配置项收集', () => {
+  it('v2.4.5：收集新增 flags 与尚未引入的顶层字段，保留原值', () => {
+    const entries = collectUnsupportedConfigEntries(
+      {
+        rpc_portal: '0.0.0.0:15888',
+        secure_mode: { enabled: true, local_private_key: 'K' },
+        ipv6_public_addr_provider: true,
+        bind_device: false,
+        flags: {
+          bind_device: false,
+          p2p_only: true,
+          prefer_peer_relay: true
+        }
+      },
+      resolveCoreCapabilities('v2.4.5')
+    )
+    expect(entries.flags).toEqual({ p2p_only: true, prefer_peer_relay: true })
+    expect(entries.topLevel).toEqual({
+      secure_mode: { enabled: true, local_private_key: 'K' },
+      ipv6_public_addr_provider: true
+    })
+    // rpc_portal 由 LightTier 转为 CLI 参数，桌面端仍生效，不归入未兼容
+    expect('rpc_portal' in entries.topLevel).toBe(false)
+  })
+
+  it('v2.7.0：收集已移除的 rpc_portal_whitelist，但跳过 rpc_portal', () => {
+    const entries = collectUnsupportedConfigEntries(
+      {
+        rpc_portal: '0.0.0.0:15888',
+        rpc_portal_whitelist: ['127.0.0.1/32'],
+        flags: { bind_device: true, prefer_peer_relay: true }
+      },
+      resolveCoreCapabilities('v2.7.0')
+    )
+    expect(entries.flags).toEqual({})
+    expect(entries.topLevel).toEqual({ rpc_portal_whitelist: ['127.0.0.1/32'] })
+  })
+
+  it('未知版本/null 能力集不锁定任何项（宽松降级，避免误伤）', () => {
+    const config = {
+      secure_mode: { enabled: true },
+      flags: { future_flag: true }
+    }
+    expect(collectUnsupportedConfigEntries(config, null)).toEqual({ flags: {}, topLevel: {} })
+    expect(collectUnsupportedConfigEntries(config, resolveCoreCapabilities('v2.8.0'))).toEqual({
+      flags: {},
+      topLevel: {}
+    })
+  })
+
+  it('非法输入返回空结果', () => {
+    expect(collectUnsupportedConfigEntries(null, resolveCoreCapabilities('v2.4.5'))).toEqual({
+      flags: {},
+      topLevel: {}
+    })
+    expect(collectUnsupportedConfigEntries([], resolveCoreCapabilities('v2.4.5'))).toEqual({
+      flags: {},
+      topLevel: {}
+    })
   })
 })
 
