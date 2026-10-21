@@ -177,7 +177,7 @@
             </div>
           </div>
 
-          <div class="sd-row">
+          <div v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.defaultServiceMethod') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultServiceMethodDesc') }}</span>
@@ -193,7 +193,7 @@
             </select>
           </div>
 
-          <div class="sd-row">
+          <div v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.defaultAutostart') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultAutostartDesc') }}</span>
@@ -249,6 +249,14 @@
           aria-labelledby="sd-tab-core"
           tabindex="0"
         >
+          <!-- 浏览器预览：无 Tauri 运行时，内核检测/路径/下载安装等桌面能力不可用 -->
+          <div v-if="!isDesktopRuntime && !isAndroidPlatform" class="sd-row">
+            <div class="sd-row-info">
+              <span class="sd-row-title">{{ t('newSettings.mockModeTitle') }}</span>
+              <span class="sd-row-desc">{{ t('newSettings.mockModeDesc') }}</span>
+            </div>
+          </div>
+
           <!-- 核心版本 -->
           <div class="sd-row">
             <div class="sd-row-info">
@@ -270,7 +278,7 @@
                 >{{ coreVersion }}</span
               >
               <button
-                v-if="!isAndroidPlatform"
+                v-if="isDesktopRuntime"
                 class="sd-btn sd-btn-ghost"
                 @click="handleCheckCore"
                 :disabled="checkingCore"
@@ -281,7 +289,7 @@
           </div>
 
           <!-- 版本适配档案：表单字段 / CLI / 服务参数均按已安装内核切换 -->
-          <div v-if="!isAndroidPlatform" class="sd-row">
+          <div v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.compatProfile') }}</span>
               <span class="sd-row-desc">{{ compatProfileDesc }}</span>
@@ -289,7 +297,7 @@
           </div>
 
           <!-- 核心路径（Android 内核编译期内置，无独立路径） -->
-          <div v-if="!isAndroidPlatform" class="sd-row">
+          <div v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.corePath') }}</span>
               <span class="sd-row-desc sd-row-desc-mono">{{ corePath }}</span>
@@ -297,7 +305,7 @@
           </div>
 
           <!-- 快捷操作 -->
-          <div v-if="!isAndroidPlatform" class="sd-row">
+          <div v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.openDir') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.openDirDesc') }}</span>
@@ -313,7 +321,7 @@
           </div>
 
           <!-- 下载与安装（桌面换内核版本；Android 内核随应用更新） -->
-          <div v-if="!isAndroidPlatform" class="sd-core-install">
+          <div v-if="isDesktopRuntime" class="sd-core-install">
             <div class="sd-core-install-head">
               <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
               <!-- 加速源入口：列表/增删放在下级弹窗，避免占用内核面板纵向空间 -->
@@ -847,7 +855,7 @@ import {
 } from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { clearAppCache } from '@/utils/cacheUtil'
-import { clearETLogs, clearLogs, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
+import { clearAllLogs, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
 import { formatBytes } from '@/utils/easyTierUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
 import { hashLockPassword } from '@/utils/lockUtil'
@@ -1066,6 +1074,11 @@ const handleCheckUpdate = async () => {
 }
 
 const handleOpenManagerReleases = async () => {
+  // 浏览器预览没有 plugin-shell：直接用新标签页打开，避免静默失败
+  if (!isTauriRuntime()) {
+    window.open(MANAGER_REPO_URL, '_blank', 'noopener')
+    return
+  }
   try {
     await openUrl(MANAGER_REPO_URL)
   } catch (e) {
@@ -1435,14 +1448,19 @@ const handleClearCache = async () => {
   }
 }
 
-// 清除日志
+// 清除日志：删除应用日志与内核日志的历史分段，正在写入的当前日志保留
 const handleClearLogs = async () => {
   if (!(await showConfirm(t('newSettings.clearLogsTitle'), t('newSettings.clearLogsMsg')))) return
   clearingLogs.value = true
   try {
-    await clearLogs()
-    await clearETLogs('easytier')
-    toast.success(t('newSettings.logsClearSuccess'))
+    const result = await clearAllLogs()
+    if (result.failed > 0) {
+      toast.error(t('newSettings.logsClearPartial', { n: result.removed, m: result.failed }))
+    } else if (result.removed > 0) {
+      toast.success(t('newSettings.logsClearSuccess', { n: result.removed }))
+    } else {
+      toast.info(t('newSettings.logsClearNothing'))
+    }
   } catch (e) {
     console.error('清除日志失败:', e)
     toast.error(t('newSettings.logsClearFail') + ': ' + String(e))

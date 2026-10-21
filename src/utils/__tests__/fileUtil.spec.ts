@@ -41,13 +41,26 @@ vi.mock('@tauri-apps/api/path', () => ({
 
 vi.mock('@/utils/platformUtil', () => ({ isAndroid: () => false }))
 
-import { readDir, remove, rename, writeFile } from '@tauri-apps/plugin-fs'
+import {
+  exists,
+  readDir,
+  readTextFile,
+  remove,
+  rename,
+  writeFile,
+  writeTextFile
+} from '@tauri-apps/plugin-fs'
 import { fetch } from '@tauri-apps/plugin-http'
 import {
   cleanCoreDirExceptPackages,
+  clearAllLogs,
   downloadFile,
+  fileExists,
   isCorePackageFile,
   isSafeZipEntryPath,
+  readFileContent,
+  resolveKernelLogFile,
+  writeFileWithBackup,
   type DownloadProgress
 } from '@/utils/fileUtil'
 
@@ -219,5 +232,169 @@ describe('downloadFile（流式进度）', () => {
 
     await expect(downloadFile(fileUrl)).resolves.toBe(false)
     expect(writeFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveKernelLogFile（按配置定位日志）', () => {
+  const entries = (names: string[]) => names.map((name) => ({ name }) as any)
+
+  it('优先新布局 logs/kernel/<scope>/ 中的当前文件', async () => {
+    vi.mocked(readDir).mockImplementation(async (dir: string | URL) => {
+      if (dir === 'logs/kernel/server') {
+        return entries(['easytier.log', 'easytier.log.1'])
+      }
+      return entries(['easytier.log', 'server.log'])
+    })
+
+    await expect(resolveKernelLogFile('server.toml')).resolves.toEqual({
+      dir: 'logs/kernel/server',
+      file: 'easytier.log'
+    })
+  })
+
+  it('新布局没有文件时回退旧版 logs/ 根目录', async () => {
+    vi.mocked(readDir).mockImplementation(async (dir: string | URL) => {
+      if (dir === 'logs/kernel/server') return []
+      return entries(['server.log', 'server.log.1'])
+    })
+
+    await expect(resolveKernelLogFile('server.toml')).resolves.toEqual({
+      dir: 'logs',
+      file: 'server.log'
+    })
+  })
+
+  it('旧版目录同时存在共享 easytier.log 时仍优先本配置的 {name}.log', async () => {
+    vi.mocked(readDir).mockImplementation(async (dir: string | URL) => {
+      if (dir === 'logs/kernel/server') return []
+      return entries(['easytier.log', 'server.log'])
+    })
+
+    await expect(resolveKernelLogFile('server.toml')).resolves.toEqual({
+      dir: 'logs',
+      file: 'server.log'
+    })
+  })
+
+  it('两处都没有日志时返回 null（区别于空日志）', async () => {
+    vi.mocked(readDir).mockResolvedValue([])
+    await expect(resolveKernelLogFile('server.toml')).resolves.toBeNull()
+  })
+})
+
+describe('clearAllLogs（只清理历史分段，保留活跃日志）', () => {
+  const entries = (names: string[]) => names.map((name) => ({ name }) as any)
+
+  it('覆盖应用/旧版/按配置目录，返回真实计数且不删除当前文件', async () => {
+    vi.mocked(readDir).mockImplementation(async (dir: string | URL) => {
+      if (dir === 'logs') {
+        return entries([
+          'lighttier.log',
+          'lighttier_2026-10-21_10-00-00.log',
+          'monitor_server_20261021.log',
+          'easytier.log',
+          'easytier.log.1',
+          'server.log',
+          'server.log.1',
+          'server.2026-10-20.log',
+          'kernel'
+        ])
+      }
+      if (dir === 'logs/kernel') return entries(['server'])
+      if (dir === 'logs/kernel/server') {
+        return entries(['easytier.log', 'easytier.log.1', 'easytier.log.2'])
+      }
+      return []
+    })
+    vi.mocked(remove).mockResolvedValue(undefined)
+
+    const result = await clearAllLogs()
+
+    expect(result.removed).toBe(7)
+    expect(result.kept).toBe(4)
+    expect(result.failed).toBe(0)
+    expect(vi.mocked(remove)).toHaveBeenCalledTimes(7)
+    const removed = vi.mocked(remove).mock.calls.map(([path]) => path)
+    expect(removed).not.toContain('logs/lighttier.log')
+    expect(removed).not.toContain('logs/easytier.log')
+    expect(removed).not.toContain('logs/server.log')
+    expect(removed).toContain('logs/lighttier_2026-10-21_10-00-00.log')
+    expect(removed).toContain('logs/monitor_server_20261021.log')
+    expect(removed).toContain('logs/kernel/server/easytier.log.2')
+  })
+
+  it('单个文件删除失败时继续清理并记录失败', async () => {
+    vi.mocked(readDir).mockImplementation(async (dir: string | URL) => {
+      if (dir === 'logs') return entries(['lighttier.log', 'easytier.log.1', 'easytier.log.2'])
+      return []
+    })
+    vi.mocked(remove).mockRejectedValueOnce(new Error('locked')).mockResolvedValue(undefined)
+
+    const result = await clearAllLogs()
+
+    expect(result.removed).toBe(1)
+    expect(result.failed).toBe(1)
+    expect(result.failedFiles[0].file).toBe('logs/easytier.log.1')
+  })
+})
+
+describe('安全读写辅助函数（H-05 回归）', () => {
+  it('fileExists 使用 Resource 基址并原样返回存在性结果', async () => {
+    vi.mocked(exists).mockResolvedValueOnce(true)
+    await expect(fileExists('config.json')).resolves.toBe(true)
+    expect(exists).toHaveBeenCalledWith('config.json', { baseDir: 1 })
+
+    vi.mocked(exists).mockResolvedValueOnce(false)
+    await expect(fileExists('config.json')).resolves.toBe(false)
+  })
+
+  it('writeFileWithBackup 覆盖前把旧内容写入 .bak', async () => {
+    vi.mocked(exists).mockResolvedValue(true)
+    vi.mocked(readTextFile).mockResolvedValue('old-content')
+
+    await writeFileWithBackup('config.json', 'new-content')
+
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      1,
+      'config.json.bak',
+      'old-content',
+      expect.objectContaining({ baseDir: 1 })
+    )
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      2,
+      'config.json',
+      'new-content',
+      expect.objectContaining({ baseDir: 1 })
+    )
+  })
+
+  it('目标不存在时不读取旧内容，直接写入', async () => {
+    vi.mocked(exists).mockResolvedValue(false)
+
+    await writeFileWithBackup('config.json', 'new-content')
+
+    expect(readTextFile).not.toHaveBeenCalled()
+    expect(writeTextFile).toHaveBeenCalledTimes(1)
+    expect(writeTextFile).toHaveBeenCalledWith(
+      'config.json',
+      'new-content',
+      expect.objectContaining({ baseDir: 1 })
+    )
+  })
+
+  it('旧内容不可读时中止覆盖，不写入新内容', async () => {
+    vi.mocked(exists).mockResolvedValue(true)
+    vi.mocked(readTextFile).mockRejectedValue(new Error('EACCES'))
+
+    await expect(writeFileWithBackup('config.json', 'new-content')).rejects.toThrow('EACCES')
+    expect(writeTextFile).not.toHaveBeenCalled()
+  })
+
+  it('readFileContent 默认吞掉错误返回空串，throwOnError 时向上抛出', async () => {
+    vi.mocked(exists).mockResolvedValue(true)
+    vi.mocked(readTextFile).mockRejectedValue(new Error('EACCES'))
+
+    await expect(readFileContent('config.json')).resolves.toBe('')
+    await expect(readFileContent('config.json', { throwOnError: true })).rejects.toThrow('EACCES')
   })
 })

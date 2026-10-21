@@ -28,7 +28,13 @@ import { Command, open } from '@tauri-apps/plugin-shell'
 import { unzipSync } from 'fflate'
 import { isAndroid } from './platformUtil'
 import { getPlatform } from './sysUtil'
-import { isKernelLogFile } from './coreLogUtil'
+import {
+  getConfigLogBaseName,
+  getKernelLogScope,
+  isActiveKernelLogFile,
+  isKernelLogFile,
+  pickLogTarget
+} from './coreLogUtil'
 import pkg from '../../package.json'
 
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
@@ -145,6 +151,58 @@ export const getLogsDir = async () => {
   return await join(await resourceDir(), LOG_PATH)
 }
 
+// 内核按配置隔离的日志子目录根（相对 logs）
+const KERNEL_LOG_ROOT = `${LOG_PATH}/kernel`
+// Web 配置没有本地配置名，使用保留作用域，避免与用户配置目录冲突
+const WEB_KERNEL_LOG_SCOPE = '__web__'
+
+/**
+ * 获取某配置的内核日志目录（绝对路径，供 easytier-core 的 --file-log-dir 使用）
+ * 目录在 logs/kernel/<scope> 下创建；EasyTier 只支持固定文件名 easytier.log，
+ * 按配置分目录是避免多实例日志交错与轮转互相覆盖的唯一可行方式。
+ */
+export const getKernelLogsDir = async (configFileName: string): Promise<string> => {
+  const scope = getKernelLogScope(configFileName)
+  const relative = `${KERNEL_LOG_ROOT}/${scope}`
+  // 这里直接 mkdir，不用 checkDir：scope 可能含点号，checkDir 会按扩展名误判为文件
+  await mkdir(relative, { baseDir: getBaseDir(), recursive: true })
+  return await join(await getLogsDir(), 'kernel', scope)
+}
+
+/** Web 配置的内核日志目录（无本地配置名，使用保留作用域隔离） */
+export const getWebKernelLogsDir = async (): Promise<string> =>
+  getKernelLogsDir(WEB_KERNEL_LOG_SCOPE)
+
+/**
+ * 定位某配置当前可读的内核日志文件：
+ * 1. 优先新布局 logs/kernel/<scope>/
+ * 2. 回退旧版共享目录 logs/（旧版 {configName}.log 与共享 easytier.log）
+ * 返回 null 表示没有任何可读日志（与“日志为空”区分）。
+ */
+export interface KernelLogLocation {
+  dir: string
+  file: string
+}
+
+export const resolveKernelLogFile = async (
+  configName: string
+): Promise<KernelLogLocation | null> => {
+  const scopedDir = `${KERNEL_LOG_ROOT}/${getKernelLogScope(configName)}`
+  const scopedFiles = await listFiles(scopedDir, true)
+  const scopedTarget = pickLogTarget(scopedFiles, configName)
+  if (scopedFiles.includes(scopedTarget)) return { dir: scopedDir, file: scopedTarget }
+
+  const legacyFiles = await listFiles(LOG_PATH, true)
+  // 旧版共享目录中按配置名写入的文件属于本配置，优先于可能被其他实例共写的 easytier.log
+  const baseName = getConfigLogBaseName(configName)
+  if (baseName && legacyFiles.includes(`${baseName}.log`)) {
+    return { dir: LOG_PATH, file: `${baseName}.log` }
+  }
+  const legacyTarget = pickLogTarget(legacyFiles, configName)
+  if (legacyFiles.includes(legacyTarget)) return { dir: LOG_PATH, file: legacyTarget }
+  return null
+}
+
 /**
  * 写入内容到文件
  * 1.支持写入字符串或二进制数据 (Uint8Array)
@@ -219,6 +277,8 @@ export async function readFileContent(
   options?: {
     baseDir?: BaseDirectory // 基础目录
     asBinary?: boolean // 是否以二进制方式读取
+    /** true 时读取失败直接抛错（数据关键路径用：禁止把读取失败误当成空内容） */
+    throwOnError?: boolean
   }
 ): Promise<string | Uint8Array> {
   try {
@@ -232,6 +292,7 @@ export async function readFileContent(
       return content
     }
   } catch (e: any) {
+    if (options?.throwOnError) throw e
     if (!JSON.stringify(e).includes('系统找不到指定的文件')) {
       error(`Error reading file ${filePath}:${JSON.stringify(e)}`)
     }
@@ -239,14 +300,35 @@ export async function readFileContent(
   }
 }
 
-// 列出目录下的所有文件
-export const listFiles = async (targetDir: string = RESOURCE_PATH) => {
+/**
+ * 判断文件是否存在（与读写使用同一 BaseDirectory）。
+ * 存在性检查本身失败时抛错，避免调用方把“无法确认”当成“文件不存在”后覆盖数据。
+ */
+export const fileExists = async (filePath: string): Promise<boolean> => {
+  return await exists(filePath, { baseDir: getBaseDir() })
+}
+
+/**
+ * 带备份的安全写入：覆盖前把上一份内容保存为 `<file>.bak`。
+ * 无法读取旧内容（非“不存在”）时中止写入，避免在旧数据损坏/不可读时直接覆盖。
+ */
+export const writeFileWithBackup = async (filePath: string, content: string): Promise<void> => {
+  if (await fileExists(filePath)) {
+    const previous = (await readFileContent(filePath, { throwOnError: true })) as string
+    await writeFileContent(`${filePath}.bak`, previous)
+  }
+  await writeFileContent(filePath, content)
+}
+
+// 列出目录下的所有文件（只读；目录不存在时返回空数组，不隐式创建）
+// 注：不能复用 checkDir——配置名派生的目录可能含点号，会被误判为文件路径
+// silent：轮询类读取在目录尚未生成时不应反复写错误日志
+export const listFiles = async (targetDir: string = RESOURCE_PATH, silent = false) => {
   try {
-    await checkDir(targetDir)
     const entries = await readDir(targetDir, { baseDir: getBaseDir() })
     return entries.map((entry) => entry.name)
   } catch (e: any) {
-    error(`Error listing resource files:${JSON.stringify(e)}`)
+    if (!silent) error(`Error listing resource files:${JSON.stringify(e)}`)
     return []
   }
 }
@@ -679,33 +761,106 @@ async function findCommonPrefix(paths: string[]): Promise<string> {
   return prefix.length > 0 ? `${prefix.join('/')}/` : ''
 }
 
-// 清空程序logs目录下 pkg name 的日志文件，以免日志文件过大
-export const clearLogs = async () => {
+/** 日志清理结果：只删除非活跃文件，正在写入的当前日志保留并计数 */
+export interface LogClearFailure {
+  file: string
+  reason: string
+}
+
+export interface LogClearResult {
+  removed: number
+  kept: number
+  failed: number
+  removedFiles: string[]
+  failedFiles: LogClearFailure[]
+}
+
+const createClearResult = (): LogClearResult => ({
+  removed: 0,
+  kept: 0,
+  failed: 0,
+  removedFiles: [],
+  failedFiles: []
+})
+
+// 删除单个日志文件并累计结果（失败不中断后续清理）
+const removeLogFile = async (
+  dir: string,
+  fileName: string,
+  result: LogClearResult
+): Promise<void> => {
+  const file = `${dir}/${fileName}`
   try {
-    const logsFile = await join('logs', pkg.name + '.log')
-    // 清空 logsFile 的内容（如果失败不影响程序启动）
-    await writeFileContent(logsFile, '', { baseDir: getBaseDir() })
+    await remove(file, { baseDir: getBaseDir() })
+    result.removed++
+    result.removedFiles.push(file)
   } catch (e: any) {
-    // 如果清理失败，只记录警告，不阻塞启动
-    error(`清理日志文件失败（不影响使用）: ${e.message || e}`)
+    result.failed++
+    result.failedFiles.push({ file, reason: e?.message || String(e) })
+    error(`清理日志文件 ${file} 失败:${JSON.stringify(e)}`)
   }
 }
 
-// 清空 logs 目录下内核日志文件（当前文件 + 轮转/旧版命名的历史文件）
-// 仅清空已存在的文件（旧实现按日期拼名会意外创建残留空文件；轮转实际为 easytier.log.N 而非日期后缀）
-export const clearETLogs = async (fileName: string) => {
-  try {
-    const files = await listFiles(LOG_PATH)
-    const targets = files.filter((f) => isKernelLogFile(f, fileName))
-    for (const target of targets) {
-      try {
-        await writeFileContent(await join(LOG_PATH, target), '', { baseDir: getBaseDir() })
-      } catch (e: any) {
-        error(`清理日志文件 ${target} 失败（不影响使用）: ${e.message || e}`)
-      }
+// 应用日志历史：plugin-log 轮转为 lighttier_yyyy-MM-dd_HH-mm-ss.log（同日冲突产生 .bak）
+// 监控页旧版隐藏诊断文件 monitor_*.log 也一并清理
+const isAppLogHistory = (fileName: string): boolean =>
+  (fileName.startsWith(`${pkg.name}_`) && /\.log(?:\.bak)?$/.test(fileName)) ||
+  /^monitor_.+\.log$/.test(fileName)
+
+// 旧版共享目录中的内核历史分段（数字轮转或日期后缀）；活跃文件不在此列
+const isRootKernelHistory = (fileName: string): boolean =>
+  /^easytier\.log\.\d+$/.test(fileName) ||
+  /^easytier\.log\.\d{4}-\d{2}-\d{2}/.test(fileName) ||
+  /\.log\.\d+$/.test(fileName) ||
+  /^.+\.\d{4}-\d{2}-\d{2}/.test(fileName)
+
+/**
+ * 清理日志：删除应用日志与内核日志的**历史分段**，保留正在写入的当前文件。
+ *
+ * 为什么不截断活跃文件：
+ * - Windows 上日志文件被内核/插件持有，跨进程截断会失败或与写入竞争；
+ * - Unix 上截断正在追加的文件会破坏内核的写入偏移，产生稀疏空洞。
+ * 历史分段（轮转文件）已关闭，可安全删除；当前文件由各自的轮转策略约束大小。
+ */
+export const clearAllLogs = async (): Promise<LogClearResult> => {
+  const result = createClearResult()
+  const appActiveLog = `${pkg.name}.log`
+
+  // 1. 应用日志历史 + 旧版监控隐藏日志
+  const rootFiles = await listFiles(LOG_PATH, true)
+  for (const fileName of rootFiles) {
+    if (isAppLogHistory(fileName)) {
+      await removeLogFile(LOG_PATH, fileName, result)
+    } else if (
+      fileName === appActiveLog ||
+      fileName === 'easytier.log' ||
+      (/\.log$/.test(fileName) && !isRootKernelHistory(fileName))
+    ) {
+      // 应用当前日志、内核当前日志、旧版按配置写入的当前日志
+      result.kept++
     }
-  } catch (e: any) {
-    // 如果清理失败，只记录警告，不阻塞启动
-    error(`清理日志文件失败（不影响使用）: ${e.message || e}`)
   }
+
+  // 2. 旧版共享目录中的内核历史分段
+  for (const fileName of rootFiles) {
+    if (isAppLogHistory(fileName) || !isRootKernelHistory(fileName)) continue
+    await removeLogFile(LOG_PATH, fileName, result)
+  }
+
+  // 3. 新布局 logs/kernel/<scope>/：保留 easytier.log 等活跃文件
+  const scopes = await listFiles(KERNEL_LOG_ROOT, true)
+  for (const scope of scopes) {
+    const dir = `${KERNEL_LOG_ROOT}/${scope}`
+    const files = await listFiles(dir, true)
+    for (const fileName of files) {
+      if (!isKernelLogFile(fileName, scope)) continue
+      if (isActiveKernelLogFile(fileName, scope)) {
+        result.kept++
+        continue
+      }
+      await removeLogFile(dir, fileName, result)
+    }
+  }
+
+  return result
 }

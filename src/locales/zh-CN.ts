@@ -80,7 +80,10 @@ export default {
     trayShowHide: '显示 / 隐藏',
     trayQuit: '退出',
     appStartFail: '应用启动失败，请查看日志文件或联系开发者',
-    exitRouteResidueAutoCleared: '已自动清理上次异常退出残留的出口节点路由'
+    exitRouteResidueAutoCleared: '已自动清理上次异常退出残留的出口节点路由',
+    deleteBlockedRunning: '该配置正在运行，请先停止后再删除',
+    deleteBlockedService: '该配置已安装 Windows 服务，请先卸载服务后再删除',
+    coreStartInvalidPid: '内核未返回有效的进程号，启动失败'
   },
   newOverview: {
     totalConfig: '配置总数',
@@ -122,6 +125,8 @@ export default {
     logRefresh: '刷新',
     logDesktopOnly: '✦ 日志仅桌面端可用',
     logEmpty: '暂无日志',
+    logNotReady: '暂无可读取的日志文件（内核尚未写入或路径不可读）',
+    logReadFailed: '读取日志失败，请稍后重试',
     logs: '日志',
     viewLogDesc: '查看此配置的日志文件',
     openLogDir: '打开日志目录',
@@ -517,6 +522,9 @@ export default {
     coreVersion: '内核版本',
     coreVersionDesc: '当前已安装的 EasyTier 内核版本',
     androidBuiltinCoreDesc: '内核随应用编译内置，随应用更新而升级，无需手动安装',
+    mockModeTitle: '浏览器预览模式',
+    mockModeDesc:
+      '当前运行在浏览器预览环境，未连接 Tauri 桌面运行时，因此内核检测、路径与下载安装等功能不可用；请使用桌面应用进行内核管理。',
     recheck: '重新检测',
     corePath: '内核路径',
     openDir: '打开目录',
@@ -572,7 +580,7 @@ export default {
     clearing: '清除中…',
     cacheCleared: '临时缓存已清除',
     clearLogs: '清除日志',
-    clearLogsDesc: '清空所有 EasyTier 运行日志文件',
+    clearLogsDesc: '删除应用日志与内核日志的历史文件，正在写入的当前日志会保留',
     backupRestore: '备份与恢复',
     backupRestoreDesc: '导出配置与设置为备份文件，或从备份逐项恢复',
     backupRestoreOpen: '管理备份',
@@ -581,8 +589,11 @@ export default {
     clearCacheTitle: '清除临时缓存',
     clearCacheMsg: '仅清除 STUN 与公共对等节点缓存，配置、主题、语言与锁屏密码都会保留。是否继续？',
     clearLogsTitle: '清除日志',
-    clearLogsMsg: '确定要清除所有日志文件吗？',
-    logsClearSuccess: '日志清除成功',
+    clearLogsMsg:
+      '将删除应用日志、内核日志及旧版日志的历史分段；正在写入的当前日志会保留。是否继续？',
+    logsClearSuccess: '已删除 {n} 个历史日志文件',
+    logsClearPartial: '已删除 {n} 个，{m} 个删除失败',
+    logsClearNothing: '没有可删除的历史日志',
     logsClearFail: '清除日志失败',
     selectVersionFirst: '请先选择版本',
     downloadSuccess: '内核下载完成',

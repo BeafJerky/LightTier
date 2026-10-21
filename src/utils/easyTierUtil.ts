@@ -3,8 +3,8 @@
  *
  * 三类职责：
  * 1. CLI 文本解析：node / peer 表格文本 → 对象（parseNodeInfo / parsePeerInfo）；
- * 2. 日志提取与读取：从日志文本提取公网 IP（extractAllPublicIPs）、倒序尾读
- *    （readTextReverse，供日志查看器只读末尾 N 行）；
+ * 2. 日志提取与读取：从日志文本提取公网 IP（extractAllPublicIPs）、尾部顺序读取
+ *    （readTextTail，供日志查看器只读末尾 N 行）；
  * 3. 展示格式化：延迟配色、字节/指标格式化、路由开销与 NAT 类型转可读文本、
  *    peer 数据后处理（processPeerData）与 TOML 配置清洗（normalizeToml，5.7）。
  */
@@ -208,39 +208,31 @@ export async function extractAllPublicIPs(logText: string) {
 }
 
 /**
- * 倒着读取文本的指定行数
- * @param {string} text - 要读取的文本
- * @param {number} linesToRead - 要读取的行数
- * @returns {string} 倒着读取的结果，按换行符分隔
+ * 顺序读取文本末尾的指定行数（保持旧→新的时间顺序）
+ *
+ * 日志查看器采用“顶部最旧、底部最新”的常规顺序，因此不能再返回倒序结果：
+ * 旧实现把最后一行放在开头，界面又自动滚到底部，用户实际看到的是窗口里
+ * 最旧的位置，新日志从顶部出现且不在视野内（修复 F-01）。
+ *
+ * @param text 要读取的文本
+ * @param linesToRead 要保留的末尾行数
+ * @returns 末尾 N 行，按原始时间顺序用换行符连接
  */
-export function readTextReverse(text: string, linesToRead: number) {
-  // 参数校验
+export function readTextTail(text: string, linesToRead: number) {
   if (typeof text !== 'string') {
     throw new Error('第一个参数必须是字符串')
   }
-  if (typeof linesToRead !== 'number' || linesToRead < 0) {
+  if (!Number.isFinite(linesToRead) || linesToRead < 0) {
     throw new Error('第二个参数必须是正整数')
   }
 
-  // 按换行符分割文本（支持多种换行符格式）
   const lines = text.split(/\r?\n/)
+  // 文件以换行结尾时会多出空元素，尾部空行不参与行数计算
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+  if (lines.length === 0) return ''
 
-  // 如果文本为空或行数不足，返回空字符串或全部行
-  if (lines.length === 0) {
-    return ''
-  }
-
-  // 计算实际需要读取的行数
-  const actualLinesToRead = Math.min(linesToRead, lines.length)
-
-  // 从后往前提取指定行数
-  const reversedLines: string[] = []
-  for (let i = 0; i < actualLinesToRead; i++) {
-    reversedLines.push(lines[lines.length - 1 - i])
-  }
-
-  // 返回倒序后的结果
-  return reversedLines.join('\n')
+  const actualLinesToRead = Math.min(Math.floor(linesToRead), lines.length)
+  return lines.slice(-actualLinesToRead).join('\n')
 }
 
 /**

@@ -22,6 +22,7 @@
       <div v-else-if="loading && lines.length === 0" class="lv-empty">{{
         t('newCommon.loading')
       }}</div>
+      <div v-else-if="loadError" class="lv-empty lv-empty-error">{{ loadError }}</div>
       <div v-else-if="lines.length === 0" class="lv-empty">{{ t('newConfig.logEmpty') }}</div>
       <div v-else class="lv-lines">
         <div v-for="(line, idx) in lines" :key="idx" class="lv-line" :class="lineClass(line)">{{
@@ -36,17 +37,23 @@
 /**
  * LogViewer — 内联日志查看器（嵌入配置详情等页面）
  *
- * 数据来源：按 {configName}.{YYYY-MM-DD} 命名规则定位最新一份轮转日志，
- * 经 readTextReverse 逆序尾读仅取末尾 500 行；轮询间隔与 store.refreshInterval
- * 同源（不短于 3s），页面不可见时暂停，浏览器（非 Tauri）环境降级为提示文案。
- * 交互：error / warn 关键字行高亮着色；默认自动滚动到底部跟随最新日志，
- * 用户上翻后暂停跟随，滚回底部或手动刷新时恢复。
+ * 数据来源：优先读取按配置隔离的 logs/kernel/<scope>/，回退旧版共享 logs/
+ * 目录（只读兼容）。仅取末尾 500 行并按时间正序展示；轮询间隔与
+ * store.refreshInterval 同源（不短于 3s），页面不可见时暂停，浏览器
+ * （非 Tauri）环境降级为提示文案。
+ * 交互：按行首级别标记 error / warn 行；默认自动滚动到底部跟随最新日志，
+ * 用户上翻后暂停跟随，滚回底部或手动刷新时恢复；无文件时展示明确空态。
  */
-import { getLogsDir, listFiles, openPath, readFileContent } from '@/utils/fileUtil'
-import { pickLogTarget } from '@/utils/coreLogUtil'
+import {
+  getKernelLogsDir,
+  getLogsDir,
+  openPath,
+  readFileContent,
+  resolveKernelLogFile
+} from '@/utils/fileUtil'
+import { getLogLineLevel } from '@/utils/coreLogUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
-import { readTextReverse } from '@/utils/easyTierUtil'
-import { LOG_PATH } from '@/constants/easytier'
+import { readTextTail } from '@/utils/easyTierUtil'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -71,6 +78,7 @@ const isTauri = computed(() => {
 
 const content = ref('')
 const loading = ref(false)
+const loadError = ref('')
 const autoScroll = ref(true)
 const panelRef = ref<HTMLDivElement | null>(null)
 // 用户上翻后暂停自动滚动跟随，滚回底部恢复
@@ -80,10 +88,11 @@ const lines = computed(() =>
   content.value ? content.value.split('\n').filter((l) => l.trim() !== '') : []
 )
 
-// 关键字着色：error / warn 级别日志行分别标红、标黄
+// 按行首级别着色：error/fatal 标红、warn 标黄（不再匹配正文中的同名单词）
 const lineClass = (line: string): string => {
-  if (/error|ERROR|fatal/i.test(line)) return 'lv-line-error'
-  if (/warn|WARN/i.test(line)) return 'lv-line-warn'
+  const level = getLogLineLevel(line)
+  if (level === 'error') return 'lv-line-error'
+  if (level === 'warn') return 'lv-line-warn'
   return ''
 }
 
@@ -102,18 +111,24 @@ const scrollToBottom = async () => {
   if (panel) panel.scrollTop = panel.scrollHeight
 }
 
-// 加载日志：定位最新轮转文件并逆序尾读 500 行（读取失败时清空展示）
+// 加载日志：定位当前配置的日志文件，按时间正序尾读末尾 500 行
+// 无文件与读取失败分别给出明确空态，不再静默显示为“日志为空”
 const loadLog = async () => {
   if (!props.configName || !isTauri.value) return
   loading.value = true
   try {
-    // 目标选择：v2.6.x 内核固定写 easytier.log；旧版内核按配置名写 {configName}.log（详见 coreLogUtil）
-    const files = await listFiles(LOG_PATH)
-    const target = pickLogTarget(files, props.configName)
-    const text = (await readFileContent(`${LOG_PATH}/${target}`)) as string
-    content.value = text ? readTextReverse(text, 500) : ''
+    const location = await resolveKernelLogFile(props.configName)
+    if (!location) {
+      content.value = ''
+      loadError.value = t('newConfig.logNotReady')
+      return
+    }
+    const text = (await readFileContent(`${location.dir}/${location.file}`)) as string
+    content.value = text ? readTextTail(text, 500) : ''
+    loadError.value = ''
   } catch {
     content.value = ''
+    loadError.value = t('newConfig.logReadFailed')
   } finally {
     loading.value = false
     await scrollToBottom()
@@ -126,12 +141,16 @@ const refresh = () => {
   loadLog()
 }
 
-// 调用系统文件管理器打开日志目录（失败静默忽略）
+// 调用系统文件管理器打开当前配置的日志目录（失败回退 logs 根目录）
 const openLogsDir = async () => {
   try {
-    await openPath(await getLogsDir())
+    await openPath(await getKernelLogsDir(props.configName))
   } catch {
-    /* ignore */
+    try {
+      await openPath(await getLogsDir())
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -166,6 +185,7 @@ watch(
   () => props.configName,
   () => {
     content.value = ''
+    loadError.value = ''
     userScrolledUp = false
     loadLog()
     startPolling()
@@ -314,6 +334,10 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
   align-items: center;
   justify-content: center;
+}
+
+.lv-empty-error {
+  color: var(--theme-color-danger);
 }
 
 .lv-lines {

@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeToml } from '@/utils/easyTierUtil'
+import { normalizeToml, readTextTail } from '@/utils/easyTierUtil'
+
+describe('readTextTail（日志尾部顺序读取）', () => {
+  it('返回末尾 N 行并保持旧→新的时间顺序', () => {
+    expect(readTextTail('l1\nl2\nl3\nl4', 2)).toBe('l3\nl4')
+  })
+
+  it('忽略文件末尾换行产生的空行', () => {
+    expect(readTextTail('l1\nl2\nl3\n', 2)).toBe('l2\nl3')
+    expect(readTextTail('l1\nl2\r\nl3\r\n', 2)).toBe('l2\nl3')
+  })
+
+  it('行数不足时返回全部，空文本返回空串', () => {
+    expect(readTextTail('l1\nl2', 10)).toBe('l1\nl2')
+    expect(readTextTail('', 10)).toBe('')
+    expect(readTextTail('\n\n', 10)).toBe('')
+  })
+
+  it('非法参数抛出异常', () => {
+    expect(() => readTextTail(123 as unknown as string, 2)).toThrow()
+    expect(() => readTextTail('l1', -1)).toThrow()
+    expect(() => readTextTail('l1', Number.NaN)).toThrow()
+  })
+})
 
 describe('normalizeToml（5.7 默认数据合并 + 空值清理）', () => {
   it('剔除空值：空串、空数组、undefined、null 不落盘', () => {

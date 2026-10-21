@@ -82,7 +82,11 @@ export default {
     appStartFail:
       'Application failed to start. Please check the log files or contact the developer.',
     exitRouteResidueAutoCleared:
-      'Automatically cleared exit node routes left from abnormal shutdown'
+      'Automatically cleared exit node routes left from abnormal shutdown',
+    deleteBlockedRunning: 'This configuration is running. Stop it before deleting',
+    deleteBlockedService:
+      'A Windows service is installed for this configuration. Uninstall it before deleting',
+    coreStartInvalidPid: 'The core did not return a valid process ID; start failed'
   },
   newOverview: {
     totalConfig: 'Total configs',
@@ -125,6 +129,9 @@ export default {
     logRefresh: 'Refresh',
     logDesktopOnly: '✦ Logs are only available on desktop',
     logEmpty: 'No logs yet',
+    logNotReady:
+      'No readable log file available yet (the kernel has not written one or the path is unreadable)',
+    logReadFailed: 'Failed to read logs. Please try again later.',
     logs: 'Logs',
     viewLogDesc: 'View log file for this configuration',
     openLogDir: 'Open Log Directory',
@@ -534,6 +541,9 @@ export default {
     coreVersion: 'Kernel version',
     coreVersionDesc: 'Currently installed EasyTier kernel version',
     androidBuiltinCoreDesc: 'The kernel is compiled into the app and updates with app releases',
+    mockModeTitle: 'Browser preview mode',
+    mockModeDesc:
+      'You are running in the browser preview without the Tauri desktop runtime, so kernel detection, paths, and download/install are unavailable. Use the desktop app to manage the kernel.',
     recheck: 'Re-detect',
     corePath: 'Kernel path',
     openDir: 'Open directory',
@@ -592,7 +602,8 @@ export default {
     clearing: 'Clearing…',
     cacheCleared: 'Temporary cache cleared',
     clearLogs: 'Clear Logs',
-    clearLogsDesc: 'Clear all EasyTier runtime log files',
+    clearLogsDesc:
+      'Remove archived app and kernel log files; logs currently being written are kept',
     backupRestore: 'Backup & Restore',
     backupRestoreDesc: 'Export configurations and settings, or restore them item by item',
     backupRestoreOpen: 'Manage backups',
@@ -602,8 +613,11 @@ export default {
     clearCacheMsg:
       'Only STUN and public peer caches will be cleared. Configurations, theme, language, and lock password are kept. Continue?',
     clearLogsTitle: 'Clear Logs',
-    clearLogsMsg: 'Are you sure you want to clear all log files?',
-    logsClearSuccess: 'Logs cleared successfully',
+    clearLogsMsg:
+      'Archived app, kernel, and legacy log files will be deleted; logs currently being written are kept. Continue?',
+    logsClearSuccess: 'Removed {n} archived log files',
+    logsClearPartial: 'Removed {n}, failed to remove {m}',
+    logsClearNothing: 'No archived logs to remove',
     logsClearFail: 'Failed to clear logs',
     selectVersionFirst: 'Please select a version first',
     downloadSuccess: 'Kernel download complete',

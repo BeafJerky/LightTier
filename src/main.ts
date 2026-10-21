@@ -42,7 +42,6 @@ import { createApp } from 'vue'
 
 import App from './App.vue'
 
-import { clearLogs } from './utils/fileUtil'
 import { cleanExitRouteResidue } from './utils/routeUtil'
 import { t } from './utils/i18nUtil'
 import { ElNotification } from 'element-plus'
@@ -64,10 +63,8 @@ const setupAll = async () => {
   app.mount('#app')
 
   // 启动后台任务（不阻塞启动）
+  // 注：应用日志不再随启动清空（保留上次会话诊断信息），由插件按大小轮转并保留历史
   Promise.all([
-    // 清理日志（不阻塞主流程）
-    clearLogs().catch((err) => console.warn('清理日志失败:', err)),
-
     // 启动补清：上次异常退出残留的出口节点路由（崩溃/强杀不留残）
     (async () => {
       const res = await cleanExitRouteResidue()

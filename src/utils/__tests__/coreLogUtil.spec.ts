@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   DEFAULT_LOG_COUNT,
   DEFAULT_LOG_SIZE_MB,
+  getKernelLogScope,
+  getLogLineLevel,
   isAbsolutePath,
+  isActiveKernelLogFile,
   isKernelLogFile,
   normalizeLogLevel,
   parsePositiveInt,
@@ -86,22 +89,30 @@ describe('normalizeLogLevel（日志级别校验）', () => {
 })
 
 describe('pickLogTarget（日志读取目标选择）', () => {
-  it('优先旧版按配置名写入的 {configName}.log', () => {
+  it('当前内核正在写入的 easytier.log 优先于旧版按配置名日志', () => {
     expect(pickLogTarget(['easytier.log', 'server.log', 'server.log.1'], 'server')).toBe(
-      'server.log'
-    )
-  })
-
-  it('其次使用 v2.6.x 内核固定的 easytier.log（优先于轮转历史文件）', () => {
-    expect(pickLogTarget(['easytier.log', 'easytier.log.1', 'easytier.log.2'], 'server')).toBe(
       'easytier.log'
     )
   })
 
-  it('仅有历史文件时取字典序最大（兼容日期后缀命名）', () => {
-    expect(pickLogTarget(['easytier.log.1', 'easytier.log.2'], 'server')).toBe('easytier.log.2')
+  it('没有当前文件时回退旧版 {configName}.log', () => {
+    expect(pickLogTarget(['server.log', 'server.log.1'], 'server')).toBe('server.log')
+    // 调用方传入的配置名可能带 .toml，需按基名匹配旧版日志
+    expect(pickLogTarget(['server.log', 'server.log.1'], 'server.toml')).toBe('server.log')
+  })
+
+  it('仅历史分段时取编号最小（.1 最新，.9 比 .10 新）', () => {
+    expect(pickLogTarget(['easytier.log.1', 'easytier.log.2'], 'server')).toBe('easytier.log.1')
+    expect(pickLogTarget(['easytier.log.9', 'easytier.log.10'], 'server')).toBe('easytier.log.9')
+    expect(pickLogTarget(['server.log.2', 'server.log.10'], 'server')).toBe('server.log.2')
+  })
+
+  it('日期后缀分段取日期最大', () => {
     expect(pickLogTarget(['server.2026-10-19.log', 'server.2026-10-20.log'], 'server')).toBe(
       'server.2026-10-20.log'
+    )
+    expect(pickLogTarget(['easytier.log.2026-10-19', 'easytier.log.2026-10-20'], 'server')).toBe(
+      'easytier.log.2026-10-20'
     )
   })
 
@@ -124,11 +135,67 @@ describe('isKernelLogFile（清理目标匹配）', () => {
     expect(isKernelLogFile('server', 'server')).toBe(true)
     expect(isKernelLogFile('server.2026-10-20', 'server')).toBe(true)
     expect(isKernelLogFile('server.2026-10-20.log', 'server')).toBe(true)
+    expect(isKernelLogFile('server.log.2026-10-20', 'server')).toBe(true)
   })
 
-  it('不匹配无关文件', () => {
+  it('不匹配无关文件（不再宽匹配 {configName}.*）', () => {
     expect(isKernelLogFile('lighttier.log', 'server')).toBe(false)
+    expect(isKernelLogFile('server.toml', 'server')).toBe(false)
     expect(isKernelLogFile('server-config.toml', 'server')).toBe(false)
+    expect(isKernelLogFile('easytier.logx', 'server')).toBe(false)
+    expect(isKernelLogFile('server.toml', 'server.toml')).toBe(false)
     expect(isKernelLogFile('resource', 'server')).toBe(false)
+  })
+})
+
+describe('isActiveKernelLogFile（清理时保留写入中的文件）', () => {
+  it('当前共享文件与旧版配置当前文件视为活跃', () => {
+    expect(isActiveKernelLogFile('easytier.log', 'server')).toBe(true)
+    expect(isActiveKernelLogFile('server.log', 'server')).toBe(true)
+    expect(isActiveKernelLogFile('server', 'server')).toBe(true)
+  })
+
+  it('轮转与日期分段不是活跃文件', () => {
+    expect(isActiveKernelLogFile('easytier.log.1', 'server')).toBe(false)
+    expect(isActiveKernelLogFile('server.log.2', 'server')).toBe(false)
+    expect(isActiveKernelLogFile('server.2026-10-20.log', 'server')).toBe(false)
+  })
+})
+
+describe('getKernelLogScope（按配置隔离目录名）', () => {
+  it('去掉 .toml 并清理路径非法字符', () => {
+    expect(getKernelLogScope('server.toml')).toBe('server')
+    expect(getKernelLogScope('Alice Home.toml')).toBe('Alice_Home')
+    expect(getKernelLogScope('a/b:c*.toml')).toBe('a_b_c_')
+  })
+
+  it('空名回退 default', () => {
+    expect(getKernelLogScope('')).toBe('default')
+    expect(getKernelLogScope('.toml')).toBe('default')
+  })
+})
+
+describe('getLogLineLevel（行首级别识别）', () => {
+  it('识别标准时间戳格式的 error/warn/fatal', () => {
+    expect(getLogLineLevel('2026-10-21 12:00:00 ERROR [core]: boom')).toBe('error')
+    expect(getLogLineLevel('2026-10-21 12:00:00.123 WARN  [core]: slow')).toBe('warn')
+    expect(getLogLineLevel('2026-10-21T12:00:00 FATAL [core]: dead')).toBe('error')
+  })
+
+  it('识别 EasyTier RFC3339 时区后缀（+08:00 / Z）', () => {
+    expect(getLogLineLevel('2026-10-21T12:00:00.123456789+08:00  INFO core: up')).toBe('')
+    expect(getLogLineLevel('2026-10-21T12:00:00.123456789+08:00 ERROR core: down')).toBe('error')
+    expect(getLogLineLevel('2026-10-21T04:00:00.123Z  WARN core: slow')).toBe('warn')
+  })
+
+  it('识别方括号级别与大小写', () => {
+    expect(getLogLineLevel('[ERROR] failed')).toBe('error')
+    expect(getLogLineLevel('[warn] slow')).toBe('warn')
+  })
+
+  it('正文中出现 error/warn 不误判', () => {
+    expect(getLogLineLevel('2026-10-21 12:00:00 INFO  [core]: error rate is 0')).toBe('')
+    expect(getLogLineLevel('2026-10-21 12:00:00 DEBUG [core]: warning text')).toBe('')
+    expect(getLogLineLevel('received ERROR from peer')).toBe('')
   })
 })

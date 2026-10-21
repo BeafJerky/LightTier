@@ -28,6 +28,9 @@ target
 tmp
 .tmp
 /log/
+# 内核/监控日志误在仓库根目录启动时产生（正常写入 logs/，见 .gitignore 上方规则）
+/easytier.log*
+/monitor_*.log
 
 # ----- 本地环境覆盖 -----
 *.local
