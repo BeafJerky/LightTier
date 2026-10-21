@@ -1,0 +1,60 @@
+/* @theme-label: 青瓷 */
+:root {
+  /* 青瓷主题 — 宋瓷粉青，青绿主色 + 茶褐点缀 */
+  --theme-bg: #eef3ef;
+  --theme-bg-card: #fbfdfb;
+  --theme-bg-sidebar: linear-gradient(180deg, #e4eee9, #d7e4dd);
+  --theme-bg-toolbar: #fbfdfb;
+  --theme-bg-hover: rgba(68, 113, 95, 0.07);
+  --theme-bg-active: rgba(68, 113, 95, 0.12);
+  --theme-bg-tag: #e4ede8;
+
+  --theme-text-primary: #2f3b37;
+  --theme-text-secondary: #5d6c66;
+  --theme-text-muted: #93a29b;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #44715f;
+  --theme-accent-secondary: #a0785d;
+  --theme-accent-hover: #3a6454;
+  --theme-color-success: #3f7258;
+  --theme-color-success-dark: #356149;
+  --theme-color-danger: #a94f42;
+  --theme-color-warning: #b9854e;
+  --theme-color-info: #5f8fa3;
+
+  --theme-border: #d3e0d9;
+  --theme-border-light: #e2ece6;
+  --theme-color-scrollbar: #c2d2ca;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #e4ede8;
+  --theme-surface-hover: #d9e5de;
+  --theme-text-on-accent: #f7fbf8;
+
+  /* 阴影 — 青绿色调 */
+  --theme-shadow-sm: 0 8px 28px rgba(47, 59, 55, 0.06);
+  --theme-shadow-md: 0 12px 36px rgba(47, 59, 55, 0.08);
+  --theme-shadow-toast: 0 6px 24px rgba(47, 59, 55, 0.1);
+
+  /* 圆角 — 与现有主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 标题用宋体/楷体，正文保持无衬线 */
+  --theme-font-display:
+    'Quicksand', 'Songti SC', 'SimSun', 'KaiTi', 'STKaiti', 'Noto Serif CJK SC', serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  /* 动效 — 与现有主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

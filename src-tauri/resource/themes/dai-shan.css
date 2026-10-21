@@ -1,0 +1,60 @@
+/* @theme-label: 黛山 */
+:root {
+  /* 黛山主题 — 夜色远山，月白文字 + 石青冷光 + 朱砂点缀 */
+  --theme-bg: #1b2125;
+  --theme-bg-card: #242c31;
+  --theme-bg-sidebar: linear-gradient(180deg, #20272c, #181d21);
+  --theme-bg-toolbar: #242c31;
+  --theme-bg-hover: rgba(143, 179, 196, 0.08);
+  --theme-bg-active: rgba(143, 179, 196, 0.14);
+  --theme-bg-tag: #2c353b;
+
+  --theme-text-primary: #dce3e4;
+  --theme-text-secondary: #a4b0b3;
+  --theme-text-muted: #6f7c80;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #8fb3c4;
+  --theme-accent-secondary: #c2725f;
+  --theme-accent-hover: #a4c6d6;
+  --theme-color-success: #7fb894;
+  --theme-color-success-dark: #6aa482;
+  --theme-color-danger: #d07a67;
+  --theme-color-warning: #d6a45e;
+  --theme-color-info: #88b5c9;
+
+  --theme-border: #39444a;
+  --theme-border-light: #2e383e;
+  --theme-color-scrollbar: #46545b;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #2c353b;
+  --theme-surface-hover: #354047;
+  --theme-text-on-accent: #141b1f;
+
+  /* 阴影 — 夜色深墨 */
+  --theme-shadow-sm: 0 8px 28px rgba(6, 10, 12, 0.3);
+  --theme-shadow-md: 0 12px 36px rgba(6, 10, 12, 0.36);
+  --theme-shadow-toast: 0 6px 24px rgba(6, 10, 12, 0.4);
+
+  /* 圆角 — 与现有主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 标题用楷体/宋体，正文保持无衬线 */
+  --theme-font-display:
+    'Quicksand', 'KaiTi', 'STKaiti', 'Kaiti SC', 'Songti SC', 'SimSun', 'Noto Serif CJK SC', serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  /* 动效 — 与现有主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

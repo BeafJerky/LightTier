@@ -1,0 +1,185 @@
+# EasyTier v2.7.0 全字段示例配置
+#
+# 用途：仅供 LightTier 表单渲染 / 读写往返测试，不保证能实际联网。
+# 依据：EasyTier v2.7.0 源码 easytier-core/src/config/toml.rs（Config 结构 + 子结构）
+# 说明：
+# - 覆盖 v2.7.0 TOML Config 的全部 31 个可反序列化字段（flags_struct 为 #[serde(skip)]，不是 TOML 字段）
+# - 覆盖 v2.7.0 的全部 43 个 flags
+# - 密钥、凭据、peer 地址均为虚构占位值，请勿用于真实网络
+# - 日志（file_logger / console_logger）不属于 v2.7.0 TOML Config，由 CLI 参数控制，故未包含
+
+# ============ 顶层基础字段 ============
+netns = "easytier-full-270"                        # 仅 Linux network namespace
+hostname = "LT-FULL-270"
+instance_name = "lt-full-270"
+instance_id = "8f14e45f-ea0c-4b1a-9d5e-2b7f0c3a6d11"
+ipv4 = "10.144.0.2/24"
+ipv6 = "fd00:144::2/64"
+dhcp = false
+
+# ============ IPv6 公网地址共享（v2.6.2+） ============
+ipv6_public_addr_provider = true
+ipv6_public_addr_auto = false
+ipv6_public_addr_prefix = "2001:db8:144::/64"
+
+# ============ 监听与映射监听 ============
+listeners = [
+  "tcp://0.0.0.0:11010",
+  "udp://0.0.0.0:11010",
+  "wg://0.0.0.0:11011",
+  "quic://0.0.0.0:11012",
+]
+mapped_listeners = [
+  "tcp://203.0.113.10:11010",
+  "udp://203.0.113.10:11010",
+]
+
+# ============ 路由 / 出口节点 ============
+routes = ["10.0.0.0/8", "172.16.0.0/12"]
+exit_nodes = ["10.144.0.1", "fd00:144::1"]
+
+# ============ 代理 ============
+socks5_proxy = "socks5://127.0.0.1:1080"
+
+# ============ 端口白名单 / STUN ============
+tcp_whitelist = ["80", "443", "8000-9000"]
+udp_whitelist = ["53", "5000-6000"]
+stun_servers = ["stun.qq.com:3478", "stun.miwifi.com:3478"]
+tcp_stun_servers = ["stun.qq.com:3478", "stun.miwifi.com:3478"]   # v2.7.0+
+stun_servers_v6 = ["[2001:db8::1]:3478"]
+
+# ============ 安全模式（v2.6.0+） ============
+credential_file = "C:/LightTierDemo/config/credentials.json"
+
+# ACL 为透传字段，这里保留一个空表占位（实际内容由用户按官方 ACL 结构填写）
+acl = {}
+
+# 可选：测试“当前内核未兼容”栏时，取消下面两行的注释（二者自 v2.5.0 起已从 TOML 移除）
+# rpc_portal = "0.0.0.0:15888"
+# rpc_portal_whitelist = ["127.0.0.1/32"]
+
+# ============ 网络身份 ============
+[network_identity]
+network_name = "LightTierFull270"
+network_secret = "LT270DemoSecret"
+
+# ============ 对端（PeerConfig：uri + peer_public_key） ============
+[[peer]]
+uri = "tcp://198.51.100.10:11010"
+peer_public_key = "TFQyNzBQZWVyUHVibGljS2V5MDE="
+
+[[peer]]
+uri = "udp://198.51.100.11:11010"
+peer_public_key = "TFQyNzBQZWVyUHVibGljS2V5MDI="
+
+# ============ 子网代理（ProxyNetworkConfig：cidr + mapped_cidr + allow） ============
+[[proxy_network]]
+cidr = "192.168.100.0/24"
+mapped_cidr = "10.144.100.0/24"
+allow = ["tcp", "udp", "icmp"]
+
+# ============ WireGuard VPN 门户（v2.7.0 新结构） ============
+[vpn_portal_config]
+enabled = true
+wireguard_listen = "0.0.0.0:51820"
+wireguard_private_key = "ZGVtby13aXJlZ3VhcmQtcHJpdmF0ZS1rZXktMjcw"
+
+[[vpn_portal_config.clients]]
+name = "alice"
+virtual_ip = "10.144.144.10/24"
+groups = ["staff", "ops"]
+
+[[vpn_portal_config.clients]]
+name = "bob"
+virtual_ip = "10.144.144.11/24"
+groups = ["guest"]
+
+# ============ 端口转发（PortForwardConfig：bind_addr + dst_addr + proto） ============
+[[port_forward]]
+bind_addr = "0.0.0.0:8080"
+dst_addr = "10.144.0.10:80"
+proto = "tcp"
+
+[[port_forward]]
+bind_addr = "0.0.0.0:5353"
+dst_addr = "10.144.0.10:53"
+proto = "udp"
+
+# ============ 安全模式配置 ============
+[secure_mode]
+enabled = true
+local_private_key = "ZGVtby1zZWN1cmUtbW9kZS1wcml2YXRlLWtleS0yNzA="
+local_public_key = "ZGVtby1zZWN1cmUtbW9kZS1wdWJsaWMta2V5LTI3MA=="
+
+# ============ 受管凭据（v2.7.0+，ManagedCredentialConfig） ============
+[[managed_credentials]]
+credential_id = "cred-full-270"
+credential_secret = "ZGVtby1tYW5hZ2VkLWNyZWRlbnRpYWwtc2VjcmV0"
+groups = ["staff", "ops"]
+allow_relay = true
+allowed_proxy_cidrs = ["192.168.100.0/24", "10.144.100.0/24"]
+expiry_unix = 1893456000
+reusable = true
+
+# ============ 配置来源（ConfigSourceConfig，取值为 user / web） ============
+[source]
+source = "web"
+
+# ============ flags：v2.7.0 全部 43 个（31 布尔 + 12 非布尔） ============
+[flags]
+# --- 基线 29 个 ---
+default_protocol = "tcp"
+dev_name = "LightTierFull270"
+enable_encryption = true
+enable_ipv6 = true
+mtu = 1380
+latency_first = true
+enable_exit_node = true
+proxy_forward_by_system = true
+no_tun = false
+use_smoltcp = false
+relay_network_whitelist = "*"
+disable_p2p = false
+relay_all_peer_rpc = false
+disable_udp_hole_punching = false
+multi_thread = true
+data_compress_algo = "zstd"
+bind_device = false
+enable_kcp_proxy = true
+disable_kcp_input = false
+disable_relay_kcp = false
+enable_relay_foreign_network_kcp = false
+accept_dns = true
+private_mode = false
+enable_quic_proxy = true
+disable_quic_input = false
+foreign_relay_bps_limit = 1048576
+multi_thread_count = 2
+encryption_algorithm = "aes-gcm"
+disable_sym_hole_punching = false
+
+# --- v2.5.0 新增 4 个 ---
+p2p_only = false
+disable_tcp_hole_punching = false
+quic_listen_port = 11012
+tld_dns_zone = "lt.internal"
+
+# --- v2.6.0 新增 5 个 ---
+lazy_p2p = false
+disable_relay_quic = false
+enable_relay_foreign_network_quic = false
+need_p2p = true
+instance_recv_bps_limit = 2097152
+
+# --- v2.6.2 新增 1 个 ---
+disable_upnp = false
+
+# --- v2.6.3 新增 1 个 ---
+disable_relay_data = false
+
+# --- v2.6.4 新增 1 个 ---
+enable_udp_broadcast_relay = true
+
+# --- v2.7.0 新增 2 个 ---
+prefer_peer_relay = true
+socket_mark = 100

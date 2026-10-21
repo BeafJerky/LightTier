@@ -2,6 +2,7 @@
  * 外部主题发现与恢复
  *
  * - 扫描 resource/themes/*.css（Tauri Resource 目录），至少含 3 个 --theme- 变量才视为合法主题
+ * - 显示名优先取 CSS 内的 `@theme-label: <中文名>` 元数据，缺省回退文件名
  * - 主题色徽标从 --theme-accent-primary 或 --theme-color-success 提取
  * - 浏览器 dev 模式（无 Tauri API）下静默跳过，不阻塞页面
  */
@@ -27,6 +28,17 @@ const isValidThemeCss = (cssText: string): boolean => {
 const THEME_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 export const isValidThemeName = (name: string): boolean => THEME_NAME_PATTERN.test(name)
 
+// 显示名元数据：CSS 注释中的 `@theme-label: 丹青水墨`；仅用于界面展示，不参与路径拼接
+const THEME_LABEL_PATTERN = /@theme-label\s*:\s*([^*\r\n]+)/
+const THEME_LABEL_MAX_LENGTH = 40
+
+/** 提取主题显示名；未声明、为空或超长时按规则回退/截断（文件名始终作为稳定 ID） */
+export const extractThemeLabel = (cssText: string, fallback: string): string => {
+  const label = cssText.match(THEME_LABEL_PATTERN)?.[1].trim()
+  if (!label) return fallback
+  return label.slice(0, THEME_LABEL_MAX_LENGTH)
+}
+
 // 模块级单例：发现列表多组件共享
 const extThemes = ref<ExternalThemeInfo[]>([])
 
@@ -47,7 +59,7 @@ export const useExternalThemes = () => {
           const match = cssText.match(/--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/)
           extThemes.value.push({
             name,
-            label: name,
+            label: extractThemeLabel(cssText, name),
             color: match ? match[1].trim() : '#888',
             cssText
           })
