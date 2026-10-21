@@ -55,6 +55,8 @@
     "core:tray:allow-set-visible",
     "core:window:allow-unminimize",
     "core:window:allow-is-minimized",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
     "core:app:allow-default-window-icon",
     "core:path:allow-is-absolute",
     "notification:default",
