@@ -6,7 +6,7 @@ const routeChildren: AppRouteRecordRaw[] = [
     component: () => import('@/views/new/overview/index.vue'),
     name: 'NewOverview',
     meta: {
-      title: '全局',
+      title: '总览',
       subtitle: '集中管理所有组网配置',
       titleKey: 'newLayout.overview',
       subtitleKey: 'newLayout.overviewSub',

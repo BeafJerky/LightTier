@@ -3,14 +3,45 @@
     <!-- 左侧配置列表 -->
     <div class="nw-left">
       <div class="nw-left-header">
-        <div class="nw-left-label">✦ {{ t('newConfig.configList') }}</div>
-        <div class="nw-left-btns">
-          <button class="nw-add-btn" @click="openAdd" :title="t('newConfig.addConfig')">+</button>
+        <div class="nw-left-top">
+          <div class="nw-left-label">{{ t('newConfig.configList') }}</div>
+          <div class="nw-left-btns">
+            <button
+              type="button"
+              class="nw-add-btn"
+              @click="openAdd"
+              :title="t('newConfig.addConfig')"
+              :aria-label="t('newConfig.addConfig')"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <!-- 搜索固定在标题栏，不随列表滚动 -->
+        <div v-if="easyTierStore.configList.length > 0" class="nw-search">
+          <input
+            v-model="configSearch"
+            type="search"
+            class="nw-search-input"
+            :placeholder="t('newCommon.searchConfig')"
+            :aria-label="t('newCommon.searchConfig')"
+            @keydown.esc="configSearch = ''"
+          />
+          <button
+            v-if="configSearch"
+            type="button"
+            class="nw-search-clear"
+            :title="t('newCommon.clearSearch')"
+            :aria-label="t('newCommon.clearSearch')"
+            @click="configSearch = ''"
+          >
+            ×
+          </button>
         </div>
       </div>
       <div class="nw-left-scroll" v-loading="easyTierStore.configListLoading">
         <div
-          v-for="item in easyTierStore.configList"
+          v-for="item in filteredConfigList"
           :key="item.configFileName"
           class="nw-card"
           :class="{ active: selectedConfig?.configFileName === item.configFileName }"
@@ -33,17 +64,13 @@
           <div class="nw-card-name">{{ item.configFileName }}</div>
           <div class="nw-card-sub">{{ item.fileName }}</div>
           <div class="nw-card-actions" @click.stop>
+            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
             <button
-              class="nw-btn nw-btn-run"
-              :disabled="getRunning(item)"
-              @click="startAction(item)"
-              >{{ t('newCommon.run') }}</button
-            >
-            <button
-              class="nw-btn nw-btn-stop"
-              :disabled="!getRunning(item)"
-              @click="stopAction(item)"
-              >{{ t('newCommon.close') }}</button
+              type="button"
+              class="nw-btn"
+              :class="getRunning(item) ? 'nw-btn-stop' : 'nw-btn-run'"
+              @click="getRunning(item) ? stopAction(item) : startAction(item)"
+              >{{ getRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
             >
           </div>
         </div>
@@ -52,7 +79,22 @@
           class="nw-empty-cards"
         >
           <span class="nw-empty-icon">✦</span>
-          <p>{{ t('newCommon.noConfig') }}</p>
+          <p class="nw-empty-title">{{ t('newConfig.emptyNoConfig') }}</p>
+          <span class="nw-empty-desc">{{ t('newConfig.emptyHint') }}</span>
+          <button type="button" class="nw-empty-cta" @click="openAdd">
+            {{ t('newCommon.createConfig') }}
+          </button>
+        </div>
+        <!-- 搜索无结果：与“无配置”区分，提供清除入口 -->
+        <div
+          v-else-if="filteredConfigList.length === 0 && !easyTierStore.configListLoading"
+          class="nw-empty-cards"
+        >
+          <span class="nw-empty-icon">⌕</span>
+          <p class="nw-empty-title">{{ t('newCommon.noSearchResult') }}</p>
+          <button type="button" class="nw-empty-cta" @click="configSearch = ''">
+            {{ t('newCommon.clearSearch') }}
+          </button>
         </div>
       </div>
     </div>
@@ -78,22 +120,26 @@
           <span class="nw-badge" :class="selectedRunning ? 'on' : 'off'">
             {{ selectedRunning ? '● ' + t('newCommon.running') : '○ ' + t('newCommon.stopped') }}
           </span>
+          <span v-if="detailState === 'demo'" class="nw-badge nw-badge-demo">{{
+            t('newCommon.demoData')
+          }}</span>
         </div>
         <div class="nw-detail-actions">
-          <button class="nw-btn-lg nw-btn-edit" @click="openEdit">{{ t('newCommon.edit') }}</button>
+          <button type="button" class="nw-btn-lg nw-btn-edit" @click="openEdit">{{
+            t('newCommon.edit')
+          }}</button>
+          <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
           <button
-            class="nw-btn-lg nw-btn-start"
-            :disabled="selectedRunning"
-            @click="selectedConfig && startAction(selectedConfig)"
-            >{{ t('newCommon.run') }}</button
+            type="button"
+            class="nw-btn-lg nw-detail-lifecycle"
+            :class="selectedRunning ? 'nw-btn-kill' : 'nw-btn-start'"
+            @click="
+              selectedConfig &&
+              (selectedRunning ? stopAction(selectedConfig) : startAction(selectedConfig))
+            "
+            >{{ selectedRunning ? t('newCommon.stop') : t('newCommon.run') }}</button
           >
-          <button
-            class="nw-btn-lg nw-btn-kill"
-            :disabled="!selectedRunning"
-            @click="selectedConfig && stopAction(selectedConfig)"
-            >{{ t('newCommon.close') }}</button
-          >
-          <button class="nw-btn-lg nw-btn-del" @click="deleteSelectedConfig">{{
+          <button type="button" class="nw-btn-lg nw-btn-del" @click="deleteSelectedConfig">{{
             t('newCommon.delete')
           }}</button>
         </div>
@@ -293,6 +339,43 @@
       </div>
     </div>
 
+    <!-- 详情加载中 / 读取失败：不使用演示数据掩盖真实错误 -->
+    <div class="nw-right" v-else-if="selectedConfig">
+      <div class="nw-detail-header">
+        <div class="nw-detail-title-row">
+          <button class="nw-back-btn" @click="closeDetail">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            {{ t('newCommon.back') }}
+          </button>
+          <h3 class="nw-detail-title">{{ selectedConfig.configFileName }}</h3>
+        </div>
+      </div>
+      <div v-if="detailState === 'loading'" class="nw-empty" aria-live="polite">
+        <p>{{ t('newCommon.loading') }}</p>
+      </div>
+      <div v-else class="nw-empty nw-detail-error" role="alert">
+        <p class="nw-detail-error-title">{{ detailErrorTitle }}</p>
+        <p v-if="detailError?.message" class="nw-detail-error-desc">{{ detailError.message }}</p>
+        <div class="nw-detail-error-actions">
+          <button class="nw-btn-lg nw-btn-edit" @click="retryDetail">{{
+            t('newCommon.retry')
+          }}</button>
+          <button v-if="isTauri" class="nw-btn-lg" @click="openConfigDir">{{
+            t('newConfig.openConfigDir')
+          }}</button>
+        </div>
+      </div>
+    </div>
+
     <div class="nw-right" v-else>
       <div class="nw-empty"
         ><span class="nw-empty-icon">✦</span><p>{{ t('newConfig.selectConfig') }}</p></div
@@ -358,6 +441,8 @@ import { useMockData } from '@/hooks/useMockData'
 import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import { resourceDir, join } from '@tauri-apps/api/path'
+import { openPath } from '@/utils/fileUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import EditDialog from './EditDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
@@ -375,7 +460,7 @@ import {
   migrateLightTierConfig
 } from '@/utils/lighttierConfigUtil'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { checkConfigCompat } from '@/utils/kernelCompatUtil'
 
 defineOptions({ name: 'NewConfigView' })
@@ -406,6 +491,7 @@ const {
 } = useMockData()
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 
 // 详情面板 flags：已知字段 key → i18n 标签（与编辑表单同源定义），未知 key 回退原文
 const FLAG_LABEL_KEY_MAP: Record<string, string> = {}
@@ -430,7 +516,7 @@ const mapServiceStatus = (key: string): string => {
     case 'stopped':
       return t('newConfig.stoppedStatus')
     case 'stopping':
-      return t('newConfig.stoppedStatus') + '...'
+      return t('newCommon.stopping')
     case 'notInstalled':
       return t('newConfig.notInstalled')
     case 'unknown':
@@ -493,6 +579,22 @@ const selectedRunning = computed(() =>
   selectedConfig.value ? getRunning(selectedConfig.value) : false
 )
 
+// 列表搜索：按配置名/文件名不区分大小写过滤；运行中优先且保持原加载顺序（稳定排序）
+const configSearch = ref('')
+const filteredConfigList = computed(() => {
+  const keyword = configSearch.value.trim().toLowerCase()
+  return easyTierStore.configList
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item }) =>
+        !keyword ||
+        item.configFileName.toLowerCase().includes(keyword) ||
+        (item.fileName || '').toLowerCase().includes(keyword)
+    )
+    .sort((a, b) => Number(getRunning(b.item)) - Number(getRunning(a.item)) || a.index - b.index)
+    .map(({ item }) => item)
+})
+
 // 运行时状态刷新（FAB 已负责文件加载）
 const refreshRuntimeState = async () => {
   await updateRunningList()
@@ -514,6 +616,8 @@ const refreshRuntimeState = async () => {
 const selectConfig = async (item: RunningItem) => {
   selectedConfig.value = item
   routeFilter.value = ''
+  // 先清空旧详情，避免读取失败时仍显示上一个配置的内容
+  selectedDetail.value = null
   await loadConfigDetail(item)
   easyTierStore.setLastSelectedConfig(item)
 }
@@ -522,30 +626,88 @@ const selectConfig = async (item: RunningItem) => {
 const closeDetail = () => {
   selectedConfig.value = null
   selectedDetail.value = null
+  detailState.value = 'idle'
+  detailError.value = null
 }
 
-// 读取并解析配置 TOML；无文件名（Mock 环境）或读取失败时回退内置演示数据
+// 详情显式状态机：idle | loading | ready | demo | error
+const detailState = ref<'idle' | 'loading' | 'ready' | 'demo' | 'error'>('idle')
+const detailError = ref<{ kind: 'read' | 'parse' | 'empty'; message: string } | null>(null)
+const detailErrorTitle = computed(() => {
+  switch (detailError.value?.kind) {
+    case 'parse':
+      return t('newConfig.detailParseFailed')
+    case 'empty':
+      return t('newConfig.detailEmpty')
+    default:
+      return t('newConfig.detailLoadFailed')
+  }
+})
+
+// 读取并解析配置 TOML：Mock 环境无 fileName 时展示演示数据并明确标注；
+// Tauri 环境读取/解析失败进入错误态，不再静默回退演示数据
 const loadConfigDetail = async (item: RunningItem) => {
+  detailState.value = 'loading'
+  detailError.value = null
+  selectedDetail.value = null
   if (!item.fileName) {
-    selectedDetail.value = getDemoConfig(item.configFileName)
+    if (!isTauri) {
+      selectedDetail.value = getDemoConfig(item.configFileName)
+      detailState.value = 'demo'
+      return
+    }
+    detailState.value = 'error'
+    detailError.value = { kind: 'read', message: '' }
     return
   }
+
+  let content: string
   try {
-    const content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-    if (content) {
-      const cfg = toml.parse(content) as Record<string, any>
-      // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
-      if (migrateLightTierConfig(cfg)) {
-        try {
-          await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
-        } catch {
-          /* 回写失败不阻断详情展示 */
-        }
-      }
-      selectedDetail.value = cfg as unknown as EasyTierConfig
-    }
+    content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
   } catch {
-    selectedDetail.value = getDemoConfig(item.configFileName)
+    detailState.value = 'error'
+    detailError.value = { kind: 'read', message: '' }
+    return
+  }
+  if (!content || !content.trim()) {
+    detailState.value = 'error'
+    detailError.value = { kind: 'empty', message: '' }
+    return
+  }
+
+  try {
+    const cfg = toml.parse(content) as Record<string, any>
+    // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
+    if (migrateLightTierConfig(cfg)) {
+      try {
+        await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+      } catch {
+        /* 回写失败不阻断详情展示 */
+      }
+    }
+    selectedDetail.value = cfg as unknown as EasyTierConfig
+    detailState.value = 'ready'
+  } catch (e) {
+    detailState.value = 'error'
+    detailError.value = {
+      kind: 'parse',
+      message: e instanceof Error ? e.message : String(e)
+    }
+  }
+}
+
+// 错误态重试 / 打开配置目录（桌面）
+const retryDetail = async () => {
+  if (!selectedConfig.value) return
+  await loadConfigDetail(selectedConfig.value)
+}
+const openConfigDir = async () => {
+  if (!isTauri) return
+  try {
+    const resDir = await resourceDir()
+    await openPath(await join(resDir, CONFIG_PATH))
+  } catch {
+    toast(t('newConfig.openLogFail'), 'error')
   }
 }
 
@@ -612,7 +774,8 @@ const startAction = async (item: RunningItem) => {
         (r) => r.configFileName !== item.configFileName
       )
       if (current) {
-        const confirmed = window.confirm(
+        const confirmed = await showConfirm(
+          t('newOverview.androidSwitchTitle'),
           t('newOverview.androidSwitchConfirm', {
             current: current.configFileName,
             next: item.configFileName
@@ -774,21 +937,36 @@ const openEdit = async () => {
   }
 }
 
-// 编辑/新增弹窗保存回调：写入 TOML 后刷新列表与运行状态
-const handleSaved = async (name: string, content: string) => {
+// 编辑/新增弹窗保存回调：备份旧文件 → 写入 TOML → 回调结果（失败时弹窗保持打开）
+const handleSaved = async (name: string, content: string, done: (ok: boolean) => void) => {
+  const isAdd = editDialogMode.value === 'add'
+  let backupFailed = false
   try {
+    if (!isAdd) {
+      // 覆盖前备份上一版；备份失败视为保存失败，避免用户误以为有回滚点
+      try {
+        const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`)) as string
+        await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
+      } catch {
+        backupFailed = true
+        throw new Error('backup failed')
+      }
+    }
     await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
-    toast(
-      editDialogMode.value === 'add' ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'),
-      'success'
-    )
+    toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
     await easyTierStore.loadConfigFiles()
     await refreshRuntimeState()
+    done(true)
   } catch {
     toast(
-      editDialogMode.value === 'add' ? t('newCommon.addFail') : t('newCommon.saveFail'),
+      isAdd
+        ? t('newCommon.addFail')
+        : backupFailed
+          ? t('newConfig.backupFailed')
+          : t('newCommon.saveFail'),
       'error'
     )
+    done(false)
   }
 }
 
@@ -806,6 +984,15 @@ const openAdd = () => {
   editTomlContent.value = 'hostname = ""\ninstance_name = ""\ndhcp = true\n'
   editVisible.value = true
 }
+
+// 支持空态/引导一键新建：?create=1 打开新增后清除 query，避免刷新重复弹出
+onMounted(() => {
+  if (route.query.create !== '1') return
+  const query = { ...route.query }
+  delete query.create
+  router.replace({ query })
+  openAdd()
+})
 
 // 删除配置
 const deleteSelectedConfig = async () => {
@@ -1104,7 +1291,7 @@ const handleUninstallService = async () => {
 .nw-left-label {
   padding: 0 var(--theme-space-1);
   font-family: var(--theme-font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 2px;
   color: var(--theme-text-muted);
@@ -1113,15 +1300,72 @@ const handleUninstallService = async () => {
 
 .nw-left-header {
   display: flex;
+  padding: 0 var(--theme-space-1);
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.nw-left-top {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--theme-space-1);
 }
 
 .nw-left-btns {
   display: flex;
   align-items: center;
   gap: var(--theme-space-1);
+}
+
+/* 搜索框：固定于标题栏，列表滚动时保持可见 */
+.nw-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nw-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-tag);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-pill);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.nw-search-input:focus {
+  border-color: var(--theme-accent-primary);
+}
+
+.nw-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.nw-search-clear {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nw-search-clear:hover {
+  color: var(--theme-accent-primary);
+  background: var(--theme-bg-hover);
 }
 
 .nw-add-btn {
@@ -1208,12 +1452,12 @@ const handleUninstallService = async () => {
 }
 
 .nw-status-text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-muted);
 }
 
 .nw-card-pid {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-text-muted);
 }
 
@@ -1227,7 +1471,7 @@ const handleUninstallService = async () => {
 
 .nw-card-sub {
   margin-bottom: var(--theme-space-3);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-muted);
 }
 
@@ -1239,7 +1483,7 @@ const handleUninstallService = async () => {
 .nw-btn {
   padding: var(--theme-space-1) var(--theme-space-4);
   font-family: var(--theme-font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -1302,33 +1546,14 @@ const handleUninstallService = async () => {
     display: none;
   }
 
-  .nw-right {
-    flex: 1;
-    padding: var(--theme-space-4);
-  }
-
   /* 提高特异性，覆盖基础 display:none，确保窄屏详情态返回按钮可见 */
   .nw-detail-open .nw-back-btn {
     display: flex;
   }
 
-  /* 详情头部允许换行，避免标题与按钮组互挤导致标题竖排/按钮溢出 */
-  .nw-detail-header {
-    flex-wrap: wrap;
-    gap: var(--theme-space-3);
-  }
-
-  .nw-detail-title-row {
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-
-  .nw-detail-title {
-    overflow-wrap: break-word;
-  }
-
-  .nw-detail-actions {
-    flex-wrap: wrap;
+  .nw-right {
+    flex: 1;
+    padding: var(--theme-space-4);
   }
 }
 
@@ -1369,12 +1594,16 @@ const handleUninstallService = async () => {
   border-bottom: 2px solid var(--theme-border-light);
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--theme-space-3);
 }
 
 .nw-detail-title-row {
   display: flex;
   align-items: center;
   gap: var(--theme-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .nw-detail-title {
@@ -1383,12 +1612,14 @@ const handleUninstallService = async () => {
   font-size: 16px;
   font-weight: 600;
   color: var(--theme-text-primary);
+  overflow-wrap: break-word;
 }
 
 .nw-badge {
   padding: 2px var(--theme-space-3);
   font-family: var(--theme-font-body);
-  font-size: 10px;
+  font-size: 11px;
+  white-space: nowrap;
   border-radius: var(--theme-radius-pill);
 }
 
@@ -1404,9 +1635,57 @@ const handleUninstallService = async () => {
   border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
 }
 
+.nw-badge-demo {
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-hover);
+  border: 1px solid var(--theme-border);
+}
+
+.nw-detail-error {
+  gap: var(--theme-space-2);
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--theme-space-6);
+}
+
+.nw-detail-error-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nw-detail-error-desc {
+  max-width: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.nw-detail-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--theme-space-2);
+  margin-top: var(--theme-space-2);
+}
+
 .nw-detail-actions {
   display: flex;
   gap: var(--theme-space-2);
+  flex-wrap: wrap;
+}
+
+/* 宽屏列表卡片已提供生命周期操作，详情不再重复；窄屏列表隐藏时才显示 */
+.nw-detail-lifecycle {
+  display: none;
+  align-items: center;
+}
+
+@media (width <= 900px) {
+  .nw-detail-lifecycle {
+    display: inline-flex;
+  }
 }
 
 .nw-btn-lg {
@@ -1475,7 +1754,7 @@ const handleUninstallService = async () => {
   display: flex;
   margin-bottom: var(--theme-space-3);
   font-family: var(--theme-font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
   color: var(--theme-accent-primary);
@@ -1518,7 +1797,7 @@ const handleUninstallService = async () => {
 }
 
 .nw-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 1.2px;
   color: var(--theme-text-muted);
@@ -1595,7 +1874,7 @@ const handleUninstallService = async () => {
 }
 
 .nw-route-gw {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-text-muted);
 }
 
@@ -1645,6 +1924,32 @@ const handleUninstallService = async () => {
 .nw-empty-cards p {
   margin: 0;
   font-size: 14px;
+}
+
+.nw-empty-desc {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+.nw-empty-cta {
+  padding: var(--theme-space-2) var(--theme-space-5);
+  margin-top: var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-text-white);
+  cursor: pointer;
+  background: var(--theme-accent-primary);
+  border: none;
+  border-radius: var(--theme-radius-pill);
+  transition: all 0.2s;
+}
+
+.nw-empty-cta:hover {
+  transform: translateY(-1px);
 }
 
 .nw-svc-bar {
@@ -1723,7 +2028,7 @@ const handleUninstallService = async () => {
 .nw-btn-sm {
   padding: var(--theme-space-1) var(--theme-space-4);
   font-family: var(--theme-font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: none;

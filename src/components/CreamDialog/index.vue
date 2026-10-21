@@ -7,7 +7,7 @@
         class="cd-overlay"
         :class="{ 'cd-overlay-inline': inline, 'cd-overlay-sheet': sheetMode }"
         @click.self="handleOverlayClick"
-        @keydown.escape="handleClose"
+        @keydown.escape="requestClose"
         @keydown="handleKeydown"
         tabindex="-1"
       >
@@ -17,7 +17,10 @@
           :style="
             inline || sheetMode
               ? undefined
-              : { width: typeof width === 'number' ? width + 'px' : width }
+              : {
+                  width: typeof width === 'number' ? width + 'px' : width,
+                  height: typeof height === 'number' ? height + 'px' : height
+                }
           "
           :role="inline ? undefined : 'dialog'"
           :aria-modal="inline ? undefined : 'true'"
@@ -26,7 +29,7 @@
           <!-- 标题栏（内联模式由所在页面承载标题与返回，不渲染） -->
           <div v-if="!inline" class="cd-header">
             <span class="cd-title">{{ title }}</span>
-            <button class="cd-close" @click="handleClose" :title="t('newCommon.close')">
+            <button class="cd-close" @click="requestClose" :title="t('newCommon.close')">
               <svg
                 width="16"
                 height="16"
@@ -40,8 +43,10 @@
             </button>
           </div>
 
-          <!-- 内容区 -->
-          <div class="cd-body"><slot></slot></div>
+          <!-- 内容区（内容自行管理滚动时可关闭 body 滚动） -->
+          <div class="cd-body" :class="{ 'cd-body-no-scroll': !bodyScroll && !sheetMode }">
+            <slot></slot>
+          </div>
 
           <!-- 底部 -->
           <div v-if="$slots.footer" class="cd-footer"><slot name="footer"></slot></div>
@@ -100,15 +105,24 @@ const props = withDefaults(
     modelValue: boolean
     title?: string
     width?: string | number
+    // 桌面弹窗高度：短窗口由 .cd-dialog 的 max-height 兜底收缩
+    height?: string | number
+    // body 是否滚动：默认 true；内容区自行管理滚动时传 false，避免嵌套滚动
+    bodyScroll?: boolean
     closeOnOverlay?: boolean
     // 内联模式：不渲染 Teleport 遮罩与标题栏，作为页面级卡片嵌入文档流（移动端二级页面用）
     inline?: boolean
+    // 关闭守卫：返回 false（或 resolve false）时取消本次关闭（未保存保护等）
+    beforeClose?: () => boolean | Promise<boolean>
   }>(),
   {
     title: '',
     width: 600,
+    height: undefined,
+    bodyScroll: true,
     closeOnOverlay: true,
-    inline: false
+    inline: false,
+    beforeClose: undefined
   }
 )
 
@@ -167,13 +181,33 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 const handleOverlayClick = () => {
   // 内联模式无遮罩层，点击空白不触发关闭（避免页面留白区域误关）
-  if (props.closeOnOverlay && !props.inline) handleClose()
+  if (props.closeOnOverlay && !props.inline) void requestClose()
 }
 
-// 关闭弹窗：仅变更内部态，v-model 回传与 Android history 条目回收均由 watch 统一处理
-const handleClose = () => {
+// 关闭守卫执行器：异步守卫期间忽略重复关闭请求
+const closing = ref(false)
+const canClose = async (): Promise<boolean> => {
+  if (closing.value) return false
+  if (!props.beforeClose) return true
+  closing.value = true
+  try {
+    return await props.beforeClose()
+  } catch {
+    // 守卫自身异常时不关闭，避免误丢数据
+    return false
+  } finally {
+    closing.value = false
+  }
+}
+
+// 统一关闭入口：遮罩 / Esc / 标题栏 / 父组件按钮都走这里
+const requestClose = async () => {
+  if (!(await canClose())) return
   visible.value = false
 }
+
+// 供父组件（如底部取消按钮）调用，确保同样经过关闭守卫
+defineExpose({ requestClose })
 
 // Android：非内联弹窗呈现为底部动作面板（贴合移动端设计语言）
 const isAndroidPlatform = isAndroid()
@@ -186,10 +220,19 @@ const dropSheetEntry = () => {
 }
 const sheetEntry: SheetHistoryEntry = {
   isPushed: () => sheetPushed,
-  close: () => {
+  close: async () => {
     // 物理返回键消费：历史条目已被系统弹出，无需再 back()
     sheetPushed = false
     dropSheetEntry()
+    if (!(await canClose())) {
+      // 守卫取消关闭：补回 history 条目，保持“返回键关闭面板”的语义
+      if (!sheetPushed) {
+        sheetPushed = true
+        sheetStack.push(sheetEntry)
+        window.history.pushState({ ...(window.history.state || {}), ltSheet: true }, '')
+      }
+      return
+    }
     visible.value = false
   }
 }
@@ -222,12 +265,14 @@ onUnmounted(() => {
 
 <style scoped>
 .cd-overlay {
+  /* 弹窗可用高度 = 视口 - 上下留白；顶部叠加 Android 状态栏安全区（桌面端为 0） */
+  --cd-overlay-top: calc(8vh + var(--lt-safe-area-top, 0px));
+  --cd-overlay-bottom: calc(40px + var(--lt-safe-area-bottom, 0px));
+
   position: fixed;
   z-index: 2000;
   display: flex;
-
-  /* 顶部留白叠加 Android 状态栏安全区（桌面端变量为 0） */
-  padding-top: calc(8vh + var(--lt-safe-area-top, 0px));
+  padding-top: var(--cd-overlay-top);
   overflow-y: auto;
   background: var(--el-overlay-color, rgb(0 0 0 / 50%));
   inset: 0;
@@ -237,11 +282,11 @@ onUnmounted(() => {
 
 .cd-dialog {
   display: flex;
-  max-height: 80vh;
+  max-height: calc(100vh - var(--cd-overlay-top) - var(--cd-overlay-bottom));
   min-height: 0;
 
   /* 底部留白叠加手势导航条安全区（桌面端变量为 0） */
-  margin-bottom: calc(40px + var(--lt-safe-area-bottom, 0px));
+  margin-bottom: var(--cd-overlay-bottom);
   background: var(--theme-bg-card, #fff);
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 20px 60px rgb(0 0 0 / 12%));
@@ -290,6 +335,12 @@ onUnmounted(() => {
   overflow-y: auto;
   flex: 1;
   flex-direction: column;
+  overscroll-behavior: contain;
+}
+
+/* 内容自行管理滚动（如设置页的导航 + 内容区）：body 只负责撑满高度 */
+.cd-body-no-scroll {
+  overflow: hidden;
 }
 
 .cd-body::-webkit-scrollbar {
@@ -342,14 +393,17 @@ onUnmounted(() => {
 /* 移动端（含 Android）：弹窗收窄为近全屏并适配系统栏安全区 */
 @media (width <= 640px) {
   .cd-overlay {
-    padding-top: calc(16px + var(--lt-safe-area-top, 0px));
-    padding-bottom: calc(16px + var(--lt-safe-area-bottom, 0px));
+    --cd-overlay-top: calc(16px + var(--lt-safe-area-top, 0px));
+    --cd-overlay-bottom: calc(16px + var(--lt-safe-area-bottom, 0px));
+
+    padding-top: var(--cd-overlay-top);
+    padding-bottom: var(--cd-overlay-bottom);
   }
 
   .cd-dialog {
     /* 约束内联 width（如 800px）不超过视口 */
     max-width: calc(100vw - 16px);
-    max-height: calc(100vh - var(--lt-safe-area-top, 0px) - var(--lt-safe-area-bottom, 0px) - 48px);
+    max-height: calc(100vh - var(--cd-overlay-top) - var(--cd-overlay-bottom));
     margin-bottom: 0;
   }
 }

@@ -1,20 +1,82 @@
 <template>
   <div class="nl-window" :class="{ 'nl-android': isAndroidPlatform }">
     <!-- 自定义拖拽条（桌面端窗口控制；Android 隐藏） -->
-    <div v-if="!isAndroidPlatform" class="nl-drag-bar" data-tauri-drag-region>
+    <div
+      v-if="!isAndroidPlatform"
+      class="nl-drag-bar"
+      data-tauri-drag-region
+      @dblclick="toggleMaximize"
+    >
       <span class="nl-drag-title">LightTier</span>
-      <button class="nl-win-close" @click="closeWindow" :title="t('newCommon.close')">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+      <div class="nl-win-actions" @dblclick.stop>
+        <button
+          type="button"
+          class="nl-win-btn"
+          @click.stop="minimizeWindow"
+          :title="t('newLayout.minimize')"
+          :aria-label="t('newLayout.minimize')"
         >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="nl-win-btn"
+          @click.stop="toggleMaximize"
+          :title="isMaximized ? t('newLayout.restore') : t('newLayout.maximize')"
+          :aria-label="isMaximized ? t('newLayout.restore') : t('newLayout.maximize')"
+        >
+          <svg
+            v-if="isMaximized"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M8 8V5h11v11h-3" />
+            <rect x="5" y="8" width="11" height="11" rx="1" />
+          </svg>
+          <svg
+            v-else
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="5" y="5" width="14" height="14" rx="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="nl-win-btn nl-win-close"
+          @click.stop="closeWindow"
+          :title="t('newCommon.closeWindow')"
+          :aria-label="t('newCommon.closeWindow')"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="nl-root">
@@ -222,6 +284,7 @@ import FloatingMenu from '@/components/FloatingMenu/index.vue'
 import { restoreTheme } from '@/hooks/useExternalThemes'
 import { resolveDefaultTheme, useThemeLoader } from '@/hooks/useThemeLoader'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { isAndroid } from '@/utils/platformUtil'
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 
@@ -324,9 +387,48 @@ const navigate = (path: string) => {
   router.push(path)
 }
 
+// ===== 窗口控制（桌面自定义标题栏） =====
+// 浏览器 Mock 下所有操作静默跳过，避免 Tauri API 抛错
+const isMaximized = ref(false)
+let unlistenResize: (() => void) | null = null
+
+const syncMaximized = async () => {
+  if (!isTauriRuntime()) return
+  try {
+    isMaximized.value = await getCurrentWindow().isMaximized()
+  } catch {
+    /* 窗口不可用时保持当前图标 */
+  }
+}
+
+const minimizeWindow = async () => {
+  if (!isTauriRuntime()) return
+  try {
+    await getCurrentWindow().minimize()
+  } catch {
+    /* 忽略窗口 API 失败 */
+  }
+}
+
+// 最大化/还原：双击拖拽条与标题栏按钮共用
+const toggleMaximize = async () => {
+  if (!isTauriRuntime()) return
+  try {
+    await getCurrentWindow().toggleMaximize()
+    await syncMaximized()
+  } catch {
+    /* 忽略窗口 API 失败 */
+  }
+}
+
 // 关闭窗口（走 Tauri close 事件，由托盘逻辑拦截为隐藏驻留）
-const closeWindow = () => {
-  getCurrentWindow().close()
+const closeWindow = async () => {
+  if (!isTauriRuntime()) return
+  try {
+    await getCurrentWindow().close()
+  } catch {
+    /* 忽略窗口 API 失败 */
+  }
 }
 
 onMounted(() => {
@@ -347,16 +449,30 @@ onMounted(() => {
   easyTierStore.loadConfigFiles()
   // Web 配置服务仅桌面端提供（Android 上路由与菜单均已隐藏）
   if (!isAndroidPlatform) easyTierStore.loadWebConfigFiles()
+  // 窗口最大化状态：初始化并在尺寸变化（含系统快捷键）时同步图标
+  if (isTauriRuntime()) {
+    syncMaximized()
+    getCurrentWindow()
+      .onResized(() => syncMaximized())
+      .then((unlisten) => {
+        unlistenResize = unlisten
+      })
+      .catch(() => {})
+  }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick)
   stopSystemThemeWatch?.()
+  unlistenResize?.()
 })
 </script>
 
 <style scoped>
 .nl-window {
+  /* 内容区底部为悬浮菜单预留的避让高度（窄屏在媒体查询中加大） */
+  --lt-fab-clearance: 56px;
+
   display: flex;
   height: 100%;
   overflow: hidden;
@@ -365,8 +481,8 @@ onBeforeUnmount(() => {
 
 .nl-drag-bar {
   display: flex;
-  height: 28px;
-  padding: 0 var(--theme-space-2) 0 var(--theme-space-4);
+  height: 36px;
+  padding: 0 var(--theme-space-1) 0 var(--theme-space-4);
   background: var(--theme-bg);
   border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
@@ -383,10 +499,17 @@ onBeforeUnmount(() => {
   color: var(--theme-text-muted);
 }
 
-.nl-win-close {
+.nl-win-actions {
   display: flex;
-  width: 28px;
-  height: 24px;
+  gap: 2px;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.nl-win-btn {
+  display: flex;
+  width: 32px;
+  height: 32px;
   color: var(--theme-text-muted);
   cursor: pointer;
   background: transparent;
@@ -398,7 +521,7 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
 }
 
-.nl-win-close:hover {
+.nl-win-btn:hover {
   color: var(--theme-text-on-accent);
   background: var(--theme-accent-primary);
 }
@@ -453,7 +576,7 @@ onBeforeUnmount(() => {
 
 .nl-section-label {
   padding: var(--theme-space-5) var(--theme-space-5) var(--theme-space-2);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 2px;
   color: var(--theme-text-muted);
@@ -852,6 +975,7 @@ onBeforeUnmount(() => {
 .nl-content {
   min-height: 0;
   padding: var(--theme-space-6);
+  padding-bottom: calc(var(--theme-space-6) + var(--lt-fab-clearance, 0px));
   overflow-y: auto;
   flex: 1;
 }
@@ -887,16 +1011,16 @@ onBeforeUnmount(() => {
 
   .nl-content {
     padding: var(--theme-space-4);
+    padding-bottom: calc(var(--theme-space-4) + var(--lt-fab-clearance, 0px));
+  }
+
+  .nl-window {
+    --lt-fab-clearance: 88px;
   }
 }
 
-.nl-content::-webkit-scrollbar {
-  display: none;
-  width: 0;
-}
-
 .nl-content {
-  scrollbar-width: none;
+  scrollbar-width: thin;
 }
 
 /* Toast 通知 */
@@ -974,17 +1098,5 @@ onBeforeUnmount(() => {
     opacity: 0;
     transform: translateY(-8px) scale(0.95);
   }
-}
-</style>
-
-<!-- 新版布局全局隐藏滚动条 -->
-<style>
-.nl-window ::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-}
-
-.nl-window * {
-  scrollbar-width: none !important;
 }
 </style>

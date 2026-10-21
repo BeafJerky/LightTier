@@ -17,6 +17,7 @@ import { restoreStateCurrent, StateFlags } from '@tauri-apps/plugin-window-state
 // 引入 Tauri API（getCurrentWindow 供窗口显隐/聚焦事件，currentMonitor 供窗口越界校正）
 import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window'
 import { emit } from '@tauri-apps/api/event'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { isAndroid } from '@/utils/platformUtil'
 import { migrateLockPassword, verifyLockPassword } from '@/utils/lockUtil'
 import { registerMobileVpnListeners, syncMobileVpnStatus } from '@/utils/mobileVpn'
@@ -46,6 +47,8 @@ const showOnboarding = ref(localStorage.getItem('settings.onboardingDone') !== '
 let unlistenFocus: (() => void) | null = null
 // Android：托盘/窗口状态插件仅桌面注册；VPN 事件监听需在此注册
 const isAndroidPlatform = isAndroid()
+// 浏览器 Mock 无 Tauri API：托盘/窗口/资源目录初始化全部跳过
+const isTauriPlatform = isTauriRuntime()
 let onVisibilityChange: (() => void) | null = null
 
 // 锁定窗口：清空输入并显示锁屏（聚焦监听 / 首次启动共用）
@@ -64,6 +67,11 @@ const unlock = () => {
     isFirstLoad.value = false
   } else {
     lockError.value = true
+    // 保持焦点并选中已输入内容，方便直接重输
+    nextTick(() => {
+      lockInputRef.value?.focus()
+      lockInputRef.value?.select()
+    })
   }
 }
 
@@ -75,50 +83,62 @@ watch(isLocked, (v) => {
 
 onBeforeMount(async () => {
   appStore.initTheme()
-  // Android 无托盘与窗口状态恢复（对应插件仅在桌面注册）
-  if (!isAndroidPlatform) {
+  // 桌面 Tauri：托盘与窗口状态恢复（对应插件仅在桌面注册）
+  if (!isAndroidPlatform && isTauriPlatform) {
     trayStore.initTray()
-    restoreStateCurrent(StateFlags.ALL)
+    restoreStateCurrent(StateFlags.ALL).catch(() => {
+      /* 窗口状态恢复失败不阻断启动 */
+    })
   }
-  checkDir()
-  easytierStore.setConfigPath()
+  // Tauri（桌面/Android）：资源目录就绪；浏览器 Mock 跳过
+  if (isTauriPlatform) {
+    checkDir().catch(() => {
+      /* 资源目录创建失败不阻断启动 */
+    })
+    easytierStore.setConfigPath().catch(() => {
+      /* 配置路径读取失败时保留空值，由 Mock/文件操作降级 */
+    })
+  }
   // 锁屏密码迁移（M-06）：旧版明文持久化值升级为加盐校验串（已是哈希/为空则不变）
   easytierStore.lockPassword = migrateLockPassword(easytierStore.lockPassword)
 })
 
 onMounted(async () => {
-  // 显示窗口（配置文件中设置为初始不可见，现在前端已加载完成）
-  getCurrentWindow()
-    .show()
-    .catch((e) => {
-      console.error('Failed to show window:', e)
-    })
+  // 桌面 Tauri：显示窗口、校正越界位置并通知后端（浏览器 Mock 无窗口 API）
+  if (isTauriPlatform && !isAndroidPlatform) {
+    // 显示窗口（配置文件中设置为初始不可见，现在前端已加载完成）
+    getCurrentWindow()
+      .show()
+      .catch((e) => {
+        console.error('Failed to show window:', e)
+      })
 
-  // 5.14 兜底 B：窗口状态恢复后校验是否越出屏幕（多显示器/分辨率变化场景），越界则居中，避免窗口"丢失"
-  currentMonitor()
-    .then(async (monitor) => {
-      if (!monitor) return
-      const win = getCurrentWindow()
-      const pos = await win.outerPosition()
-      const size = await win.outerSize()
-      const outOfScreen =
-        pos.x + size.width < monitor.position.x ||
-        pos.y + size.height < monitor.position.y ||
-        pos.x > monitor.position.x + monitor.size.width ||
-        pos.y > monitor.position.y + monitor.size.height
-      if (outOfScreen) {
-        await win.center()
-        console.log('[WindowState] restored position out of screen, centered')
-      }
-    })
-    .catch(() => {
-      /* non-Tauri */
-    })
+    // 5.14 兜底 B：窗口状态恢复后校验是否越出屏幕（多显示器/分辨率变化场景），越界则居中，避免窗口"丢失"
+    currentMonitor()
+      .then(async (monitor) => {
+        if (!monitor) return
+        const win = getCurrentWindow()
+        const pos = await win.outerPosition()
+        const size = await win.outerSize()
+        const outOfScreen =
+          pos.x + size.width < monitor.position.x ||
+          pos.y + size.height < monitor.position.y ||
+          pos.x > monitor.position.x + monitor.size.width ||
+          pos.y > monitor.position.y + monitor.size.height
+        if (outOfScreen) {
+          await win.center()
+          console.log('[WindowState] restored position out of screen, centered')
+        }
+      })
+      .catch(() => {
+        /* 窗口监控获取失败时保持原位置 */
+      })
 
-  // 发送事件通知后端，前端已准备就绪
-  emit('frontend-ready').catch((e) => {
-    console.error('Failed to emit frontend-ready event:', e)
-  })
+    // 发送事件通知后端，前端已准备就绪
+    emit('frontend-ready').catch((e) => {
+      console.error('Failed to emit frontend-ready event:', e)
+    })
+  }
 
   // 探测已安装内核版本（非阻塞）：表单/CLI/服务安装按此版本适配
   easytierStore.detectCoreVersion().catch(() => {
@@ -130,19 +150,21 @@ onMounted(async () => {
     lockNow()
   }
 
-  // 窗口重新聚焦时重新锁定（覆盖托盘唤醒 hide→show、从其他窗口切回等场景）
-  getCurrentWindow()
-    .onFocusChanged(({ payload }) => {
-      if (payload && easytierStore.lockPassword && !isLocked.value) {
-        lockNow()
-      }
-    })
-    .then((unlisten) => {
-      unlistenFocus = unlisten
-    })
-    .catch((e) => {
-      console.error('Failed to listen focus event:', e)
-    })
+  // 窗口重新聚焦时重新锁定（覆盖托盘唤醒 hide→show、从其他窗口切回等场景；仅桌面 Tauri）
+  if (isTauriPlatform && !isAndroidPlatform) {
+    getCurrentWindow()
+      .onFocusChanged(({ payload }) => {
+        if (payload && easytierStore.lockPassword && !isLocked.value) {
+          lockNow()
+        }
+      })
+      .then((unlisten) => {
+        unlistenFocus = unlisten
+      })
+      .catch((e) => {
+        console.error('Failed to listen focus event:', e)
+      })
+  }
 
   // Android：注册 VPN 插件事件监听（vpn_service_start → TUN fd 注入），并同步一次 VPN 状态
   if (isAndroidPlatform) {
@@ -157,9 +179,9 @@ onMounted(async () => {
     document.addEventListener('visibilitychange', onVisibilityChange)
   }
 
-  // 检查是否启动后最小化到托盘（桌面专属行为）
+  // 检查是否启动后最小化到托盘（桌面 Tauri 专属行为）
   const minimizeOnStart = localStorage.getItem('settings.minimizeOnStart') === 'true'
-  if (minimizeOnStart && !isAndroidPlatform) {
+  if (minimizeOnStart && !isAndroidPlatform && isTauriPlatform) {
     const window = getCurrentWindow()
     await window.hide().catch((e) => {
       console.error('Failed to hide window:', e)
@@ -178,7 +200,7 @@ onUnmounted(() => {
 
 <template>
   <ConfigGlobal :size="currentSize">
-    <RouterView v-if="!isLocked" :class="greyMode ? `${prefixCls}-grey-mode` : ''" />
+    <RouterView v-if="!isLocked" v-bind="greyMode ? { class: `${prefixCls}-grey-mode` } : {}" />
     <div v-else class="lock-screen">
       <div class="lock-card">
         <div class="lock-icon">✦</div>
@@ -191,10 +213,19 @@ onUnmounted(() => {
           type="password"
           v-model="inputPassword"
           :placeholder="t('newLock.placeholder')"
+          :aria-label="t('newLock.passwordLabel')"
+          autocomplete="current-password"
+          :aria-invalid="lockError"
+          :aria-describedby="lockError ? 'lock-error' : undefined"
+          @input="lockError = false"
           @keyup.enter="unlock"
         />
-        <p v-if="lockError" class="lock-error">{{ t('newLock.error') }}</p>
-        <button class="lock-btn" @click="unlock">{{ t('newLock.unlock') }}</button>
+        <p v-if="lockError" id="lock-error" class="lock-error" role="alert">
+          {{ t('newLock.error') }}
+        </p>
+        <button type="button" class="lock-btn" :disabled="!inputPassword" @click="unlock">
+          {{ t('newLock.unlock') }}
+        </button>
       </div>
     </div>
     <!-- 首次引导屏：解锁后显示（锁屏优先级更高） -->
@@ -222,7 +253,8 @@ body {
 
     padding-top: var(--lt-safe-area-top, 0);
     padding-bottom: var(--lt-safe-area-bottom, 0);
-    // Android edge-to-edge 安全区：原生侧把系统栏尺寸注入 --lt-safe-area-*（桌面端未注入，默认 0）
+
+    /* Android edge-to-edge 安全区：原生侧把系统栏尺寸注入 --lt-safe-area-*（桌面端未注入，默认 0） */
     box-sizing: border-box;
   }
 }
@@ -340,5 +372,11 @@ body {
 .lock-btn:hover {
   background: var(--theme-accent-hover, #c9955f);
   transform: translateY(-1px);
+}
+
+.lock-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  transform: none;
 }
 </style>

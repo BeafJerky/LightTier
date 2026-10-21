@@ -107,7 +107,7 @@ const loadLog = async () => {
   if (!props.configName || !isTauri.value) return
   loading.value = true
   try {
-    // 目标选择：内置内核（v2.6.x）固定写 easytier.log；旧版内核按配置名写 {configName}.log（详见 coreLogUtil）
+    // 目标选择：v2.6.x 内核固定写 easytier.log；旧版内核按配置名写 {configName}.log（详见 coreLogUtil）
     const files = await listFiles(LOG_PATH)
     const target = pickLogTarget(files, props.configName)
     const text = (await readFileContent(`${LOG_PATH}/${target}`)) as string

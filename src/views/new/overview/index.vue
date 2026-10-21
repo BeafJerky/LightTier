@@ -52,7 +52,7 @@
               <span v-if="cfg.conflictPorts.length > 0" class="ndc-conflict-badge"
                 >⚠ {{ cfg.conflictPorts.join(', ') }}</span
               >
-              <span v-if="cfg.pid" class="ndc-pid">PID{{ cfg.pid }}</span>
+              <span v-if="cfg.pid" class="ndc-pid">PID {{ cfg.pid }}</span>
               <span v-if="cfg.virtualIp" class="ndc-vip">{{ cfg.virtualIp }}</span>
             </div>
           </div>
@@ -65,22 +65,41 @@
             <template v-else>…</template>
           </div>
           <div class="ndc-actions">
-            <button class="ndc-btn ndc-btn-run" :disabled="cfg.running" @click="startAction(cfg)">{{
-              t('newCommon.start')
-            }}</button>
+            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
             <button
-              class="ndc-btn ndc-btn-stop"
-              :disabled="!cfg.running"
-              @click="stopAction(cfg)"
-              >{{ t('newCommon.stop') }}</button
+              type="button"
+              class="ndc-btn"
+              :class="cfg.running ? 'ndc-btn-stop' : 'ndc-btn-run'"
+              @click="cfg.running ? stopAction(cfg) : startAction(cfg)"
+              >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</button
             >
           </div>
         </div>
         <div v-if="displayList.length === 0 && !easyTierStore.configListLoading" class="nd-empty">
-          <p>{{ t('newCommon.noConfig') }}</p>
+          <span class="nd-empty-icon">✦</span>
+          <p class="nd-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
+          <span class="nd-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
+          <button type="button" class="nd-empty-cta" @click="goCreateConfig">
+            {{ t('newCommon.createConfig') }}
+          </button>
         </div>
       </div>
     </div>
+
+    <!-- 自定义确认弹窗（替代原生 confirm） -->
+    <CreamDialog v-model="cfmVisible" :title="cfmTitle" width="400px">
+      <p class="nd-cfm-msg">{{ cfmMessage }}</p>
+      <template #footer>
+        <div class="nd-cfm-footer">
+          <button type="button" class="nd-btn-cfm nd-btn-cfm-cancel" @click="resolveConfirm(false)">
+            {{ t('newCommon.cancel') }}
+          </button>
+          <button type="button" class="nd-btn-cfm nd-btn-cfm-ok" @click="resolveConfirm(true)">
+            {{ t('newCommon.confirm') }}
+          </button>
+        </div>
+      </template>
+    </CreamDialog>
   </div>
 </template>
 
@@ -95,7 +114,9 @@
  * 平台差异：Android 卡片展示虚拟 IP（无 PID）；桌面展示 PID。
  */
 import { useEasyTierStore } from '@/store/modules/easytier'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import CreamDialog from '@/components/CreamDialog/index.vue'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useI18n } from 'vue-i18n'
 import { useAutoMetric } from '@/hooks/useAutoMetric'
@@ -111,6 +132,7 @@ import { isAndroid } from '@/utils/platformUtil'
 defineOptions({ name: 'NewOverview' })
 
 const easyTierStore = useEasyTierStore()
+const router = useRouter()
 // 启动队列：避免并发启动导致端口抢占与状态错乱
 const { runningFileName, queueLength, isQueued, enqueue } = useStartQueue()
 
@@ -142,6 +164,31 @@ const getCompatErrors = async (fileName: string) => {
 }
 const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
   issues.map((i) => t(`coreCompat.${i.code}`, i.params || {})).join('\n')
+
+// 自定义确认弹窗（替代原生 confirm，支持主题与键盘）
+const cfmVisible = ref(false)
+const cfmTitle = ref('')
+const cfmMessage = ref('')
+let cfmResolve: ((val: boolean) => void) | null = null
+const showConfirm = (title: string, message: string): Promise<boolean> => {
+  cfmTitle.value = title
+  cfmMessage.value = message
+  cfmVisible.value = true
+  return new Promise<boolean>((resolve) => {
+    cfmResolve = resolve
+  })
+}
+const resolveConfirm = (val: boolean) => {
+  cfmVisible.value = false
+  cfmResolve?.(val)
+  cfmResolve = null
+}
+watch(cfmVisible, (v) => {
+  if (!v && cfmResolve) {
+    cfmResolve(false)
+    cfmResolve = null
+  }
+})
 
 // 顶部统计：运行中 / 已停止 / 配置总数
 const runningCount = computed(() => easyTierStore.runningList.length)
@@ -217,7 +264,8 @@ const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => 
         )
         throw new Error('compat-blocked')
       }
-      const confirmed = window.confirm(
+      const confirmed = await showConfirm(
+        t('newConfig.compatBlockTitle'),
         t('newOverview.compatBlockConfirm', { name: item.configFileName, issues })
       )
       if (!confirmed) throw new Error('compat-cancelled')
@@ -249,7 +297,8 @@ const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => 
         (r) => r.configFileName !== item.configFileName
       )
       if (current) {
-        const confirmed = window.confirm(
+        const confirmed = await showConfirm(
+          t('newOverview.androidSwitchTitle'),
           t('newOverview.androidSwitchConfirm', {
             current: current.configFileName,
             next: item.configFileName
@@ -302,6 +351,11 @@ const stopAction = async (item: RunningItem) => {
     easyTierStore.removeRunningList(item.configFileName)
   }
   await autoMetricAfterStop()
+}
+
+// 空态 CTA：Android 直接进入新增页，桌面打开配置页并自动弹出新增弹窗
+const goCreateConfig = () => {
+  router.push(isAndroid() ? '/new/config-add' : '/new/config?create=1')
 }
 
 // ===== 生命周期 =====
@@ -641,8 +695,47 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--theme-text-muted);
   grid-column: 1 / -1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--theme-space-2);
+  text-align: center;
+}
+
+.nd-empty-icon {
+  font-size: 40px;
+  color: var(--theme-color-scrollbar);
+}
+
+.nd-empty-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-text-muted);
+}
+
+.nd-empty-desc {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.nd-empty-cta {
+  padding: var(--theme-space-2) var(--theme-space-5);
+  margin-top: var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-text-white);
+  cursor: pointer;
+  background: var(--theme-accent-primary);
+  border: none;
+  border-radius: var(--theme-radius-pill);
+  transition: all 0.2s;
+}
+
+.nd-empty-cta:hover {
+  transform: translateY(-1px);
 }
 
 /* 移动端适配：统计卡片换行、配置卡片单列排布 */
@@ -658,5 +751,73 @@ onUnmounted(() => {
   .nd-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
+}
+
+/* 手机尺寸：缩小图标与间距，让三张统计卡在 390px 下仍可并排 */
+@media (width <= 480px) {
+  .nd-stat-card {
+    padding: var(--theme-space-3);
+    gap: var(--theme-space-2);
+    flex-basis: 110px;
+  }
+
+  .nd-stat-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+    border-radius: var(--theme-radius-md);
+  }
+
+  .nd-stat-body {
+    min-width: 0;
+  }
+}
+
+/* 自定义确认弹窗 */
+.nd-cfm-msg {
+  max-height: 260px;
+  padding: var(--theme-space-1) 0 0;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+  white-space: pre-line;
+}
+
+.nd-cfm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--theme-space-3);
+  margin-top: var(--theme-space-4);
+}
+
+.nd-btn-cfm {
+  padding: var(--theme-space-2) var(--theme-space-5);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--theme-radius-sm, 6px);
+  transition: all 0.18s ease;
+}
+
+.nd-btn-cfm-cancel {
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-hover);
+}
+
+.nd-btn-cfm-cancel:hover {
+  background: var(--theme-bg-active);
+}
+
+.nd-btn-cfm-ok {
+  color: var(--theme-text-on-accent, #fff);
+  background: var(--theme-accent-primary);
+}
+
+.nd-btn-cfm-ok:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 </style>

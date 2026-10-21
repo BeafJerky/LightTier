@@ -1,62 +1,41 @@
 <template>
   <CreamDialog
+    ref="dialogRef"
     v-model="visible"
     :title="dialogMode === 'add' ? t('newEdit.addTitle') : t('newEdit.editTitle')"
     width="800px"
     :inline="inline"
+    :before-close="handleBeforeClose"
   >
     <!-- 配置名称（仅新增模式显示） -->
     <div v-if="dialogMode === 'add'" class="ed-name-bar">
-      <label class="ed-form-label">{{ t('newEdit.configName') }}</label>
+      <label class="ed-form-label" :for="fieldId('configName')">{{
+        t('newEdit.configName')
+      }}</label>
       <input
+        :id="fieldId('configName')"
         class="ed-form-input ed-name-input"
         v-model="newConfigName"
         :placeholder="t('newEdit.configNamePlaceholder')"
       />
-      <span v-if="nameError" class="ed-name-error">{{ nameError }}</span>
-      <!-- 模板下拉（5.8）：仅派生表单初始值，不落入 TOML 序列化管线 -->
-      <div class="ed-select-wrapper" ref="templateDropdownRef">
-        <button
-          class="ed-select-trigger"
-          ref="templateTriggerRef"
-          @click="templateDropdownOpen = !templateDropdownOpen"
-        >
-          <span>✦ {{ t(currentTemplateLabel) }}</span>
-          <svg
-            class="ed-select-arrow"
-            :class="{ open: templateDropdownOpen }"
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-          >
-            <path
-              d="M3 4.5L6 7.5L9 4.5"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <Teleport to="body">
-          <div
-            v-if="templateDropdownOpen"
-            class="ed-select-dropdown ed-select-dropdown-fixed"
-            :style="templateDropdownStyle"
-          >
-            <div
-              v-for="tpl in CONFIG_TEMPLATES"
-              :key="tpl.id"
-              class="ed-select-option"
-              :class="{ active: templateId === tpl.id }"
-              @click="(applyTemplate(tpl.id), (templateDropdownOpen = false))"
-              >✦ {{ t(tpl.labelKey) }}</div
-            >
-          </div>
-        </Teleport>
-      </div>
-      <button class="ed-import-btn" @click="handleImportToml" :title="t('newEdit.importToml')">
+      <span v-if="nameError" class="ed-name-error" role="alert">{{ nameError }}</span>
+      <!-- 模板选择（5.8）：原生 select，仅派生表单初始值，不落入 TOML 序列化管线 -->
+      <select
+        class="ed-select"
+        :value="templateId"
+        :aria-label="t('newEdit.templateLabel')"
+        @change="handleTemplateSelect"
+      >
+        <option v-for="tpl in CONFIG_TEMPLATES" :key="tpl.id" :value="tpl.id">
+          {{ t(tpl.labelKey) }}
+        </option>
+      </select>
+      <button
+        type="button"
+        class="ed-import-btn"
+        @click="handleImportToml"
+        :title="t('newEdit.importToml')"
+      >
         <svg
           width="14"
           height="14"
@@ -75,13 +54,35 @@
     </div>
 
     <!-- 双模式切换：代码直编 / 表单结构化（切表单自动重解析；切代码先回写表单改动） -->
-    <div class="ed-tabs">
-      <button class="ed-tab" :class="{ active: editMode === 'code' }" @click="switchToCode">{{
-        t('newEdit.codeEdit')
-      }}</button>
-      <button class="ed-tab" :class="{ active: editMode === 'form' }" @click="switchToForm">{{
-        t('newEdit.formEdit')
-      }}</button>
+    <div class="ed-tabs" role="tablist" :aria-label="t('newEdit.editModeLabel')">
+      <button
+        id="ed-tab-code"
+        ref="codeTabRef"
+        type="button"
+        class="ed-tab"
+        role="tab"
+        aria-controls="ed-panel-code"
+        :aria-selected="editMode === 'code'"
+        :tabindex="editMode === 'code' ? 0 : -1"
+        :class="{ active: editMode === 'code' }"
+        @click="switchToCode"
+        @keydown="handleEditTabKeydown"
+        >{{ t('newEdit.codeEdit') }}</button
+      >
+      <button
+        id="ed-tab-form"
+        ref="formTabRef"
+        type="button"
+        class="ed-tab"
+        role="tab"
+        aria-controls="ed-panel-form"
+        :aria-selected="editMode === 'form'"
+        :tabindex="editMode === 'form' ? 0 : -1"
+        :class="{ active: editMode === 'form' }"
+        @click="switchToForm"
+        @keydown="handleEditTabKeydown"
+        >{{ t('newEdit.formEdit') }}</button
+      >
       <span v-if="store.detectedCoreVersion" class="ed-core-target">{{
         t('newEdit.adaptedTo', { version: store.detectedCoreVersion })
       }}</span>
@@ -104,23 +105,47 @@
     </div>
 
     <div class="ed-body">
+      <!-- 语法/保存错误条：代码模式实时校验，保存前同步复核 -->
+      <div v-if="codeIssue" class="ed-code-error" role="alert">{{ codeIssue }}</div>
       <!-- 代码模式 -->
-      <div v-show="editMode === 'code'" class="ed-code-wrap">
+      <div
+        v-show="editMode === 'code'"
+        id="ed-panel-code"
+        class="ed-code-wrap"
+        role="tabpanel"
+        aria-labelledby="ed-tab-code"
+      >
         <CodeEditor v-model="tomlContent" language="toml" />
       </div>
 
       <!-- 表单模式 -->
-      <div v-show="editMode === 'form'" class="ed-form-scroll">
+      <div
+        v-show="editMode === 'form'"
+        id="ed-panel-form"
+        class="ed-form-scroll"
+        role="tabpanel"
+        aria-labelledby="ed-tab-form"
+      >
         <div class="ed-form-section">
           <div class="ed-form-section-title">{{ t('newEdit.basicConfig') }}</div>
           <div class="ed-form-grid">
             <div class="ed-form-field">
-              <label class="ed-form-label">{{ t('newConfig.hostname') }}</label>
-              <input class="ed-form-input" v-model="formData.hostname" placeholder="hostname" />
+              <label class="ed-form-label" :for="fieldId('hostname')">{{
+                t('newConfig.hostname')
+              }}</label>
+              <input
+                :id="fieldId('hostname')"
+                class="ed-form-input"
+                v-model="formData.hostname"
+                placeholder="hostname"
+              />
             </div>
             <div class="ed-form-field">
-              <label class="ed-form-label">{{ t('newConfig.instanceName') }}</label>
+              <label class="ed-form-label" :for="fieldId('instance_name')">{{
+                t('newConfig.instanceName')
+              }}</label>
               <input
+                :id="fieldId('instance_name')"
                 class="ed-form-input"
                 v-model="formData.instance_name"
                 placeholder="instance_name"
@@ -133,39 +158,53 @@
           <div class="ed-form-section-title">{{ t('newEdit.network') }}</div>
           <div class="ed-form-grid">
             <div class="ed-form-field">
-              <label class="ed-form-label">{{ t('newConfig.networkName') }}</label>
+              <label class="ed-form-label" :for="fieldId('network_name')">{{
+                t('newConfig.networkName')
+              }}</label>
               <input
+                :id="fieldId('network_name')"
                 class="ed-form-input"
                 v-model="formDataNetworkName"
                 placeholder="network_name"
               />
             </div>
             <div class="ed-form-field">
-              <label class="ed-form-label">{{ t('newEdit.networkSecret') }}</label>
+              <label class="ed-form-label" :for="fieldId('network_secret')">{{
+                t('newEdit.networkSecret')
+              }}</label>
               <input
+                :id="fieldId('network_secret')"
                 class="ed-form-input"
                 v-model="formDataNetworkSecret"
                 placeholder="network_secret"
               />
             </div>
             <div class="ed-form-field">
-              <label class="ed-form-label">DHCP</label>
+              <label class="ed-form-label" :for="fieldId('dhcp')">DHCP</label>
               <div class="ed-form-switch-wrap">
-                <span
-                  class="ed-form-switch"
-                  :class="{ on: formData.dhcp }"
-                  @click="formData.dhcp = !formData.dhcp"
-                >
-                  {{ formData.dhcp ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled') }}
-                </span>
+                <label class="ed-form-switch" :class="{ on: formData.dhcp }">
+                  <input
+                    :id="fieldId('dhcp')"
+                    class="lt-sr-only"
+                    type="checkbox"
+                    v-model="formData.dhcp"
+                  />
+                  <span>{{
+                    formData.dhcp ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
+                  }}</span>
+                </label>
               </div>
             </div>
             <div v-if="showRpcPortal" class="ed-form-field">
-              <label class="ed-form-label" :title="unsupportedTitle('rpc_portal')"
+              <label
+                class="ed-form-label"
+                :for="fieldId('rpc_portal')"
+                :title="unsupportedTitle('rpc_portal')"
                 >{{ t('newConfig.rpcPortal')
                 }}<span v-if="!rpcPortalSupported" class="ed-field-warn">⚠</span></label
               >
               <input
+                :id="fieldId('rpc_portal')"
                 class="ed-form-input"
                 :class="{ 'ed-input-unsupported': !rpcPortalSupported }"
                 v-model="formData.rpc_portal"
@@ -182,11 +221,20 @@
               <input
                 class="ed-form-input ed-tag-input"
                 v-model="formListeners[i]"
+                :aria-label="`${t('newEdit.listenSection')} ${i + 1}`"
                 placeholder="tcp://0.0.0.0:11000"
               />
-              <button class="ed-tag-del" @click="formListeners.splice(i, 1)">✕</button>
+              <button
+                type="button"
+                class="ed-tag-del"
+                :title="t('newEdit.removeItem', { label: t('newEdit.listenSection') })"
+                :aria-label="t('newEdit.removeItem', { label: t('newEdit.listenSection') })"
+                @click="formListeners.splice(i, 1)"
+              >
+                ✕
+              </button>
             </div>
-            <button class="ed-tag-add" @click="formListeners.push('')">{{
+            <button type="button" class="ed-tag-add" @click="formListeners.push('')">{{
               t('newEdit.addListen')
             }}</button>
           </div>
@@ -199,11 +247,22 @@
               <input
                 class="ed-form-input ed-tag-input"
                 v-model="formPeers[i]"
+                :aria-label="`${t('newEdit.peerSection')} ${i + 1}`"
                 placeholder="tcp://host:port"
               />
-              <button class="ed-tag-del" @click="removePeer(i)">✕</button>
+              <button
+                type="button"
+                class="ed-tag-del"
+                :title="t('newEdit.removeItem', { label: t('newEdit.peerSection') })"
+                :aria-label="t('newEdit.removeItem', { label: t('newEdit.peerSection') })"
+                @click="removePeer(i)"
+              >
+                ✕
+              </button>
             </div>
-            <button class="ed-tag-add" @click="addPeer">{{ t('newEdit.addPeer') }}</button>
+            <button type="button" class="ed-tag-add" @click="addPeer">{{
+              t('newEdit.addPeer')
+            }}</button>
           </div>
         </div>
 
@@ -214,11 +273,20 @@
               <input
                 class="ed-form-input ed-tag-input"
                 v-model="formRoutes[i]"
+                :aria-label="`${t('newEdit.routeSection')} ${i + 1}`"
                 placeholder="10.0.0.0/8"
               />
-              <button class="ed-tag-del" @click="formRoutes.splice(i, 1)">✕</button>
+              <button
+                type="button"
+                class="ed-tag-del"
+                :title="t('newEdit.removeItem', { label: t('newEdit.routeSection') })"
+                :aria-label="t('newEdit.removeItem', { label: t('newEdit.routeSection') })"
+                @click="formRoutes.splice(i, 1)"
+              >
+                ✕
+              </button>
             </div>
-            <button class="ed-tag-add" @click="formRoutes.push('')">{{
+            <button type="button" class="ed-tag-add" @click="formRoutes.push('')">{{
               t('newEdit.addRoute')
             }}</button>
           </div>
@@ -231,11 +299,20 @@
               <input
                 class="ed-form-input ed-tag-input"
                 v-model="formExitNodes[i]"
+                :aria-label="`${t('newEdit.exitSection')} ${i + 1}`"
                 placeholder="10.0.0.0/24"
               />
-              <button class="ed-tag-del" @click="formExitNodes.splice(i, 1)">✕</button>
+              <button
+                type="button"
+                class="ed-tag-del"
+                :title="t('newEdit.removeItem', { label: t('newEdit.exitSection') })"
+                :aria-label="t('newEdit.removeItem', { label: t('newEdit.exitSection') })"
+                @click="formExitNodes.splice(i, 1)"
+              >
+                ✕
+              </button>
             </div>
-            <button class="ed-tag-add" @click="formExitNodes.push('')">{{
+            <button type="button" class="ed-tag-add" @click="formExitNodes.push('')">{{
               t('newEdit.addExit')
             }}</button>
           </div>
@@ -248,18 +325,31 @@
               <input
                 class="ed-form-input ed-tag-input-short"
                 v-model="formFlagsKeys[i]"
+                :aria-label="`${t('newEdit.flagsSection')} ${i + 1} key`"
                 placeholder="key"
               />
               <input
                 class="ed-form-input ed-tag-input"
                 v-model="formFlagsVals[i]"
+                :aria-label="`${t('newEdit.flagsSection')} ${i + 1} value`"
                 placeholder="value"
               />
-              <button class="ed-tag-del" @click="removeFlag(i)">✕</button>
+              <button
+                type="button"
+                class="ed-tag-del"
+                :title="t('newEdit.removeItem', { label: t('newEdit.flagsSection') })"
+                :aria-label="t('newEdit.removeItem', { label: t('newEdit.flagsSection') })"
+                @click="removeFlag(i)"
+              >
+                ✕
+              </button>
             </div>
-            <button class="ed-tag-add" @click="(formFlagsKeys.push(''), formFlagsVals.push(''))">{{
-              t('newEdit.addFlag')
-            }}</button>
+            <button
+              type="button"
+              class="ed-tag-add"
+              @click="(formFlagsKeys.push(''), formFlagsVals.push(''))"
+              >{{ t('newEdit.addFlag') }}</button
+            >
           </div>
         </div>
 
@@ -270,50 +360,72 @@
           >
           <div class="ed-form-grid">
             <div class="ed-form-field" v-for="f in visibleAdvancedFlagDefs" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
+              <label
+                class="ed-form-label"
+                :for="fieldId(f.key)"
+                :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey) }}</label
+              >
               <div class="ed-form-switch-wrap">
-                <span
-                  class="ed-form-switch"
-                  :class="{ on: isAdvancedFlagOn(f) }"
-                  @click="toggleAdvancedFlag(f)"
-                >
-                  {{
+                <label class="ed-form-switch" :class="{ on: isAdvancedFlagOn(f) }">
+                  <input
+                    :id="fieldId(f.key)"
+                    class="lt-sr-only"
+                    type="checkbox"
+                    :checked="isAdvancedFlagOn(f)"
+                    @change="toggleAdvancedFlag(f)"
+                  />
+                  <span>{{
                     isAdvancedFlagOn(f) ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
-                  }}
-                </span>
+                  }}</span>
+                </label>
               </div>
             </div>
             <div class="ed-form-field" v-for="f in visibleTopSwitchDefs" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
+              <label
+                class="ed-form-label"
+                :for="fieldId(f.key)"
+                :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey) }}</label
+              >
               <div class="ed-form-switch-wrap">
-                <span
-                  class="ed-form-switch"
-                  :class="{ on: formData[f.key] === true }"
-                  @click="toggleTopSwitch(f.key)"
-                >
-                  {{
+                <label class="ed-form-switch" :class="{ on: formData[f.key] === true }">
+                  <input
+                    :id="fieldId(f.key)"
+                    class="lt-sr-only"
+                    type="checkbox"
+                    :checked="formData[f.key] === true"
+                    @change="toggleTopSwitch(f.key)"
+                  />
+                  <span>{{
                     formData[f.key] === true
                       ? t('newConfig.dhcpEnabled')
                       : t('newConfig.dhcpDisabled')
-                  }}
-                </span>
+                  }}</span>
+                </label>
               </div>
             </div>
             <div class="ed-form-field" v-for="f in visibleTopTextDefs" :key="f.key">
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
+              <label
+                class="ed-form-label"
+                :for="fieldId(f.key)"
+                :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey) }}</label
+              >
               <input
                 v-if="f.key === 'stun_servers'"
+                :id="fieldId(f.key)"
                 class="ed-form-input"
                 v-model="formStunServers"
                 :placeholder="f.key"
               />
-              <input v-else class="ed-form-input" v-model="formData[f.key]" :placeholder="f.key" />
+              <input
+                v-else
+                :id="fieldId(f.key)"
+                class="ed-form-input"
+                v-model="formData[f.key]"
+                :placeholder="f.key"
+              />
             </div>
           </div>
           <div v-if="isAddMode" class="ed-compat-note">
@@ -329,13 +441,17 @@
         <div v-if="securitySectionVisible" class="ed-form-section ed-secure-section">
           <div class="ed-secure-head" :title="t('newEdit.tipSecureMode')">
             <span class="ed-secure-title">🔒 {{ t('newEdit.securitySection') }}</span>
-            <span
-              class="ed-form-switch"
-              :class="{ on: secureModeEnabled }"
-              @click="secureModeEnabled = !secureModeEnabled"
-            >
-              {{ secureModeEnabled ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled') }}
-            </span>
+            <label class="ed-form-switch" :class="{ on: secureModeEnabled }">
+              <input
+                class="lt-sr-only"
+                type="checkbox"
+                v-model="secureModeEnabled"
+                :aria-label="t('newEdit.securitySection')"
+              />
+              <span>{{
+                secureModeEnabled ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
+              }}</span>
+            </label>
           </div>
           <div v-if="secureModeEnabled" class="ed-form-grid">
             <div
@@ -344,11 +460,15 @@
               v-for="f in visibleSecurityFieldDefs"
               :key="f.key"
             >
-              <label class="ed-form-label" :title="f.tooltipKey ? t(f.tooltipKey) : f.key">{{
-                t(f.labelKey)
-              }}</label>
+              <label
+                class="ed-form-label"
+                :for="fieldId(f.key)"
+                :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
+                >{{ t(f.labelKey) }}</label
+              >
               <div class="ed-secret-row">
                 <input
+                  :id="fieldId(f.key)"
                   class="ed-form-input"
                   :class="{ 'ed-secret-input': f.secret }"
                   :value="secretDisplays[f.key] ?? formData[f.key] ?? ''"
@@ -358,8 +478,12 @@
                 />
                 <button
                   v-if="f.secret"
+                  type="button"
                   class="ed-btn-sm"
                   :title="secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
+                  :aria-label="
+                    secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')
+                  "
                   @click="toggleSecretVisible(f.key)"
                   >{{
                     secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')
@@ -367,8 +491,10 @@
                 >
                 <button
                   v-if="f.filePick"
+                  type="button"
                   class="ed-btn-sm"
                   :title="t('newEdit.pickFile')"
+                  :aria-label="t('newEdit.pickFile')"
                   @click="pickCredentialFile"
                   >📁 {{ t('newEdit.pickFile') }}</button
                 >
@@ -405,18 +531,43 @@
           dialogMode === 'add' ? t('newEdit.addFooter') : t('newEdit.editFooter')
         }}</span>
         <div class="ed-footer-btns">
-          <button class="ed-btn ed-btn-cancel" @click="visible = false">{{
+          <button type="button" class="ed-btn ed-btn-cancel" @click="requestCloseFromButton">{{
             t('newCommon.cancel')
           }}</button>
-          <button class="ed-btn ed-btn-primary" :disabled="saving" @click="handleSave">{{
-            saving
-              ? t('newCommon.saving')
-              : dialogMode === 'add'
-                ? t('newEdit.create')
-                : t('newEdit.save')
-          }}</button>
+          <button
+            type="button"
+            class="ed-btn ed-btn-primary"
+            :disabled="saving || (editMode === 'code' && !!codeIssue)"
+            :title="editMode === 'code' && codeIssue ? t('newEdit.codeInvalidSave') : undefined"
+            @click="handleSave"
+            >{{
+              saving
+                ? t('newCommon.saving')
+                : dialogMode === 'add'
+                  ? t('newEdit.create')
+                  : t('newEdit.save')
+            }}</button
+          >
         </div>
       </div>
+    </template>
+  </CreamDialog>
+
+  <!-- 放弃未保存修改的二次确认（Esc/遮罩/关闭按钮/取消按钮/Android 返回键共用） -->
+  <CreamDialog
+    v-model="discardVisible"
+    :title="t('newCommon.discardTitle')"
+    width="380px"
+    :close-on-overlay="false"
+  >
+    <p class="ed-discard-msg">{{ t('newCommon.discardMsg') }}</p>
+    <template #footer>
+      <button type="button" class="ed-btn ed-btn-cancel" @click="resolveDiscard(false)">{{
+        t('newCommon.cancel')
+      }}</button>
+      <button type="button" class="ed-btn ed-btn-danger" @click="resolveDiscard(true)">{{
+        t('newCommon.discardConfirm')
+      }}</button>
     </template>
   </CreamDialog>
 </template>
@@ -430,12 +581,12 @@
  * 保存前统一经 normalizeToml 清洗（合并默认值、剔除空参数，5.7），保证落盘 TOML 简洁。
  * 关键点：secret 字段以掩码展示、真实值暂存 secretBackup，未改动则原值写回。
  */
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onUnmounted, useId, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onClickOutside } from '@vueuse/core'
 import { CodeEditor } from '@/components/CodeEditor'
 import * as toml from 'smol-toml'
 import { normalizeToml } from '@/utils/easyTierUtil'
+import { validateToml } from '@/utils/tomlValidationUtil'
 import { migrateLightTierConfig } from '@/utils/lighttierConfigUtil'
 import { isValidConfigName } from '@/utils/configNameUtil'
 import {
@@ -483,11 +634,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [v: boolean]
-  saved: [name: string, content: string]
+  // done 由父组件在写盘结束后回调：true 关闭弹窗，false 保留内容与弹窗
+  saved: [name: string, content: string, done: (ok: boolean) => void]
 }>()
 
+const dialogRef = ref<InstanceType<typeof CreamDialog> | null>(null)
+
+// 表单字段 id 前缀：label for 与控件的可访问名称一一对应
+const uid = useId()
+const fieldId = (key: string) => `ed-${uid}-${key}`
+const codeTabRef = ref<HTMLButtonElement | null>(null)
+const formTabRef = ref<HTMLButtonElement | null>(null)
+
 const visible = ref(props.modelValue)
-// 弹窗打开时重置内部状态（配置名 / 校验错误 / 模板选择）
+// 弹窗打开时重置内部状态（配置名 / 校验错误 / 模板选择 / 脏检查基线）
 watch(
   () => props.modelValue,
   (v) => {
@@ -496,10 +656,16 @@ watch(
       newConfigName.value = props.dialogMode === 'add' ? '' : props.configName
       nameError.value = ''
       templateId.value = 'custom'
-      templateDropdownOpen.value = false
       // 重新打开时回到代码模式：避免上一次打开留下的表单值被保存到新配置
       editMode.value = 'code'
       formParsedOk.value = false
+      codeIssue.value = ''
+      saveError.value = ''
+      tomlContent.value = props.tomlContent
+      initialToml.value = props.tomlContent
+      initialName.value = props.dialogMode === 'add' ? '' : props.configName
+      formBaseline.value = ''
+      runCodeValidation()
     }
   }
 )
@@ -514,6 +680,14 @@ const nameError = ref('')
 const editMode = ref<'code' | 'form'>('code')
 // 保存中标志：避免重复提交
 const saving = ref(false)
+// 代码语法问题（实时校验与保存前复核共用；空串表示无问题）
+const codeIssue = ref('')
+// 归一化/写盘结果错误提示
+const saveError = ref('')
+// 脏检查基线：打开时的名称/代码 + 进入表单模式时的表单快照
+const initialToml = ref(props.tomlContent)
+const initialName = ref(props.dialogMode === 'add' ? '' : props.configName)
+const formBaseline = ref('')
 // 代码区内容：外部传入的 TOML 原文，编辑期间以本地副本为准
 const tomlContent = ref(props.tomlContent)
 watch(
@@ -522,6 +696,33 @@ watch(
     tomlContent.value = v
   }
 )
+
+// ===== TOML 实时校验（300ms 防抖）=====
+let codeCheckTimer: ReturnType<typeof setTimeout> | null = null
+const runCodeValidation = () => {
+  const result = validateToml(tomlContent.value)
+  codeIssue.value = result.ok
+    ? ''
+    : t('newEdit.codeInvalid', {
+        line: result.error.line,
+        column: result.error.column
+      })
+}
+const scheduleCodeValidation = () => {
+  if (codeCheckTimer) clearTimeout(codeCheckTimer)
+  codeCheckTimer = setTimeout(() => {
+    codeCheckTimer = null
+    runCodeValidation()
+  }, 300)
+}
+watch(tomlContent, () => {
+  if (editMode.value !== 'code') return
+  saveError.value = ''
+  scheduleCodeValidation()
+})
+onUnmounted(() => {
+  if (codeCheckTimer) clearTimeout(codeCheckTimer)
+})
 
 interface FormData {
   hostname: string
@@ -571,6 +772,80 @@ const formFlagsVals = ref<string[]>([])
 
 const formDataNetworkName = ref('')
 const formDataNetworkSecret = ref('')
+
+// ===== 未保存修改检测 =====
+// 表单模式以内容快照比较（避免逐事件接线）；代码模式直接比较原文；名称变化同样视为修改
+const formSignature = (): string =>
+  JSON.stringify({
+    formData: formData.value,
+    secureMode: secureModeEnabled.value,
+    stun: formStunServers.value,
+    listeners: formListeners.value,
+    peers: formPeers.value,
+    peerExtras: formPeerExtras.value,
+    routes: formRoutes.value,
+    exitNodes: formExitNodes.value,
+    flagKeys: formFlagsKeys.value,
+    flagVals: formFlagsVals.value,
+    networkName: formDataNetworkName.value,
+    networkSecret: formDataNetworkSecret.value,
+    secretDisplays: secretDisplays.value
+  })
+
+const dirty = computed(() => {
+  if (!visible.value) return false
+  if (newConfigName.value !== initialName.value) return true
+  if (editMode.value === 'form' && formParsedOk.value) {
+    return formSignature() !== formBaseline.value
+  }
+  return tomlContent.value !== initialToml.value
+})
+
+// 放弃确认：Promise 供 CreamDialog before-close 与 Android 路由守卫共同等待
+const discardVisible = ref(false)
+let discardResolve: ((ok: boolean) => void) | null = null
+const resolveDiscard = (ok: boolean) => {
+  const resolve = discardResolve
+  discardResolve = null
+  discardVisible.value = false
+  if (!ok) return resolve?.(false)
+  // 用户明确放弃修改：重置基线，避免关闭动画/路由跳转再次触发提示
+  initialToml.value = tomlContent.value
+  initialName.value = newConfigName.value
+  formBaseline.value = formSignature()
+  resolve?.(true)
+}
+const confirmDiscard = (): Promise<boolean> => {
+  if (!dirty.value) return Promise.resolve(true)
+  if (discardVisible.value) return Promise.resolve(false)
+  return new Promise<boolean>((resolve) => {
+    discardResolve = resolve
+    discardVisible.value = true
+  })
+}
+// 放弃确认框被 Esc/遮罩/返回键关闭时视为取消
+watch(discardVisible, (v) => {
+  if (!v && discardResolve) {
+    const resolve = discardResolve
+    discardResolve = null
+    resolve(false)
+  }
+})
+
+const requestCloseFromButton = () => {
+  void dialogRef.value?.requestClose()
+}
+const handleBeforeClose = async (): Promise<boolean> => {
+  // 写盘期间不允许关闭，避免内容与结果状态错位
+  if (saving.value) return false
+  return confirmDiscard()
+}
+
+defineExpose({
+  isDirty: () => dirty.value,
+  confirmDiscard,
+  requestClose: () => dialogRef.value?.requestClose()
+})
 
 // TOML 原文 → 表单模型：解析失败时保留空表单（用户切到表单模式不报错）
 // @returns 是否解析成功（供代码/表单双向切换判断能否安全回写）
@@ -798,49 +1073,57 @@ const toggleSecretVisible = (key: string) => {
 }
 
 // 切到表单模式：以当前代码区内容重新解析，保证两种模式数据一致
-// formParsedOk 记录解析是否成功，失败时禁止表单 → 代码回写（避免覆盖用户无法解析的代码）
+// formParsedOk 记录解析是否成功；解析失败不进入表单，避免空表单覆盖原文件
 const formParsedOk = ref(false)
 const switchToForm = () => {
-  formParsedOk.value = parseFormData()
+  if (editMode.value === 'form') return
+  const ok = parseFormData()
+  formParsedOk.value = ok
+  if (!ok) {
+    const result = validateToml(tomlContent.value)
+    codeIssue.value = result.ok
+      ? t('newEdit.formParseFailed')
+      : t('newEdit.codeInvalid', {
+          line: result.error.line,
+          column: result.error.column
+        })
+    return
+  }
+  codeIssue.value = ''
+  saveError.value = ''
+  // 进入表单时记录基线：切回代码时仅在有实际修改时回写，避免无意义的格式变化
+  formBaseline.value = formSignature()
   editMode.value = 'form'
 }
 
 // 切到代码模式：先把表单改动回写到代码区，避免“表单改完切代码再保存”路径丢失修改
 const switchToCode = () => {
-  if (editMode.value === 'form' && formParsedOk.value) {
+  if (editMode.value === 'form' && formParsedOk.value && formSignature() !== formBaseline.value) {
     tomlContent.value = buildFormToml()
   }
   editMode.value = 'code'
+  runCodeValidation()
+}
+
+// 编辑模式 tab 键盘操作：左右方向键切换，Home/End 定位首尾
+const handleEditTabKeydown = (e: KeyboardEvent) => {
+  const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  e.preventDefault()
+  if (e.key === 'ArrowLeft' || e.key === 'Home') switchToCode()
+  else switchToForm()
+  nextTick(() => {
+    ;(editMode.value === 'code' ? codeTabRef.value : formTabRef.value)?.focus()
+  })
 }
 
 // === 配置模板（5.8） ===
 const templateId = ref<'server' | 'client' | 'custom'>('custom')
-const templateDropdownOpen = ref(false)
-const templateDropdownRef = ref<HTMLElement | null>(null)
-const templateTriggerRef = ref<HTMLButtonElement | null>(null)
-onClickOutside(templateDropdownRef, () => {
-  templateDropdownOpen.value = false
-})
 
-const currentTemplateLabel = computed(() => {
-  const tpl = CONFIG_TEMPLATES.find((t) => t.id === templateId.value)
-  return tpl ? tpl.labelKey : 'newEdit.templateCustom'
-})
-
-const templateDropdownStyle = computed(() => {
-  if (!templateTriggerRef.value) return {}
-  const rect = templateTriggerRef.value.getBoundingClientRect()
-  const dropdownWidth = Math.max(rect.width, 140)
-  // 窄屏下拉不超出视口右缘
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - dropdownWidth - 8))
-  return {
-    position: 'fixed' as const,
-    top: `${rect.bottom + 4}px`,
-    left: `${left}px`,
-    width: `${dropdownWidth}px`,
-    zIndex: 9999
-  }
-})
+// 原生 select 变更 → 应用模板
+const handleTemplateSelect = (e: Event) => {
+  applyTemplate((e.target as HTMLSelectElement).value as 'server' | 'client' | 'custom')
+}
 
 // 应用模板：覆写代码区 TOML，表单模式下同步重解析（模板不落盘、仅影响初始值）
 const applyTemplate = (id: 'server' | 'client' | 'custom') => {
@@ -851,6 +1134,8 @@ const applyTemplate = (id: 'server' | 'client' | 'custom') => {
   if (editMode.value === 'form') {
     formParsedOk.value = parseFormData()
   }
+  codeIssue.value = ''
+  saveError.value = ''
 }
 
 // 校验配置名：非空、仅字母数字下划线连字符、新增时不得与现有配置重名
@@ -872,14 +1157,42 @@ const validateName = (): boolean => {
   return true
 }
 
-// 保存：按当前模式取内容 → normalizeToml 清洗 → emit saved（父组件负责写盘）
+// 保存：按当前模式取内容 → 语法校验 → normalizeToml 清洗 → 等待父组件写盘结果后再关闭
 const handleSave = async () => {
+  if (saving.value) return
+  saveError.value = ''
+  if (editMode.value === 'code') {
+    const check = validateToml(tomlContent.value)
+    if (!check.ok) {
+      codeIssue.value = t('newEdit.codeInvalid', {
+        line: check.error.line,
+        column: check.error.column
+      })
+      return
+    }
+    codeIssue.value = ''
+  } else if (!formParsedOk.value) {
+    codeIssue.value = t('newEdit.formParseFailed')
+    return
+  }
+  if (dialogMode.value === 'add' && !validateName()) return
+
+  const rawContent = editMode.value === 'code' ? tomlContent.value : buildFormToml()
+  // 表单构建结果再校验一次：任何非法 TOML 都不得进入写盘流程
+  const check = validateToml(rawContent)
+  if (!check.ok) {
+    codeIssue.value = t('newEdit.codeInvalid', {
+      line: check.error.line,
+      column: check.error.column
+    })
+    return
+  }
+
   saving.value = true
   try {
-    // 5.7：保存前统一清洗（默认值合并 + 空值剔除），双模式均不落空参数
-    const rawContent = editMode.value === 'code' ? tomlContent.value : buildFormToml()
     let content = rawContent
     try {
+      // 5.7：保存前统一清洗（默认值合并 + 空值剔除），双模式均不落空参数
       const parsed = toml.parse(rawContent) as Record<string, any>
       // 旧版 LightTier 私有标记迁移到 [lighttier]，保存后不再污染 [flags]
       migrateLightTierConfig(parsed)
@@ -895,14 +1208,21 @@ const handleSave = async () => {
       }
       content = toml.stringify(normalized)
     } catch {
-      /* 解析失败按原样保存 */
+      // 归一化失败：不写坏原文件，保留用户输入
+      saveError.value = t('newCommon.saveFail')
+      return
     }
-    if (dialogMode.value === 'add') {
-      if (!validateName()) return
-      emit('saved', newConfigName.value, content)
-    } else {
-      emit('saved', props.configName, content)
-    }
+
+    const name = dialogMode.value === 'add' ? newConfigName.value : props.configName
+    const ok = await new Promise<boolean>((resolve) => {
+      emit('saved', name, content, resolve)
+    })
+    if (!ok) return
+    // 写盘成功才重置基线并关闭；失败时保留弹窗与内容
+    initialToml.value = tomlContent.value
+    initialName.value = newConfigName.value
+    formParsedOk.value = true
+    formBaseline.value = formSignature()
     visible.value = false
   } finally {
     saving.value = false
@@ -954,7 +1274,7 @@ const handleImportToml = async () => {
 }
 
 .ed-name-error {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-accent-primary, #e8a0a0);
   white-space: nowrap;
 }
@@ -983,77 +1303,28 @@ const handleImportToml = async () => {
   border-style: solid;
 }
 
-/* 模板下拉（复用 SettingsDialog 已验证的 trigger + Teleport + fixed 模式） */
-.ed-select-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.ed-select-trigger {
-  display: flex;
-  min-width: 110px;
-  padding: 6px 10px;
+/* 模板原生下拉 */
+.ed-select {
+  padding: 6px 28px 6px 12px;
   font-family: var(--theme-font-body, 'Sora', sans-serif);
   font-size: 12px;
   color: var(--theme-text-secondary, #7a6e5e);
-  white-space: nowrap;
   cursor: pointer;
   background: var(--theme-bg-card, #fff);
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237a6e5e' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
+  outline: none;
   transition: border-color 0.2s;
-  align-items: center;
-  gap: 6px;
-}
-
-.ed-select-trigger:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.ed-select-arrow {
-  margin-left: auto;
-  transition: transform 0.2s;
+  appearance: none;
   flex-shrink: 0;
 }
 
-.ed-select-arrow.open {
-  transform: rotate(180deg);
-}
-
-.ed-select-dropdown {
-  max-height: 160px;
-  padding: 4px;
-  overflow-y: auto;
-  background: var(--theme-bg-card, #fff);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-sm, 6px);
-  box-shadow: var(--theme-shadow-sm, 0 4px 12px rgb(0 0 0 / 12%));
-}
-
-.ed-select-dropdown-fixed {
-  position: fixed !important;
-}
-
-.ed-select-option {
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--theme-text-secondary, #7a6e5e);
-  white-space: nowrap;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
-}
-
-.ed-select-option:hover {
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-}
-
-.ed-select-option.active {
-  font-weight: 500;
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-active, rgb(232 160 160 / 10%));
+.ed-select:hover,
+.ed-select:focus {
+  border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 .ed-tabs {
@@ -1108,7 +1379,7 @@ const handleImportToml = async () => {
 
 .ed-compat-note {
   margin-top: 10px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
 }
@@ -1152,6 +1423,24 @@ const handleImportToml = async () => {
 
 .ed-body {
   min-height: 350px;
+}
+
+.ed-code-error {
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-accent-primary, #e8a0a0);
+  background: var(--theme-bg-tag, rgb(232 160 160 / 6%));
+  border: 1px solid var(--theme-accent-primary, #e8a0a0);
+  border-radius: var(--theme-radius-sm, 10px);
+}
+
+.ed-discard-msg {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .ed-code-wrap {
@@ -1208,7 +1497,7 @@ const handleImportToml = async () => {
 }
 
 .ed-form-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
   color: var(--theme-text-muted, #c8bdb2);
@@ -1236,7 +1525,7 @@ const handleImportToml = async () => {
 }
 
 .ed-form-switch {
-  display: inline-block;
+  display: inline-flex;
   padding: 4px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -1245,6 +1534,13 @@ const handleImportToml = async () => {
   background: color-mix(in srgb, var(--theme-text-muted, #c8bdb2) 10%, transparent);
   border-radius: var(--theme-radius-pill, 100px);
   transition: all 0.2s;
+  align-items: center;
+}
+
+/* 隐藏的原生 checkbox 键盘聚焦时给整个开关画焦点环 */
+.ed-form-switch:focus-within {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
 }
 
 .ed-form-switch.on {
@@ -1275,8 +1571,8 @@ const handleImportToml = async () => {
 
 .ed-tag-del {
   display: flex;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   font-size: 12px;
   color: var(--theme-text-muted, #c8bdb2);
   cursor: pointer;
@@ -1350,7 +1646,7 @@ const handleImportToml = async () => {
 
 .ed-locked-hint {
   margin-bottom: 8px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
 }
@@ -1366,7 +1662,7 @@ const handleImportToml = async () => {
   gap: 10px;
   padding: 5px 8px;
   font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   background: color-mix(in srgb, var(--theme-bg-card, #fff) 55%, transparent);
   border-radius: var(--theme-radius-sm, 6px);
@@ -1430,7 +1726,7 @@ const handleImportToml = async () => {
 .ed-btn-sm {
   padding: 6px 12px;
   font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-secondary, #7a6e5e);
   white-space: nowrap;
   cursor: pointer;
@@ -1494,6 +1790,15 @@ const handleImportToml = async () => {
 
 .ed-btn-primary:hover:not(:disabled) {
   background: var(--theme-accent-hover, #c9955f);
+}
+
+.ed-btn-danger {
+  color: var(--theme-text-on-accent, #fff);
+  background: var(--theme-accent-hover, #c9955f);
+}
+
+.ed-btn-danger:hover:not(:disabled) {
+  background: var(--theme-accent-primary, #d4a574);
 }
 
 /* 移动端窄屏：名称栏换行、表单单列、编辑区降矮、底部按钮可换行 */

@@ -1,6 +1,7 @@
 <template>
   <div class="nce-page">
     <EditDialog
+      ref="editRef"
       v-model="visible"
       :config-name="configName"
       :toml-content="tomlContent"
@@ -20,7 +21,7 @@
  * 关闭面板统一 goBack 回退（保存成功/取消均走同一出口），保持移动端返回语义一致。
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import EditDialog from '@/views/new/config-view/EditDialog.vue'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -36,6 +37,7 @@ const { t } = useI18n()
 const easyTierStore = useEasyTierStore()
 const { readFileContent, writeFileContent } = useMockData()
 const { show: toast } = useCreamToast()
+const editRef = ref<InstanceType<typeof EditDialog> | null>(null)
 
 // 页面模式在挂载时捕获：路由回退后，在途异步流程（保存 toast）仍使用正确模式
 const dialogMode: 'add' | 'edit' = route.name === 'NewConfigAddView' ? 'add' : 'edit'
@@ -82,14 +84,42 @@ watch(visible, (v) => {
   if (!v) goBack()
 })
 
+// 物理返回键与页面返回都会经过路由守卫：有未保存修改时复用弹窗自身的放弃确认
+onBeforeRouteLeave(async () => {
+  const edit = editRef.value
+  if (!edit || !edit.isDirty()) return true
+  return edit.confirmDiscard()
+})
+
 // 保存回调：写盘后按模式提示成功/失败（移动端由本页直接完成落盘）
-const handleSaved = async (name: string, content: string) => {
+// 覆盖前先备份；写盘成功才让 EditDialog 关闭，失败时保留内容
+const handleSaved = async (name: string, content: string, done: (ok: boolean) => void) => {
+  const isAdd = dialogMode === 'add'
+  let backupFailed = false
   try {
+    if (!isAdd) {
+      try {
+        const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`)) as string
+        await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
+      } catch {
+        backupFailed = true
+        throw new Error('backup failed')
+      }
+    }
     await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
-    toast(dialogMode === 'add' ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
+    toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
     await easyTierStore.loadConfigFiles()
+    done(true)
   } catch {
-    toast(dialogMode === 'add' ? t('newCommon.addFail') : t('newCommon.saveFail'), 'error')
+    toast(
+      isAdd
+        ? t('newCommon.addFail')
+        : backupFailed
+          ? t('newConfig.backupFailed')
+          : t('newCommon.saveFail'),
+      'error'
+    )
+    done(false)
   }
 }
 </script>

@@ -1,6 +1,12 @@
 <template>
-  <div class="og-overlay">
-    <div class="og-card">
+  <div
+    class="og-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="og-title"
+    @keydown="handleKeydown"
+  >
+    <div ref="cardRef" class="og-card" tabindex="-1">
       <!-- 步骤内容 -->
       <Transition name="og-step" mode="out-in">
         <div :key="step" class="og-body">
@@ -20,13 +26,13 @@
                 <path d="M8.4 7.3l3.3 8.3M15.6 7.3l-3.3 8.3" />
               </svg>
             </div>
-            <h2 class="og-title">{{ t('newOnboarding.welcomeTitle') }}</h2>
+            <h2 id="og-title" class="og-title">{{ t('newOnboarding.welcomeTitle') }}</h2>
             <p class="og-desc">{{ t('newOnboarding.welcomeDesc') }}</p>
           </div>
 
           <!-- 第 2 步：核心功能简介 -->
           <div v-else-if="step === 2" class="og-features">
-            <h2 class="og-title">{{ t('newOnboarding.featuresTitle') }}</h2>
+            <h2 id="og-title" class="og-title">{{ t('newOnboarding.featuresTitle') }}</h2>
             <p class="og-sub">{{ t('newOnboarding.featuresDesc') }}</p>
             <div class="og-feature-grid">
               <div v-for="f in features" :key="f.title" class="og-feature">
@@ -39,27 +45,25 @@
             </div>
           </div>
 
-          <!-- 第 3 步：安装核心（Android 内核编译期内置，仅展示说明） -->
+          <!-- 第 3 步：内核获取方式（桌面按需下载，Android 编译期内置） -->
           <div v-else-if="step === 3" class="og-install">
-            <div class="og-badge">{{ BUILTIN_CORE_VERSION }}</div>
-            <h2 class="og-title">{{
+            <div class="og-badge">
+              {{
+                isAndroidPlatform
+                  ? t('newOnboarding.androidBuiltinBadge')
+                  : t('newOnboarding.coreSetupBadge')
+              }}
+            </div>
+            <h2 id="og-title" class="og-title">{{
               isAndroidPlatform
                 ? t('newOnboarding.androidBuiltinTitle')
-                : t('newOnboarding.installTitle')
+                : t('newOnboarding.coreSetupTitle')
             }}</h2>
             <p class="og-desc">{{
               isAndroidPlatform
-                ? t('newOnboarding.androidBuiltinDesc', { version: BUILTIN_CORE_VERSION })
-                : t('newOnboarding.installDesc', { version: BUILTIN_CORE_VERSION })
+                ? t('newOnboarding.androidBuiltinDesc')
+                : t('newOnboarding.coreSetupDesc')
             }}</p>
-            <div v-if="!isAndroidPlatform" class="og-install-actions">
-              <button class="og-btn og-btn-primary" :disabled="installing" @click="handleInstall">
-                {{ installing ? t('newOnboarding.installing') : t('newOnboarding.installCoreBtn') }}
-              </button>
-              <button class="og-btn og-btn-ghost" :disabled="installing" @click="skipInstall">
-                {{ t('newOnboarding.skipInstall') }}
-              </button>
-            </div>
           </div>
 
           <!-- 第 4 步：完成 -->
@@ -76,9 +80,11 @@
                 <path d="M4.5 12.5l5 5 10-11" />
               </svg>
             </div>
-            <h2 class="og-title">{{ t('newOnboarding.doneTitle') }}</h2>
+            <h2 id="og-title" class="og-title">{{ t('newOnboarding.doneTitle') }}</h2>
             <p class="og-desc">{{
-              installed ? t('newOnboarding.installDoneDesc') : t('newOnboarding.skipDoneDesc')
+              isAndroidPlatform || easyTierStore.detectedCoreVersion
+                ? t('newOnboarding.installDoneDesc')
+                : t('newOnboarding.corePendingDesc')
             }}</p>
           </div>
         </div>
@@ -88,19 +94,24 @@
       <div class="og-footer">
         <template v-if="step < 4">
           <div class="og-dots">
-            <span
+            <button
               v-for="i in 4"
               :key="i"
-              class="og-dot"
-              :class="{ active: i === step }"
-              @click="step = i"
-            ></span>
+              type="button"
+              class="og-dot-btn"
+              :disabled="i === 4"
+              :aria-label="t('newOnboarding.stepLabel', { n: i })"
+              :aria-current="i === step ? 'step' : undefined"
+              @click="goToStep(i)"
+            >
+              <span class="og-dot" :class="{ active: i === step }"></span>
+            </button>
           </div>
           <div class="og-footer-actions">
-            <button v-if="step > 1" class="og-btn og-btn-ghost" @click="step--">
+            <button v-if="step > 1" type="button" class="og-btn og-btn-ghost" @click="step--">
               {{ t('newOnboarding.prev') }}
             </button>
-            <button class="og-btn og-btn-primary" @click="step++">
+            <button type="button" class="og-btn og-btn-primary" @click="step++">
               {{ t('newOnboarding.next') }}
             </button>
           </div>
@@ -110,9 +121,18 @@
             <input v-model="notShowAgain" type="checkbox" />
             <span>{{ t('newOnboarding.notShowAgain') }}</span>
           </label>
-          <button class="og-btn og-btn-primary" @click="finish">
-            {{ t('newOnboarding.doneBtn') }}
-          </button>
+          <div class="og-footer-actions">
+            <button v-if="!hasConfigs" type="button" class="og-btn og-btn-ghost" @click="finish">
+              {{ t('newOnboarding.doneBtn') }}
+            </button>
+            <button
+              type="button"
+              class="og-btn og-btn-primary"
+              @click="hasConfigs ? finish() : finishAndCreate()"
+            >
+              {{ hasConfigs ? t('newOnboarding.doneBtn') : t('newOnboarding.createFirst') }}
+            </button>
+          </div>
         </template>
       </div>
     </div>
@@ -123,32 +143,35 @@
 /**
  * OnboardingGuide — 首次启动引导（4 步流程）
  *
- * 步骤：1 欢迎 → 2 功能简介 → 3 安装内核（Android 内核编译期内置，仅展示说明）
- * → 4 完成；第 3 步经 useCoreInstall 安装内置版本核心（免下载，可跳过）；
+ * 步骤：1 欢迎 → 2 功能简介 → 3 内核获取方式（桌面按需下载，Android 编译期内置）
+ * → 4 完成；桌面内核不再随安装包内置，第 3 步仅说明获取入口，不执行安装。
  * 结束时勾选“下次不再显示”则写入 localStorage（settings.onboardingDone）持久化，
  * finish 事件交由父组件控制显隐。
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { BUILTIN_CORE_VERSION } from '@/constants/easytier'
-import { useCoreInstall } from '@/hooks/useCoreInstall'
-import { useCreamToast } from '@/hooks/useCreamToast'
+import { useRouter } from 'vue-router'
+import { useEasyTierStore } from '@/store/modules/easytier'
 import { isAndroid } from '@/utils/platformUtil'
 
 const emit = defineEmits<{ finish: [] }>()
 
 const { t } = useI18n()
-const toast = useCreamToast()
-const { installing, installCore } = useCoreInstall()
+const router = useRouter()
+const easyTierStore = useEasyTierStore()
 
-// 当前步骤（1-4），底部圆点可直达
+// 当前步骤（1-4）；圆点仅允许在 1–3 步之间跳转，第 4 步通过底部“下一步”到达
 const step = ref(1)
-// Android：内核编译期内置，无需安装步骤
+// Android：内核编译期内置，无需下载安装
 const isAndroidPlatform = isAndroid()
-// 是否已安装核心（决定第 4 步提示文案）；Android 内核随应用内置
-const installed = ref(isAndroidPlatform)
-// 下次不再显示
-const notShowAgain = ref(false)
+// 是否已有配置：决定完成页主 CTA（创建第一个配置 / 结束引导）
+const hasConfigs = computed(() => easyTierStore.configList.length > 0)
+// 下次不再显示（默认勾选：完成引导后不再出现，取消勾选则每次启动显示）
+const notShowAgain = ref(true)
+
+// 焦点管理：打开时记录来源并聚焦引导卡片，关闭时还原
+const cardRef = ref<HTMLElement | null>(null)
+let prevFocus: HTMLElement | null = null
 
 // 核心功能简介（以快速上手为目标）
 const features = computed(() => [
@@ -174,31 +197,84 @@ const features = computed(() => [
   }
 ])
 
-// 安装内置核心（免下载）
-const handleInstall = async () => {
-  const ok = await installCore(BUILTIN_CORE_VERSION)
-  if (ok) {
-    installed.value = true
-    toast.success(t('newOnboarding.installSuccess'))
-    step.value = 4
-  } else {
-    toast.error(t('newOnboarding.installFail'))
+// 圆点跳转：只允许 1–3 步，第 4 步通过底部“下一步”到达
+const goToStep = (i: number) => {
+  if (i >= 1 && i <= 3) step.value = i
+}
+
+// 键盘焦点圈定：Tab/Shift+Tab 在引导卡片内循环，不逃逸到背景页面
+const getFocusable = (): HTMLElement[] => {
+  const root = cardRef.value
+  if (!root) return []
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((el) => el.offsetParent !== null)
+}
+
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key !== 'Tab') return
+  const root = cardRef.value
+  if (!root) return
+  const items = getFocusable()
+  if (!items.length) {
+    e.preventDefault()
+    root.focus()
+    return
+  }
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement
+  if (!root.contains(active)) {
+    e.preventDefault()
+    first.focus()
+    return
+  }
+  if (e.shiftKey && (active === first || active === root)) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
   }
 }
 
-// 跳过安装
-const skipInstall = () => {
-  installed.value = false
-  step.value = 4
-}
-
-// 结束引导：勾选"下次不再显示"时持久化，否则下次打开仍显示
-const finish = () => {
+// 按勾选状态持久化：勾选记为已完成；取消勾选则移除标记，下次启动仍显示
+const persistOnboardingChoice = () => {
   if (notShowAgain.value) {
     localStorage.setItem('settings.onboardingDone', 'true')
+  } else {
+    localStorage.removeItem('settings.onboardingDone')
   }
+}
+
+// 结束引导
+const finish = () => {
+  persistOnboardingChoice()
   emit('finish')
 }
+
+// 结束引导并直达新建配置（桌面进入配置列表并打开新增弹窗，Android 进入新增页）
+const finishAndCreate = () => {
+  persistOnboardingChoice()
+  emit('finish')
+  router.push(isAndroidPlatform ? '/new/config-add' : '/new/config?create=1')
+}
+
+onMounted(() => {
+  prevFocus = document.activeElement as HTMLElement | null
+  // 完成页需要判断是否已有配置；尚未加载时补一次
+  if (!easyTierStore.configListLoaded) {
+    easyTierStore.loadConfigFiles()
+  }
+  nextTick(() => cardRef.value?.focus())
+})
+
+// 关闭引导后把焦点还原到打开前的元素
+onBeforeUnmount(() => {
+  prevFocus?.focus?.()
+})
 </script>
 
 <style scoped>
@@ -227,6 +303,11 @@ const finish = () => {
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 12px 36px rgb(74 55 40 / 7%));
   animation: og-card-in 0.35s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+/* 容器仅作为程序化焦点落点，不显示焦点环 */
+.og-card:focus {
+  outline: none;
 }
 
 @keyframes og-card-in {
@@ -347,7 +428,7 @@ const finish = () => {
 
 .og-feature-desc {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--theme-text-secondary, #7a6e5e);
 }
@@ -372,12 +453,6 @@ const finish = () => {
   color: var(--theme-accent-primary, #e8a0a0);
   background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 14%, transparent);
   border-radius: var(--theme-radius-pill, 100px);
-}
-
-.og-install-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
 }
 
 /* 第 4 步：完成 */
@@ -436,13 +511,31 @@ const finish = () => {
 
 .og-dots {
   display: flex;
-  gap: 8px;
+  gap: 0;
+}
+
+/* 圆点按钮：视觉保持 8px 圆点，命中区扩大到 32×32（键盘可聚焦） */
+.og-dot-btn {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 第 4 步不能直接点击，保留进度指示 */
+.og-dot-btn:disabled {
+  cursor: default;
 }
 
 .og-dot {
   width: 8px;
   height: 8px;
-  cursor: pointer;
   background: var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-round, 50%);
   transition: all 0.25s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));

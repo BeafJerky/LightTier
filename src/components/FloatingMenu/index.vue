@@ -1,10 +1,16 @@
 <template>
-  <div class="fab-root" ref="fabRoot">
+  <div class="fab-root" ref="fabRoot" @keydown.esc="handleEscape">
     <!-- 展开菜单 -->
     <Transition name="fab-menu">
-      <div v-if="menuOpen" class="fab-menu">
+      <div
+        v-if="menuOpen"
+        ref="menuRef"
+        class="fab-menu"
+        role="menu"
+        :aria-label="t('newCommon.quickActions')"
+      >
         <!-- 刷新配置 -->
-        <button class="fab-menu-item" @click="handleRefresh">
+        <button type="button" role="menuitem" class="fab-menu-item" @click="handleRefresh">
           <svg
             class="fab-menu-icon"
             width="14"
@@ -24,10 +30,15 @@
 
     <!-- 主按钮 -->
     <button
+      ref="triggerRef"
+      type="button"
       class="fab-trigger"
       :class="{ active: menuOpen }"
-      @click.stop="menuOpen = !menuOpen"
+      @click.stop="toggleMenu"
       :title="t('newCommon.quickActions')"
+      :aria-label="t('newCommon.quickActions')"
+      :aria-expanded="menuOpen"
+      aria-haspopup="menu"
     >
       <svg
         width="18"
@@ -51,7 +62,7 @@
  * 文件列表，再触发当前页运行时状态刷新；菜单展开时点击组件外部自动收起，
  * 组件卸载时移除全局点击监听。
  */
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEasyTierStore } from '@/store/modules/easytier'
 
@@ -62,6 +73,23 @@ const easyTierStore = useEasyTierStore()
 
 const menuOpen = ref(false)
 const fabRoot = ref<HTMLElement | null>(null)
+const menuRef = ref<HTMLElement | null>(null)
+const triggerRef = ref<HTMLButtonElement | null>(null)
+
+// 展开后聚焦首个菜单项：键盘用户可直接操作，Esc 也能从菜单内冒泡到根节点
+const toggleMenu = async () => {
+  menuOpen.value = !menuOpen.value
+  if (!menuOpen.value) return
+  await nextTick()
+  menuRef.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+}
+
+// Esc 关闭并把焦点还给主按钮；外部点击关闭时不抢焦点
+const handleEscape = () => {
+  if (!menuOpen.value) return
+  menuOpen.value = false
+  triggerRef.value?.focus()
+}
 
 // 刷新配置（重新加载所有配置文件 + 刷新当前页运行时状态）
 const handleRefresh = async () => {
@@ -113,7 +141,7 @@ onBeforeUnmount(() => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-round, 50%);
-  opacity: 0.3;
+  opacity: 0.65;
   box-shadow: var(--theme-shadow-sm);
   transition: all 0.3s var(--theme-ease-spring, ease);
   align-items: center;
@@ -121,8 +149,15 @@ onBeforeUnmount(() => {
 }
 
 .fab-root:hover .fab-trigger,
+.fab-trigger:hover,
+.fab-trigger:focus-visible,
 .fab-trigger.active {
   opacity: 1;
+}
+
+.fab-trigger:focus-visible {
+  outline: 2px solid var(--theme-accent-primary);
+  outline-offset: 2px;
 }
 
 .fab-trigger:hover {

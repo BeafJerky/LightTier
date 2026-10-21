@@ -5,24 +5,31 @@
       <div class="td-sidebar">
         <div class="td-sidebar-header">
           <span class="td-sidebar-title">{{ t('newTheme.installed') }}</span>
-          <button class="td-refresh-btn" @click="refreshList">{{
+          <button type="button" class="td-refresh-btn" @click="refreshList">{{
             t('newTheme.refreshList')
           }}</button>
         </div>
-        <div class="td-list">
-          <div
+        <div class="td-list" role="radiogroup" :aria-label="t('newLayout.theme')">
+          <label
             v-for="th in themes"
             :key="th.name"
             class="td-item"
             :class="{ active: previewName === th.name }"
-            @click="selectTheme(th.name)"
           >
+            <input
+              class="lt-sr-only"
+              type="radio"
+              name="lt-theme"
+              :value="th.name"
+              :checked="previewName === th.name"
+              @change="selectTheme(th.name)"
+            />
             <span class="td-item-dot" :style="{ background: th.color }"></span>
             <span class="td-item-label">{{ th.label }}</span>
             <span v-if="th.name === defaultThemeName" class="td-item-badge">{{
               t('newTheme.default')
             }}</span>
-          </div>
+          </label>
         </div>
       </div>
 
@@ -123,7 +130,7 @@ const buildPreviewHTML = () => `
     <div class="pv-sub">${t('newTheme.previewSub')}</div>
     <div class="pv-btns">
       <button class="pv-btn pv-btn-primary">${t('newCommon.run')}</button>
-      <button class="pv-btn pv-btn-stop">${t('newCommon.close')}</button>
+      <button class="pv-btn pv-btn-stop">${t('newCommon.stop')}</button>
     </div>
     <div class="pv-toasts">
       <span class="pv-toast pv-toast-succ">✅ ${t('newCommon.startSuccess')}</span>
@@ -309,6 +316,12 @@ watch(visible, (v) => {
   background: var(--theme-bg-active, rgb(232 160 160 / 10%));
 }
 
+/* 原生 radio 键盘聚焦时给圆点画焦点环（不使用 :has，兼容旧 WebView） */
+.td-item input:focus-visible + .td-item-dot {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 3px;
+}
+
 .td-item-dot {
   width: 10px;
   height: 10px;
@@ -324,7 +337,7 @@ watch(visible, (v) => {
 .td-item-badge {
   padding: 1px var(--theme-space-2);
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-text-muted, #c8bdb2);
   background: var(--theme-bg-tag, #f5ede6);
   border-radius: 4px;
@@ -348,6 +361,42 @@ watch(visible, (v) => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+}
+
+/* 桌面端：主题列表独立滚动，标题/预览/底部按钮保持固定，避免长列表把整个弹窗撑出滚动 */
+@media (width >= 641px) {
+  .td-body {
+    height: 100%;
+  }
+
+  .td-sidebar {
+    min-height: 0;
+  }
+
+  .td-list {
+    min-height: 0;
+    padding: var(--theme-space-2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--theme-bg, #fdf8f4);
+    border: 1px solid var(--theme-border, #ede4db);
+    border-radius: var(--theme-radius-md, 12px);
+    flex: 1;
+    scrollbar-width: thin;
+  }
+
+  .td-list::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .td-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .td-list::-webkit-scrollbar-thumb {
+    background: var(--theme-border, #ede4db);
+    border-radius: 10px;
+  }
 }
 
 /* 移动端（含 Android 二级页面）：上下堆叠，主题列表转横向滚动，预览保留合理高度 */

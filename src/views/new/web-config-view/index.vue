@@ -3,9 +3,14 @@
     <!-- 左侧配置列表 -->
     <div class="nwc-left">
       <div class="nwc-left-header">
-        <div class="nwc-left-label">✦ {{ t('newWebConfig.webConfigLabel') }}</div>
+        <div class="nwc-left-label">{{ t('newWebConfig.webConfigLabel') }}</div>
         <div class="nwc-left-btns">
-          <button class="nwc-add-btn" @click="openAdd" :title="t('newWebConfig.addConfig')"
+          <button
+            type="button"
+            class="nwc-add-btn"
+            @click="openAdd"
+            :title="t('newWebConfig.addConfig')"
+            :aria-label="t('newWebConfig.addConfig')"
             >+</button
           >
         </div>
@@ -28,17 +33,13 @@
           <div class="nwc-card-name">{{ item.configFileName }}</div>
           <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
           <div class="nwc-card-actions" @click.stop>
+            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
             <button
-              class="nwc-btn nwc-btn-run"
-              :disabled="isRunning(item)"
-              @click="startWeb(item)"
-              >{{ t('newCommon.run') }}</button
-            >
-            <button
-              class="nwc-btn nwc-btn-stop"
-              :disabled="!isRunning(item)"
-              @click="stopWeb(item)"
-              >{{ t('newCommon.close') }}</button
+              type="button"
+              class="nwc-btn"
+              :class="isRunning(item) ? 'nwc-btn-stop' : 'nwc-btn-run'"
+              @click="isRunning(item) ? stopWeb(item) : startWeb(item)"
+              >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
             >
           </div>
         </div>
@@ -56,7 +57,7 @@
     <div class="nwc-right" v-if="selectedConfig">
       <div class="nwc-detail-header">
         <div class="nwc-detail-title-row">
-          <button class="nwc-back-btn" @click="closeWebDetail">
+          <button type="button" class="nwc-back-btn" @click="closeWebDetail">
             <svg
               width="14"
               height="14"
@@ -79,22 +80,18 @@
           </span>
         </div>
         <div class="nwc-detail-actions">
-          <button class="nwc-btn-lg nwc-btn-edit" @click="openEdit">{{
+          <button type="button" class="nwc-btn-lg nwc-btn-edit" @click="openEdit">{{
             t('newCommon.edit')
           }}</button>
+          <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
           <button
-            class="nwc-btn-lg nwc-btn-start"
-            :disabled="isRunning(selectedConfig)"
-            @click="startWeb(selectedConfig)"
-            >{{ t('newCommon.run') }}</button
+            type="button"
+            class="nwc-btn-lg nwc-detail-lifecycle"
+            :class="isRunning(selectedConfig) ? 'nwc-btn-kill' : 'nwc-btn-start'"
+            @click="isRunning(selectedConfig) ? stopWeb(selectedConfig) : startWeb(selectedConfig)"
+            >{{ isRunning(selectedConfig) ? t('newCommon.stop') : t('newCommon.run') }}</button
           >
-          <button
-            class="nwc-btn-lg nwc-btn-kill"
-            :disabled="!isRunning(selectedConfig)"
-            @click="stopWeb(selectedConfig)"
-            >{{ t('newCommon.close') }}</button
-          >
-          <button class="nwc-btn-lg nwc-btn-del" @click="deleteConfig">{{
+          <button type="button" class="nwc-btn-lg nwc-btn-del" @click="deleteConfig">{{
             t('newCommon.delete')
           }}</button>
         </div>
@@ -122,9 +119,14 @@
           >
           <div class="nwc-field"
             ><span class="nwc-label">{{ t('newWebConfig.consoleAddr') }}</span>
-            <span class="nwc-val nwc-link" @click="openConsoleUrl" v-if="selectedConfig.webUrl">{{
-              selectedConfig.webUrl
-            }}</span>
+            <button
+              v-if="selectedConfig.webUrl"
+              type="button"
+              class="nwc-val nwc-link"
+              :title="selectedConfig.webUrl"
+              @click="openConsoleUrl"
+              >{{ selectedConfig.webUrl }}</button
+            >
             <span class="nwc-val" v-else>—</span>
           </div>
         </div>
@@ -144,26 +146,34 @@
           </div>
           <div class="nwc-svc-actions">
             <template v-if="currentServiceStatus === 'notInstalled'">
-              <button class="nwc-btn-lg nwc-btn-svc-install" @click="openServiceDialog">{{
-                t('newWebConfig.installService')
-              }}</button>
+              <button
+                type="button"
+                class="nwc-btn-lg nwc-btn-svc-install"
+                @click="openServiceDialog"
+                >{{ t('newWebConfig.installService') }}</button
+              >
             </template>
             <template v-else>
               <button
+                type="button"
                 class="nwc-btn-sm nwc-btn-svc-start"
                 :disabled="currentServiceStatus === 'running'"
                 @click="handleStartService"
                 >{{ t('newCommon.start') }}</button
               >
               <button
+                type="button"
                 class="nwc-btn-sm nwc-btn-svc-stop"
                 :disabled="currentServiceStatus !== 'running'"
                 @click="handleStopService"
                 >{{ t('newCommon.stop') }}</button
               >
-              <button class="nwc-btn-sm nwc-btn-svc-uninstall" @click="handleUninstallService">{{
-                t('newConfig.uninstall')
-              }}</button>
+              <button
+                type="button"
+                class="nwc-btn-sm nwc-btn-svc-uninstall"
+                @click="handleUninstallService"
+                >{{ t('newConfig.uninstall') }}</button
+              >
             </template>
           </div>
         </div>
@@ -195,54 +205,77 @@
     <div class="nwc-svc-form">
       <div class="nwc-svc-field">
         <label class="wcf-label">{{ t('newWebConfig.installMethod') }}</label>
-        <div class="nwc-svc-radio-group">
-          <label
-            class="wcf-radio"
-            :class="{ active: svcForm.installMethod === 'nssm' }"
-            @click="svcForm.installMethod = 'nssm'"
-          >
+        <div
+          class="nwc-svc-radio-group"
+          role="radiogroup"
+          :aria-label="t('newWebConfig.installMethod')"
+        >
+          <label class="wcf-radio" :class="{ active: svcForm.installMethod === 'nssm' }">
+            <input
+              class="lt-sr-only"
+              type="radio"
+              name="nwc-install-method"
+              value="nssm"
+              v-model="svcForm.installMethod"
+            />
             <span class="wcf-radio-dot"></span><span>NSSM</span>
           </label>
-          <label
-            class="wcf-radio"
-            :class="{ active: svcForm.installMethod === 'official' }"
-            @click="svcForm.installMethod = 'official'"
-          >
+          <label class="wcf-radio" :class="{ active: svcForm.installMethod === 'official' }">
+            <input
+              class="lt-sr-only"
+              type="radio"
+              name="nwc-install-method"
+              value="official"
+              v-model="svcForm.installMethod"
+            />
             <span class="wcf-radio-dot"></span><span>{{ t('newWebConfig.officialCli') }}</span>
           </label>
         </div>
       </div>
       <template v-if="svcForm.installMethod === 'nssm'">
         <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.runUser') }}</label>
+          <label class="wcf-label" :for="fieldId('svc-user')">{{
+            t('newWebConfig.runUser')
+          }}</label>
           <input
+            :id="fieldId('svc-user')"
             class="wcf-input"
             v-model="svcForm.username"
             :placeholder="t('newWebConfig.runUserPlaceholder')"
           />
         </div>
         <div class="nwc-svc-field" v-if="svcForm.username">
-          <label class="wcf-label">{{ t('newWebConfig.userPassword') }}</label>
+          <label class="wcf-label" :for="fieldId('svc-password')">{{
+            t('newWebConfig.userPassword')
+          }}</label>
           <input
+            :id="fieldId('svc-password')"
             class="wcf-input"
             v-model="svcForm.password"
             type="password"
+            autocomplete="new-password"
             :placeholder="t('newWebConfig.passwordPlaceholder')"
           />
         </div>
       </template>
       <template v-if="svcForm.installMethod === 'official'">
         <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.displayName') }}</label>
+          <label class="wcf-label" :for="fieldId('svc-name')">{{
+            t('newWebConfig.displayName')
+          }}</label>
           <input
+            :id="fieldId('svc-name')"
             class="wcf-input"
             v-model="svcForm.displayName"
             :placeholder="t('newWebConfig.displayNamePlaceholder')"
           />
         </div>
         <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.svcDesc') }}</label>
+          <label class="wcf-label" :for="fieldId('svc-desc')">{{
+            t('newWebConfig.svcDesc')
+          }}</label>
           <input
+            :id="fieldId('svc-desc')"
             class="wcf-input"
             v-model="svcForm.description"
             :placeholder="t('newWebConfig.svcDescPlaceholder')"
@@ -254,10 +287,14 @@
       <div class="wcf-footer">
         <span class="wcf-footer-hint">{{ t('newWebConfig.installHint') }}</span>
         <div>
-          <button class="nwc-btn-cfm nwc-btn-cfm-cancel" @click="svcDialogVisible = false">{{
-            t('newCommon.cancel')
-          }}</button>
           <button
+            type="button"
+            class="nwc-btn-cfm nwc-btn-cfm-cancel"
+            @click="svcDialogVisible = false"
+            >{{ t('newCommon.cancel') }}</button
+          >
+          <button
+            type="button"
             class="nwc-btn-cfm nwc-btn-cfm-ok"
             :disabled="svcInstalling"
             @click="handleServiceInstalled"
@@ -273,10 +310,13 @@
     <p class="cfm-msg">{{ cfmMessage }}</p>
     <template #footer>
       <div class="cfm-footer">
-        <button class="nwc-btn-cfm nwc-btn-cfm-cancel" @click="resolveConfirm(false)">{{
-          t('newCommon.cancel')
-        }}</button>
-        <button class="nwc-btn-cfm nwc-btn-cfm-ok" @click="resolveConfirm(true)">{{
+        <button
+          type="button"
+          class="nwc-btn-cfm nwc-btn-cfm-cancel"
+          @click="resolveConfirm(false)"
+          >{{ t('newCommon.cancel') }}</button
+        >
+        <button type="button" class="nwc-btn-cfm nwc-btn-cfm-ok" @click="resolveConfirm(true)">{{
           t('newCommon.confirm')
         }}</button>
       </div>
@@ -294,7 +334,7 @@
  * - 状态判定：进程扫描（命令行匹配 config-server URL）+ 服务状态，合并为卡片状态
  * 平台差异：窄屏 master-detail 互斥展示；控制台地址可点击直接打开外部浏览器。
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
@@ -331,7 +371,7 @@ const mapServiceStatus = (key: string): string => {
     case 'stopped':
       return t('newWebConfig.stoppedService')
     case 'stopping':
-      return t('newWebConfig.stoppedService') + '...'
+      return t('newCommon.stopping')
     case 'notInstalled':
       return t('newConfig.notInstalled')
     case 'unknown':
@@ -367,6 +407,9 @@ const svcForm = ref({
   displayName: '',
   description: ''
 })
+// 服务安装表单的 label/输入框关联 id（Vue 3.5 useId 避免多实例冲突）
+const uid = useId()
+const fieldId = (key: string) => `nwc-${uid}-${key}`
 const currentServiceStatus = computed(() => {
   if (!selectedConfig.value) return ''
   return serviceStatusMap.value.get(selectedConfig.value.configFileName) || 'notInstalled'
@@ -409,9 +452,9 @@ const mapCardStatus = (item: FormWebData): string => {
     case 'runningService':
       return t('newWebConfig.runningService')
     case 'notRunning':
-      return t('newWebConfig.notRunning')
+      return t('newCommon.stopped')
     default:
-      return item.status ? String(item.status) : t('newWebConfig.notRunning')
+      return item.status ? String(item.status) : t('newCommon.stopped')
   }
 }
 const getServiceDotClass = computed(() => {
@@ -511,23 +554,27 @@ const openEdit = () => {
   formVisible.value = true
 }
 
-// 表单保存回调：读最新列表 → 新增/替换 → 整体写回（避免并发覆盖）
-const handleFormSaved = async (data: FormWebData) => {
+// 表单保存回调：读最新列表 → 新增/替换 → 整体写回（避免并发覆盖）；写盘成功后才关闭弹窗
+const handleFormSaved = async (data: FormWebData, done: (ok: boolean) => void) => {
   try {
     const list = await readWebConfigList()
     const idx = list.findIndex((c) => c.configFileName === data.configFileName)
     if (formMode.value === 'add') {
       list.push(data)
-      toast(t('newCommon.addSuccess'), 'success')
     } else {
       if (idx !== -1) list[idx] = data
       else list.push(data)
-      toast(t('newCommon.saveSuccess'), 'success')
     }
     await writeWebConfigList(list)
+    toast(
+      formMode.value === 'add' ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'),
+      'success'
+    )
     await refreshWebList()
+    done(true)
   } catch {
     toast(formMode.value === 'add' ? t('newCommon.addFail') : t('newCommon.saveFail'), 'error')
+    done(false)
   }
 }
 
@@ -729,7 +776,7 @@ onUnmounted(() => {
 .nwc-left-label {
   padding: 0 var(--theme-space-1);
   font-family: var(--theme-font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 2px;
   color: var(--theme-text-muted);
@@ -833,12 +880,12 @@ onUnmounted(() => {
 }
 
 .nwc-status-text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-muted);
 }
 
 .nwc-card-pid {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-text-muted);
 }
 
@@ -852,7 +899,7 @@ onUnmounted(() => {
 
 .nwc-card-sub {
   margin-bottom: var(--theme-space-3);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-muted);
 }
 
@@ -864,7 +911,7 @@ onUnmounted(() => {
 .nwc-btn {
   padding: var(--theme-space-1) var(--theme-space-4);
   font-family: var(--theme-font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -959,23 +1006,8 @@ onUnmounted(() => {
     display: flex;
   }
 
-  /* 详情头部允许换行，避免标题与按钮组互挤导致标题竖排/按钮溢出 */
-  .nwc-detail-header {
-    flex-wrap: wrap;
-    gap: var(--theme-space-3);
-  }
-
-  .nwc-detail-title-row {
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-
-  .nwc-detail-title {
-    overflow-wrap: break-word;
-  }
-
-  .nwc-detail-actions {
-    flex-wrap: wrap;
+  .nwc-detail-lifecycle {
+    display: inline-flex;
   }
 }
 
@@ -993,12 +1025,16 @@ onUnmounted(() => {
   border-bottom: 2px solid var(--theme-border-light);
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--theme-space-3);
 }
 
 .nwc-detail-title-row {
   display: flex;
   align-items: center;
   gap: var(--theme-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .nwc-detail-title {
@@ -1007,12 +1043,14 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: var(--theme-text-primary);
+  overflow-wrap: break-word;
 }
 
 .nwc-badge {
   padding: 2px var(--theme-space-3);
   font-family: var(--theme-font-body);
-  font-size: 10px;
+  font-size: 11px;
+  white-space: nowrap;
   border-radius: var(--theme-radius-pill);
 }
 
@@ -1031,6 +1069,13 @@ onUnmounted(() => {
 .nwc-detail-actions {
   display: flex;
   gap: var(--theme-space-2);
+  flex-wrap: wrap;
+}
+
+/* 宽屏列表卡片已提供生命周期操作，详情不再重复；窄屏列表隐藏时才显示 */
+.nwc-detail-lifecycle {
+  display: none;
+  align-items: center;
 }
 
 .nwc-btn-lg {
@@ -1099,7 +1144,7 @@ onUnmounted(() => {
   display: flex;
   margin-bottom: var(--theme-space-3);
   font-family: var(--theme-font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
   color: var(--theme-accent-primary);
@@ -1133,7 +1178,7 @@ onUnmounted(() => {
 }
 
 .nwc-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 1.2px;
   color: var(--theme-text-muted);
@@ -1147,9 +1192,14 @@ onUnmounted(() => {
 }
 
 .nwc-link {
+  padding: 0;
+  font-family: inherit;
   color: var(--theme-accent-primary);
+  text-align: left;
   text-decoration: underline;
   cursor: pointer;
+  background: none;
+  border: none;
 }
 
 .nwc-link:hover {
@@ -1256,7 +1306,7 @@ onUnmounted(() => {
 .nwc-btn-sm {
   padding: var(--theme-space-1) var(--theme-space-4);
   font-family: var(--theme-font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -1337,7 +1387,7 @@ onUnmounted(() => {
 
 /* 复用 wcf-* 样式（原定义在 WebConfigForm.vue scoped 中，跨组件不生效） */
 .wcf-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
   color: var(--theme-text-muted, #c8bdb2);
@@ -1378,6 +1428,12 @@ onUnmounted(() => {
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
+/* 原生 radio 隐藏后，键盘聚焦时在整个胶囊上显示焦点环 */
+.wcf-radio:has(input:focus-visible) {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
+}
+
 .wcf-radio.active {
   color: var(--theme-accent-primary, #e8a0a0);
   background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 6%, transparent);
@@ -1408,7 +1464,7 @@ onUnmounted(() => {
 .wcf-footer-hint {
   padding: var(--theme-space-2) var(--theme-space-3);
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
   background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 4%, transparent);
