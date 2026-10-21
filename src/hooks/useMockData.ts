@@ -11,6 +11,48 @@ import { ref } from 'vue'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import type { FormWebData } from '@/types/formTypes'
 
+// ===== Mock 持久化（浏览器预览刷新后保留配置与恢复结果） =====
+const MOCK_TOML_FILES_KEY = 'lighttier.mock.tomlFiles'
+const MOCK_TOML_CONTENT_KEY = 'lighttier.mock.tomlContent'
+const MOCK_WEB_CONFIGS_KEY = 'lighttier.mock.webConfigs'
+
+const loadMockJson = <T>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === null) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+const saveMockJson = (key: string, value: unknown): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* localStorage 不可用或超额时仅保留内存态 */
+  }
+}
+
+const loadMockTomlFiles = (): string[] => {
+  const loaded = loadMockJson<unknown>(MOCK_TOML_FILES_KEY, null)
+  return Array.isArray(loaded)
+    ? loaded.filter((name): name is string => typeof name === 'string')
+    : [...DEFAULT_MOCK_TOML_FILES]
+}
+
+const loadMockTomlContent = (): Record<string, string> => {
+  const loaded = loadMockJson<unknown>(MOCK_TOML_CONTENT_KEY, null)
+  if (!loaded || typeof loaded !== 'object' || Array.isArray(loaded)) {
+    return { ...DEFAULT_MOCK_TOML_CONTENT }
+  }
+  return Object.fromEntries(
+    Object.entries(loaded).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
+    )
+  )
+}
+
 // ===== Mock 运行态数据（内核实例 / Web 配置服务，内存 Map 模拟进程表） =====
 const mockRunningMap = ref<Map<string, number>>(new Map())
 let mockPidCounter = 1000
@@ -18,7 +60,7 @@ let mockPidCounter = 1000
 // --- Web 配置 Mock 数据 ---
 const mockWebRunningMap = ref<Map<string, number>>(new Map())
 let mockWebPidCounter = 2000
-const mockWebConfigList = ref<FormWebData[]>([
+const DEFAULT_MOCK_WEB_CONFIGS: FormWebData[] = [
   {
     configFileName: '自建中继',
     host: '192.168.1.100',
@@ -39,7 +81,12 @@ const mockWebConfigList = ref<FormWebData[]>([
     webUrl: '',
     status: 'notRunning'
   }
-])
+]
+const loadMockWebConfigs = (): FormWebData[] => {
+  const loaded = loadMockJson<unknown>(MOCK_WEB_CONFIGS_KEY, null)
+  return Array.isArray(loaded) ? (loaded as FormWebData[]) : [...DEFAULT_MOCK_WEB_CONFIGS]
+}
+const mockWebConfigList = ref<FormWebData[]>(loadMockWebConfigs())
 
 // Tauri 环境检测：浏览器 dev 模式无 Tauri 运行时，全部走 mock
 // 注：withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri()（读 __TAURI_INTERNALS__）
@@ -52,7 +99,7 @@ const isTauriEnv = (): boolean => {
 }
 
 // ===== Mock 配置样例（浏览器预览用演示数据） =====
-const mockTomlFiles: string[] = [
+const DEFAULT_MOCK_TOML_FILES: string[] = [
   '东京中继节点.toml',
   '新加坡出口.toml',
   '家庭局域网.toml',
@@ -60,7 +107,7 @@ const mockTomlFiles: string[] = [
   '移动设备.toml'
 ]
 
-const mockTomlContent: Record<string, string> = {
+const DEFAULT_MOCK_TOML_CONTENT: Record<string, string> = {
   东京中继节点: `[network]
 instance_name = "tokyo-relay"
 hostname = "tokyo-node-01"
@@ -151,6 +198,15 @@ uri = "tcp://office-gateway.example.com:11003"
 `
 }
 
+// 优先使用上次会话持久化的数据（含恢复写入的新配置），无记录时回退演示数据
+const mockTomlFiles: string[] = loadMockTomlFiles()
+const mockTomlContent: Record<string, string> = loadMockTomlContent()
+
+const persistMockToml = (): void => {
+  saveMockJson(MOCK_TOML_FILES_KEY, mockTomlFiles)
+  saveMockJson(MOCK_TOML_CONTENT_KEY, mockTomlContent)
+}
+
 /**
  * 创建环境感知 API 集合
  * isMock=true 返回内存 mock，否则返回真实 Tauri 实现（同签名）
@@ -163,8 +219,8 @@ export const useMockData = () => {
   }
 
   const mockReadFileContent = async (name: string): Promise<string> => {
-    // 支持传入完整文件名或纯名称
-    const key = name.replace('.toml', '')
+    // 支持完整路径（config/xxx.toml）与纯名称（xxx.toml / xxx）
+    const key = name.replace(/^.*[\\/]/, '').replace(/\.toml$/, '')
     return mockTomlContent[key] || `[network]\ninstance_name = "unknown"\nhostname = "unknown"\n`
   }
 
@@ -216,16 +272,22 @@ export const useMockData = () => {
   }
 
   const mockWriteFileContent = async (path: string, content: string): Promise<void> => {
-    const key = path.replace('.toml', '').replace(/^.*[\/]/, '')
+    const fileName = path.replace(/^.*[\\/]/, '')
+    const isToml = fileName.endsWith('.toml')
+    const key = isToml ? fileName.slice(0, -'.toml'.length) : fileName
     mockTomlContent[key] = content
+    // 恢复备份或新建配置时补齐文件列表；.toml.bak 等中间文件不进入列表
+    if (isToml && !mockTomlFiles.includes(fileName)) mockTomlFiles.push(fileName)
+    persistMockToml()
   }
 
   const mockDeleteFileOrDir = async (path: string): Promise<void> => {
-    const key = path.replace('.toml', '').replace(/^.*[\/]/, '')
+    const key = path.replace(/^.*[\\/]/, '').replace(/\.toml$/, '')
     delete mockTomlContent[key]
     // 从 mockTomlFiles 中也移除
     const idx = mockTomlFiles.indexOf(key + '.toml')
     if (idx !== -1) mockTomlFiles.splice(idx, 1)
+    persistMockToml()
   }
 
   const mockGetHostname = async (): Promise<string> => {
@@ -492,6 +554,7 @@ export const useMockData = () => {
   }
   const mockWriteWebConfigList = async (list: FormWebData[]): Promise<void> => {
     mockWebConfigList.value = JSON.parse(JSON.stringify(list))
+    saveMockJson(MOCK_WEB_CONFIGS_KEY, mockWebConfigList.value)
   }
   const mockGetRunningWebProcesses = async (): Promise<any[]> => {
     return Array.from(mockWebRunningMap.value.entries()).map(([name, pid]) => ({

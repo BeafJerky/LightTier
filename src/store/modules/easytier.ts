@@ -1,12 +1,16 @@
 import {
   DEFAULT_STUN_SERVER,
+  GITHUB_EASYTIER,
   MANAGER_INFO_API,
+  MANAGER_INFO_MIRROR_URL,
   MONITOR_LIST,
   STUN_SERVER_URL,
-  USER_AGENT
+  USER_AGENT,
+  getMirrorUrl
 } from '@/constants/easytier'
 import { useMockData } from '@/hooks/useMockData'
 import { parseCoreVersion, resolveCoreCapabilities } from '@/utils/kernelCompatUtil'
+import { isTauri } from '@tauri-apps/api/core'
 import { resourceDir } from '@tauri-apps/api/path'
 import { fetch } from '@tauri-apps/plugin-http'
 import { defineStore } from 'pinia'
@@ -238,16 +242,62 @@ export const useEasyTierStore = defineStore(
     }
 
     // 获取管理器（LightTier）发布信息（5.11 检查更新）
-    const refreshManagerReleaseInfo = async () => {
-      const response = await fetch(MANAGER_INFO_API, {
-        method: 'GET',
-        headers: { 'User-Agent': USER_AGENT },
-        connectTimeout: 10000
-      })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+    // 桌面端优先走所选加速源，并与官方 API、实测支持 api.github.com 的镜像并发请求，
+    // 首个返回有效 releases 数组的源胜出；浏览器预览走原生 fetch（镜像普遍无 CORS）。
+    // 10 秒总超时：网络不可用时及时失败，避免“检查中”无限等待。
+    const refreshManagerReleaseInfo = async (preferredMirror?: string) => {
+      const desktopRuntime = isTauri()
+      const bases = desktopRuntime
+        ? [preferredMirror, GITHUB_EASYTIER, ...MANAGER_INFO_MIRROR_URL]
+        : [GITHUB_EASYTIER]
+      // 官方源原样返回 API 地址，镜像源拼成“前缀 + 完整 GitHub URL”；去重避免重复请求
+      const urls = Array.from(
+        new Set(
+          bases
+            .filter((base): base is string => Boolean(base))
+            .map((base) => getMirrorUrl(base, MANAGER_INFO_API))
+        )
+      )
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 10000)
+      const request = async (url: string) => {
+        const init = {
+          method: 'GET',
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept: 'application/vnd.github+json'
+          },
+          signal: controller.signal
+        }
+        // 浏览器预览无 Tauri IPC，走原生 fetch（GitHub API 允许跨域）；
+        // 桌面/Android 走 plugin-http，绕过 WebView CORS 限制
+        const response = desktopRuntime ? await fetch(url, init) : await window.fetch(url, init)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const data = await response.json()
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error('empty release list')
+        }
+        return data
       }
-      return await response.json()
+      try {
+        return await new Promise((resolve, reject) => {
+          let pending = urls.length
+          urls.forEach((url) => {
+            request(url)
+              .then(resolve)
+              .catch(() => {
+                pending -= 1
+                if (pending === 0) reject(new Error('all release sources failed'))
+              })
+          })
+        })
+      } finally {
+        // 拿到首个结果后终止其余请求，避免后台挂起
+        clearTimeout(timer)
+        controller.abort()
+      }
     }
 
     // 获取公共共享节点列表（uptime 监控数据）；接口失败时回退本地缓存
@@ -269,6 +319,11 @@ export const useEasyTierStore = defineStore(
       }
       publicPeerList.value = JSON.parse(localStorage.getItem('publicPeerList') || '[]')
       return publicPeerList.value
+    }
+    // 清除远端临时缓存后同步重置内存副本（下次使用时会自然重新拉取远端数据）
+    const resetRemoteCache = () => {
+      publicPeerList.value = []
+      stunServerList.value = []
     }
     // 获取 STUN 服务器列表：命中缓存立即返回（后台静默刷新），未命中则同步请求远端
     const getStunServers = async () => {
@@ -455,6 +510,7 @@ export const useEasyTierStore = defineStore(
       detectCoreVersion,
       refreshManagerReleaseInfo,
       getPublicPeerList,
+      resetRemoteCache,
       getStunServers,
       refreshStunServers,
       setSelectedColumns,

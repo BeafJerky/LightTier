@@ -104,10 +104,21 @@ export const GITHUB_MIRROR_URL = [
   }
 ]
 
-// 安装包内置的核心版本（resource/core 下预置对应压缩包，首次安装免下载）
-// 修改时需同步更新 src-tauri/resource/core/ 下的压缩包
-// 可下载版本固定列表见 constants/kernelCompat.ts 的 CORE_VERSION_OPTIONS
-export const BUILTIN_CORE_VERSION = 'v2.6.4'
+// 可下载版本固定列表见 constants/kernelCompat.ts 的 CORE_VERSION_OPTIONS。
+// 桌面内核安装包不再随应用内置，由用户在设置页按需下载到 resource/core。
+
+/**
+ * “检查更新”可用的 GitHub API 加速前缀（2026-10-21 实测可返回 releases JSON）。
+ * 内核下载镜像多数只代理 release 资源与 github.com 页面，不代理 api.github.com，
+ * 因此不能直接复用 GITHUB_MIRROR_URL，仅保留实测支持 API 的源。
+ * 桌面端由 WebView 直接 fetch，必须带 CORS 响应头；ghproxy.vip 可返回 JSON
+ * 但缺少 Access-Control-Allow-Origin，浏览器侧会被拦截，故不纳入。
+ */
+export const MANAGER_INFO_MIRROR_URL = [
+  'https://wget.la/',
+  'https://gh-proxy.com/',
+  'https://gh-proxy.org/'
+]
 
 export const DEFAULT_STUN_SERVER = [
   'stun.nas.net:3478',

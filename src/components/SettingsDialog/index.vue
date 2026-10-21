@@ -1,14 +1,34 @@
 <template>
-  <CreamDialog v-model="visible" :title="t('newSettings.settings')" width="700px">
+  <CreamDialog
+    v-model="visible"
+    :title="t('newSettings.settings')"
+    width="700px"
+    height="720px"
+    :inline="inline"
+    :body-scroll="false"
+  >
     <div class="sd-body">
-      <!-- 左侧分类导航 -->
-      <div class="sd-nav">
+      <!-- 左侧分类导航（tablist：方向键移动并激活，roving tabindex） -->
+      <div
+        ref="navRef"
+        class="sd-nav"
+        role="tablist"
+        aria-orientation="vertical"
+        :aria-label="t('newSettings.tabsLabel')"
+      >
         <button
-          v-for="tab in tabs"
+          v-for="(tab, idx) in tabs"
           :key="tab.key"
+          :id="`sd-tab-${tab.key}`"
+          :ref="(el) => setTabRef(el, idx)"
           class="sd-nav-item"
           :class="{ active: activeTab === tab.key }"
-          @click="activeTab = tab.key"
+          role="tab"
+          :aria-selected="activeTab === tab.key"
+          :aria-controls="`sd-panel-${tab.key}`"
+          :tabindex="activeTab === tab.key ? 0 : -1"
+          @click="selectTab(tab.key)"
+          @keydown="handleTabKeydown($event, idx)"
         >
           <span class="sd-nav-icon">
             <svg
@@ -80,10 +100,17 @@
         </button>
       </div>
 
-      <!-- 右侧内容区 -->
-      <div class="sd-content">
+      <!-- 右侧内容区（唯一纵向滚动容器） -->
+      <div ref="contentRef" class="sd-content">
         <!-- 通用设置 -->
-        <div v-if="activeTab === 'general'" class="sd-section">
+        <div
+          v-if="activeTab === 'general'"
+          id="sd-panel-general"
+          class="sd-section"
+          role="tabpanel"
+          aria-labelledby="sd-tab-general"
+          tabindex="0"
+        >
           <div class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.autoRun') }}</span>
@@ -93,6 +120,7 @@
               <input
                 type="checkbox"
                 v-model="store.autoRunNetworkSetting"
+                :aria-label="t('newSettings.autoRun')"
                 @change="handleAutoRunToggle"
               />
               <span class="sd-switch-slider"></span>
@@ -104,55 +132,21 @@
               <span class="sd-row-title">{{ t('newSettings.autoRunConfig') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.autoRunConfigDesc') }}</span>
             </div>
-            <div class="sd-select-wrapper" ref="configDropdownRef">
-              <button
-                class="sd-select-trigger"
-                ref="configTriggerRef"
-                @click="configDropdownOpen = !configDropdownOpen"
+            <select
+              class="sd-select"
+              :value="store.autoRunConfigName"
+              :aria-label="t('newSettings.autoRunConfig')"
+              @change="handleAutoRunConfigSelect"
+            >
+              <option value="">{{ t('newSettings.lastRunConfig') }}</option>
+              <option
+                v-for="item in store.configList"
+                :key="item.configFileName"
+                :value="item.configFileName"
               >
-                <span>{{ store.autoRunConfigName || t('newSettings.lastRunConfig') }}</span>
-                <svg
-                  class="sd-select-arrow"
-                  :class="{ open: configDropdownOpen }"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                >
-                  <path
-                    d="M3 4.5L6 7.5L9 4.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
-              <Teleport to="body">
-                <div
-                  v-if="configDropdownOpen"
-                  class="sd-select-dropdown sd-select-dropdown-fixed"
-                  :style="configDropdownStyle"
-                >
-                  <div
-                    class="sd-select-option"
-                    :class="{ active: !store.autoRunConfigName }"
-                    @click="(handleAutoRunConfigChange(''), (configDropdownOpen = false))"
-                    >{{ t('newSettings.lastRunConfig') }}</div
-                  >
-                  <div
-                    v-for="item in store.configList"
-                    :key="item.configFileName"
-                    class="sd-select-option"
-                    :class="{ active: store.autoRunConfigName === item.configFileName }"
-                    @click="
-                      (handleAutoRunConfigChange(item.configFileName), (configDropdownOpen = false))
-                    "
-                    >{{ item.configFileName }}</div
-                  >
-                </div>
-              </Teleport>
-            </div>
+                {{ item.configFileName }}
+              </option>
+            </select>
           </div>
 
           <div class="sd-row">
@@ -160,15 +154,27 @@
               <span class="sd-row-title">{{ t('newSettings.refreshInterval') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.refreshIntervalDesc') }}</span>
             </div>
-            <input
-              type="number"
-              class="sd-number"
-              :value="store.refreshInterval"
-              @input="store.setRefreshInterval(clampNumber($event, 1, 60))"
-              min="1"
-              max="60"
-              step="1"
-            />
+            <div class="sd-number-wrap">
+              <input
+                v-model="refreshInput"
+                type="number"
+                class="sd-number"
+                :class="{ invalid: !!refreshError }"
+                min="1"
+                max="60"
+                step="1"
+                inputmode="numeric"
+                :aria-label="t('newSettings.refreshInterval')"
+                :aria-invalid="!!refreshError"
+                :aria-describedby="refreshError ? 'sd-refresh-error' : undefined"
+                @input="refreshError = ''"
+                @blur="commitRefreshInterval"
+                @keyup.enter="commitRefreshInterval"
+              />
+              <span id="sd-refresh-error" v-if="refreshError" class="sd-field-error" role="alert">{{
+                refreshError
+              }}</span>
+            </div>
           </div>
 
           <div class="sd-row">
@@ -176,60 +182,15 @@
               <span class="sd-row-title">{{ t('newSettings.defaultServiceMethod') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultServiceMethodDesc') }}</span>
             </div>
-            <div class="sd-select-wrapper" ref="methodDropdownRef">
-              <button
-                class="sd-select-trigger"
-                ref="methodTriggerRef"
-                @click="methodDropdownOpen = !methodDropdownOpen"
-              >
-                <span>{{
-                  store.defaultServiceInstallMethod === 'nssm'
-                    ? 'NSSM'
-                    : t('newWebConfig.officialCli')
-                }}</span>
-                <svg
-                  class="sd-select-arrow"
-                  :class="{ open: methodDropdownOpen }"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                >
-                  <path
-                    d="M3 4.5L6 7.5L9 4.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
-              <Teleport to="body">
-                <div
-                  v-if="methodDropdownOpen"
-                  class="sd-select-dropdown sd-select-dropdown-fixed"
-                  :style="methodDropdownStyle"
-                >
-                  <div
-                    class="sd-select-option"
-                    :class="{ active: store.defaultServiceInstallMethod === 'nssm' }"
-                    @click="
-                      (store.setDefaultServiceInstallMethod('nssm'), (methodDropdownOpen = false))
-                    "
-                    >NSSM</div
-                  >
-                  <div
-                    class="sd-select-option"
-                    :class="{ active: store.defaultServiceInstallMethod === 'official' }"
-                    @click="
-                      (store.setDefaultServiceInstallMethod('official'),
-                      (methodDropdownOpen = false))
-                    "
-                    >{{ t('newWebConfig.officialCli') }}</div
-                  >
-                </div>
-              </Teleport>
-            </div>
+            <select
+              class="sd-select"
+              :value="store.defaultServiceInstallMethod"
+              :aria-label="t('newSettings.defaultServiceMethod')"
+              @change="handleServiceMethodSelect"
+            >
+              <option value="nssm">NSSM</option>
+              <option value="official">{{ t('newWebConfig.officialCli') }}</option>
+            </select>
           </div>
 
           <div class="sd-row">
@@ -238,7 +199,11 @@
               <span class="sd-row-desc">{{ t('newSettings.defaultAutostartDesc') }}</span>
             </div>
             <label class="sd-switch">
-              <input type="checkbox" v-model="store.defaultEnableAutostart" />
+              <input
+                type="checkbox"
+                v-model="store.defaultEnableAutostart"
+                :aria-label="t('newSettings.defaultAutostart')"
+              />
               <span class="sd-switch-slider"></span>
             </label>
           </div>
@@ -249,7 +214,11 @@
               <span class="sd-row-desc">{{ t('newSettings.errorNotifyDesc') }}</span>
             </div>
             <label class="sd-switch">
-              <input type="checkbox" v-model="store.errRunNotify" />
+              <input
+                type="checkbox"
+                v-model="store.errRunNotify"
+                :aria-label="t('newSettings.errorNotify')"
+              />
               <span class="sd-switch-slider"></span>
             </label>
           </div>
@@ -261,14 +230,25 @@
               <span class="sd-row-desc">{{ t('newSettings.p2pNotifyDesc') }}</span>
             </div>
             <label class="sd-switch">
-              <input type="checkbox" v-model="store.p2pNotifySetting" />
+              <input
+                type="checkbox"
+                v-model="store.p2pNotifySetting"
+                :aria-label="t('newSettings.p2pNotify')"
+              />
               <span class="sd-switch-slider"></span>
             </label>
           </div>
         </div>
 
         <!-- 核心管理 -->
-        <div v-if="activeTab === 'core'" class="sd-section">
+        <div
+          v-if="activeTab === 'core'"
+          id="sd-panel-core"
+          class="sd-section"
+          role="tabpanel"
+          aria-labelledby="sd-tab-core"
+          tabindex="0"
+        >
           <!-- 核心版本 -->
           <div class="sd-row">
             <div class="sd-row-info">
@@ -332,42 +312,37 @@
             </div>
           </div>
 
-          <!-- 5.10：加速源（镜像延迟测试） -->
-          <div v-if="!isAndroidPlatform" class="sd-row">
-            <div class="sd-row-info">
-              <span class="sd-row-title">{{ t('newSettings.mirrorSource') }}</span>
-              <span class="sd-row-desc">{{ t('newSettings.mirrorSourceDesc') }}</span>
-            </div>
-            <button
-              class="sd-btn sd-btn-ghost"
-              @click="handleProbeMirrors"
-              :disabled="mirrorProbing"
-            >
-              {{ mirrorProbing ? t('newSettings.mirrorProbing') : t('newSettings.mirrorProbe') }}
-            </button>
-          </div>
-          <div v-if="!isAndroidPlatform" class="sd-mirror-list">
-            <div
-              v-for="s in mirrorSources"
-              :key="s.value"
-              class="sd-mirror-item"
-              :class="{ active: mirrorSelected === s.value }"
-              @click="mirrorSelect(s.value)"
-            >
-              <span class="sd-mirror-radio"></span>
-              <span class="sd-mirror-name">{{ s.label || t('newSettings.mirrorOfficial') }}</span>
-              <span class="sd-mirror-lat" :class="latencyClass(s.latency)">{{
-                latencyText(s.latency)
-              }}</span>
-              <span v-if="mirrorSelected === s.value" class="sd-mirror-inuse">{{
-                t('newSettings.mirrorInUse')
-              }}</span>
-            </div>
-          </div>
-
           <!-- 下载与安装（桌面换内核版本；Android 内核随应用更新） -->
           <div v-if="!isAndroidPlatform" class="sd-core-install">
-            <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
+            <div class="sd-core-install-head">
+              <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
+              <!-- 加速源入口：列表/增删放在下级弹窗，避免占用内核面板纵向空间 -->
+              <button
+                type="button"
+                class="sd-mirror-open"
+                :title="t('newSettings.mirrorSourceDesc')"
+                @click="openMirrorDialog"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 7h13l-3-3" />
+                  <path d="M20 17H7l3 3" />
+                </svg>
+                <span>{{ t('newSettings.mirrorSource') }}</span>
+                <span class="sd-mirror-open-value" :title="currentMirrorLabel">{{
+                  currentMirrorLabel
+                }}</span>
+              </button>
+            </div>
             <div class="sd-core-install-hint">
               {{ t('newSettings.downloadInstallHint') }}
             </div>
@@ -375,99 +350,90 @@
               {{ corePackageStatusText }}
             </div>
             <div class="sd-core-install-actions">
-              <div class="sd-select-wrapper" ref="versionDropdownRef">
-                <button
-                  class="sd-select-trigger"
-                  ref="versionTriggerRef"
-                  @click="versionDropdownOpen = !versionDropdownOpen"
-                >
-                  <span class="sd-select-value">
-                    <span>{{ coreVerSelect }}</span>
-                    <span
-                      class="sd-core-chip"
-                      :class="selectedCoreOption?.channel === 'prerelease' ? 'pre' : 'stable'"
-                      >{{ selectedChannelLabel }}</span
-                    >
-                  </span>
-                  <svg
-                    class="sd-select-arrow"
-                    :class="{ open: versionDropdownOpen }"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 12 12"
-                    fill="none"
-                  >
-                    <path
-                      d="M3 4.5L6 7.5L9 4.5"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-                <Teleport to="body">
-                  <div
-                    v-if="versionDropdownOpen"
-                    class="sd-select-dropdown sd-select-dropdown-fixed sd-version-dropdown"
-                    :style="dropdownStyle"
-                  >
-                    <div
-                      v-for="item in coreVerOptions"
-                      :key="item.tag_name"
-                      class="sd-select-option"
-                      :class="{ active: coreVerSelect === item.tag_name }"
-                      @click="((coreVerSelect = item.tag_name), (versionDropdownOpen = false))"
-                    >
-                      <span class="sd-select-option-label">{{ item.tag_name }}</span>
-                      <span
-                        class="sd-core-chip"
-                        :class="item.channel === 'prerelease' ? 'pre' : 'stable'"
-                        >{{
-                          item.channel === 'prerelease'
-                            ? t('newSettings.channelPrerelease')
-                            : t('newSettings.channelStable')
-                        }}</span
-                      >
-                      <span v-if="item.builtin" class="sd-core-chip builtin">{{
-                        t('newSettings.builtinBadge')
-                      }}</span>
-                      <span
-                        v-else-if="downloadedCoreVersions.includes(item.tag_name)"
-                        class="sd-core-chip downloaded"
-                        >{{ t('newSettings.downloadedBadge') }}</span
-                      >
-                      <span
-                        v-if="item.tag_name === store.detectedCoreVersion"
-                        class="sd-core-chip installed"
-                        >{{ t('newSettings.installedBadge') }}</span
-                      >
-                    </div>
-                  </div>
-                </Teleport>
-              </div>
+              <select
+                class="sd-select sd-core-version-select"
+                :value="coreVerSelect"
+                :aria-label="t('newSettings.coreVersion')"
+                :disabled="downloadingCore"
+                @change="handleCoreVersionSelect"
+              >
+                <option v-for="item in coreVerOptions" :key="item.tag_name" :value="item.tag_name">
+                  {{
+                    `${item.tag_name} · ${
+                      item.channel === 'prerelease'
+                        ? t('newSettings.channelPrerelease')
+                        : t('newSettings.channelStable')
+                    }${
+                      downloadedCoreVersions.includes(item.tag_name)
+                        ? ` · ${t('newSettings.downloadedBadge')}`
+                        : ''
+                    }${
+                      item.tag_name === store.detectedCoreVersion
+                        ? ` · ${t('newSettings.installedBadge')}`
+                        : ''
+                    }`
+                  }}
+                </option>
+              </select>
             </div>
             <div class="sd-core-install-actions">
               <button
                 class="sd-btn sd-btn-primary"
                 @click="handleDownloadCore"
-                :disabled="downloadingCore"
+                :disabled="downloadingCore || mirrorProbing"
               >
-                {{ downloadingCore ? t('newSettings.downloading') : t('newSettings.downloadCore') }}
+                {{ downloadBtnText }}
               </button>
               <button
                 class="sd-btn sd-btn-success"
                 @click="handleInstallCore"
-                :disabled="installingCore || !selectedCoreReady"
+                :disabled="installingCore || downloadingCore || !selectedCoreReady"
               >
                 {{ installingCore ? t('newCommon.installing') : t('newSettings.installCore') }}
               </button>
+            </div>
+            <!-- 下载进度：已知总大小时显示百分比进度条，缺失 Content-Length 时显示不确定态 -->
+            <div v-if="downloadActive" class="sd-download-progress">
+              <div
+                class="sd-download-progress-track"
+                role="progressbar"
+                :aria-label="t('newSettings.downloadProgressLabel')"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="downloadPercent ?? undefined"
+                :aria-valuetext="downloadProgressText"
+              >
+                <div
+                  class="sd-download-progress-fill"
+                  :class="{ 'is-indeterminate': downloadPercent === null }"
+                  :style="downloadPercent === null ? undefined : { width: `${downloadPercent}%` }"
+                ></div>
+              </div>
+              <span class="sd-download-progress-text">{{ downloadProgressText }}</span>
             </div>
           </div>
         </div>
 
         <!-- 数据管理 -->
-        <div v-if="activeTab === 'data'" class="sd-section">
+        <div
+          v-if="activeTab === 'data'"
+          id="sd-panel-data"
+          class="sd-section"
+          role="tabpanel"
+          aria-labelledby="sd-tab-data"
+          tabindex="0"
+        >
+          <!-- 备份与恢复：Android 无可靠的绝对路径保存/读取能力，入口仅桌面与浏览器预览 -->
+          <div v-if="!isAndroidPlatform" class="sd-row">
+            <div class="sd-row-info">
+              <span class="sd-row-title">{{ t('newSettings.backupRestore') }}</span>
+              <span class="sd-row-desc">{{ t('newSettings.backupRestoreDesc') }}</span>
+            </div>
+            <button class="sd-btn sd-btn-ghost" @click="backupDialogVisible = true">
+              {{ t('newSettings.backupRestoreOpen') }}
+            </button>
+          </div>
+
           <div class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.clearCache') }}</span>
@@ -494,84 +460,152 @@
         </div>
 
         <!-- 安全（锁定密码，5.12） -->
-        <div v-if="activeTab === 'security'" class="sd-section">
-          <div class="sd-row">
-            <div class="sd-row-info">
-              <span class="sd-row-title">{{ t('newSettings.lockPassword') }}</span>
+        <div
+          v-if="activeTab === 'security'"
+          id="sd-panel-security"
+          class="sd-section"
+          role="tabpanel"
+          aria-labelledby="sd-tab-security"
+          tabindex="0"
+        >
+          <div class="sd-security-card">
+            <div class="sd-security-head">
+              <div class="sd-security-title">
+                <span class="sd-row-title">{{ t('newSettings.lockPassword') }}</span>
+                <span class="sd-lock-status" :class="{ on: !!store.lockPassword }">
+                  {{
+                    store.lockPassword
+                      ? t('newSettings.lockPasswordEnabled')
+                      : t('newSettings.lockPasswordDisabled')
+                  }}
+                </span>
+              </div>
               <span class="sd-row-desc">{{ t('newSettings.lockPasswordDesc') }}</span>
             </div>
-            <div class="sd-lock-wrap">
-              <span class="sd-lock-status" :class="{ on: !!store.lockPassword }">
-                {{
-                  store.lockPassword
-                    ? t('newSettings.lockPasswordEnabled')
-                    : t('newSettings.lockPasswordDisabled')
-                }}
-              </span>
-              <div class="sd-lock-input-bar">
-                <input
-                  class="sd-lock-input"
-                  :type="lockPwdVisible ? 'text' : 'password'"
-                  v-model="lockPwdInput"
-                  :placeholder="t('newSettings.lockPasswordPlaceholder')"
-                  maxlength="32"
-                  @keyup.enter="commitLockPassword"
-                  @blur="commitLockPassword"
-                />
-                <button
-                  class="sd-lock-eye"
-                  type="button"
-                  @mousedown.prevent
-                  @click="lockPwdVisible = !lockPwdVisible"
-                  :title="
-                    lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
-                  "
-                  :aria-label="
-                    lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
-                  "
-                  :aria-pressed="lockPwdVisible"
-                >
-                  <svg
-                    v-if="lockPwdVisible"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+
+            <!-- 未设置密码，或已设置且点击“修改密码”时显示双输入表单 -->
+            <div v-if="!store.lockPassword || lockEditMode" class="sd-lock-form">
+              <div class="sd-lock-fields">
+                <div class="sd-lock-field">
+                  <label class="sd-lock-label" for="sd-lock-new">{{
+                    t('newSettings.lockPasswordNew')
+                  }}</label>
+                  <div class="sd-lock-input-bar">
+                    <input
+                      id="sd-lock-new"
+                      ref="lockPwdInputRef"
+                      class="sd-lock-input"
+                      :type="lockPwdVisible ? 'text' : 'password'"
+                      v-model="lockPwdInput"
+                      :placeholder="t('newSettings.lockPasswordNewPlaceholder')"
+                      :aria-label="t('newSettings.lockPasswordNew')"
+                      :aria-invalid="!!lockPwdError"
+                      :aria-describedby="lockPwdError ? 'sd-lock-error' : undefined"
+                      autocomplete="new-password"
+                      maxlength="32"
+                      @input="lockPwdError = ''"
+                      @keyup.enter="commitLockPassword"
                     />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                  <svg
-                    v-else
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                </button>
+                    <button
+                      class="sd-lock-eye"
+                      type="button"
+                      @mousedown.prevent
+                      @click="lockPwdVisible = !lockPwdVisible"
+                      :title="
+                        lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
+                      "
+                      :aria-label="
+                        lockPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
+                      "
+                      :aria-pressed="lockPwdVisible"
+                    >
+                      <svg
+                        v-if="lockPwdVisible"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                        />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                      <svg
+                        v-else
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="sd-lock-field">
+                  <label class="sd-lock-label" for="sd-lock-confirm">{{
+                    t('newSettings.lockPasswordConfirm')
+                  }}</label>
+                  <input
+                    id="sd-lock-confirm"
+                    class="sd-lock-input"
+                    :type="lockPwdVisible ? 'text' : 'password'"
+                    v-model="lockPwdConfirm"
+                    :placeholder="t('newSettings.lockPasswordConfirmPlaceholder')"
+                    :aria-label="t('newSettings.lockPasswordConfirm')"
+                    :aria-invalid="!!lockPwdError"
+                    :aria-describedby="lockPwdError ? 'sd-lock-error' : undefined"
+                    autocomplete="new-password"
+                    maxlength="32"
+                    @input="lockPwdError = ''"
+                    @keyup.enter="commitLockPassword"
+                  />
+                </div>
               </div>
-              <button
-                class="sd-btn sd-btn-danger"
-                type="button"
-                @click="handleClearLockPassword"
-                :disabled="!store.lockPassword"
-                >{{ t('newSettings.lockPasswordClear') }}</button
-              >
+              <span v-if="lockPwdError" id="sd-lock-error" class="sd-field-error" role="alert">{{
+                lockPwdError
+              }}</span>
+              <div class="sd-lock-actions">
+                <button
+                  v-if="store.lockPassword"
+                  class="sd-btn sd-btn-ghost"
+                  type="button"
+                  @click="cancelLockEdit"
+                  >{{ t('newCommon.cancel') }}</button
+                >
+                <button class="sd-btn sd-btn-primary" type="button" @click="commitLockPassword">{{
+                  store.lockPassword
+                    ? t('newSettings.lockPasswordSave')
+                    : t('newSettings.lockPasswordSet')
+                }}</button>
+              </div>
+            </div>
+            <div v-else class="sd-lock-actions">
+              <button class="sd-btn" type="button" @click="startLockEdit">{{
+                t('newSettings.lockPasswordChange')
+              }}</button>
+              <button class="sd-btn sd-btn-danger" type="button" @click="handleClearLockPassword">{{
+                t('newSettings.lockPasswordClear')
+              }}</button>
             </div>
           </div>
         </div>
 
         <!-- 关于 -->
-        <div v-if="activeTab === 'about'" class="sd-section">
+        <div
+          v-if="activeTab === 'about'"
+          id="sd-panel-about"
+          class="sd-section"
+          role="tabpanel"
+          aria-labelledby="sd-tab-about"
+          tabindex="0"
+        >
           <div class="sd-about">
             <div class="sd-about-logo">L</div>
             <div class="sd-about-info">
@@ -602,12 +636,9 @@
               {{ t('newSettings.easytierCore') }}
             </a>
           </div>
-          <div class="sd-about-core">
-            <span class="sd-about-core-label">{{ t('newSettings.coreVer') }}</span>
-            <span class="sd-about-core-ver">{{ coreVersion }}</span>
-          </div>
+          <!-- 内核版本已移至“核心管理”（随安装/切换实时变化），关于页只保留应用自身信息 -->
 
-          <!-- 检查更新（5.11）：入口暂隐藏，GitHub 发布首个 Release 后开放（UPDATE_CHECK_ENABLED） -->
+          <!-- 检查更新（5.11）：GitHub Release 已发布，入口开放 -->
           <div v-if="UPDATE_CHECK_ENABLED" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.checkUpdate') }}</span>
@@ -615,18 +646,20 @@
             </div>
             <div class="sd-btn-group">
               <span
-                v-if="latestManagerVersion"
+                v-if="latestManagerVersion && !updateCheckError"
                 class="sd-core-ver-tag"
                 :class="{ 'sd-core-ver-ok': hasManagerUpdate }"
                 >{{ latestManagerVersion }}</span
               >
               <button
                 v-if="hasManagerUpdate"
+                type="button"
                 class="sd-btn sd-btn-primary"
                 @click="handleOpenManagerReleases"
                 >{{ t('newSettings.goDownload') }}</button
               >
               <button
+                type="button"
                 class="sd-btn sd-btn-ghost"
                 @click="handleCheckUpdate"
                 :disabled="checkingUpdate"
@@ -638,6 +671,122 @@
         </div>
       </div>
     </div>
+  </CreamDialog>
+
+  <!-- 备份与恢复（数据管理的下级弹窗） -->
+  <BackupDialog v-model="backupDialogVisible" />
+
+  <!-- 加速源管理（内核下载与安装的下级弹窗） -->
+  <CreamDialog v-model="mirrorDialogVisible" :title="t('newSettings.mirrorSource')" width="560px">
+    <div class="sd-mirror-dialog">
+      <div class="sd-mirror-dialog-head">
+        <span class="sd-mirror-dialog-desc">{{ t('newSettings.mirrorSourceDesc') }}</span>
+        <div class="sd-btn-group">
+          <button
+            v-if="canRestoreDefaults"
+            type="button"
+            class="sd-btn sd-btn-ghost"
+            @click="handleRestoreMirrors"
+          >
+            {{ t('newSettings.mirrorRestoreDefaults') }}
+          </button>
+          <button
+            type="button"
+            class="sd-btn sd-btn-ghost"
+            :disabled="mirrorProbing"
+            @click="handleProbeMirrors"
+          >
+            {{ mirrorProbing ? t('newSettings.mirrorProbing') : t('newSettings.mirrorProbe') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="sd-mirror-list" role="radiogroup" :aria-label="t('newSettings.mirrorSource')">
+        <div
+          v-for="s in mirrorSources"
+          :key="s.value"
+          class="sd-mirror-item"
+          :class="{ active: mirrorSelected === s.value }"
+          @click="handleMirrorRowClick($event, s.value)"
+        >
+          <label class="sd-mirror-pick">
+            <input
+              class="lt-sr-only"
+              type="radio"
+              name="sd-mirror"
+              :value="s.value"
+              :checked="mirrorSelected === s.value"
+              @change="mirrorSelect(s.value)"
+            />
+            <span class="sd-mirror-radio" aria-hidden="true"></span>
+            <span class="sd-mirror-name" :title="s.label || t('newSettings.mirrorOfficial')">
+              <span class="sd-mirror-name-text">{{
+                s.label || t('newSettings.mirrorOfficial')
+              }}</span>
+              <span v-if="s.custom" class="sd-mirror-tag">{{ t('newSettings.mirrorCustom') }}</span>
+            </span>
+          </label>
+          <span class="sd-mirror-lat" :class="latencyClass(s.latency)">{{
+            latencyText(s.latency)
+          }}</span>
+          <span v-if="mirrorSelected === s.value" class="sd-mirror-inuse">{{
+            t('newSettings.mirrorInUse')
+          }}</span>
+          <button
+            v-if="!s.official"
+            type="button"
+            class="sd-mirror-remove"
+            :aria-label="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
+            :title="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
+            @click="handleRemoveMirror(s.value)"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <form class="sd-mirror-add" @submit.prevent="handleAddMirror">
+        <input
+          v-model="mirrorInput"
+          class="sd-mirror-input"
+          type="text"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          :placeholder="t('newSettings.mirrorAddPlaceholder')"
+          :aria-label="t('newSettings.mirrorAddLabel')"
+          :aria-invalid="mirrorAddError ? 'true' : undefined"
+          :aria-describedby="mirrorAddError ? 'sd-mirror-add-error' : 'sd-mirror-add-hint'"
+          @input="mirrorAddError = ''"
+        />
+        <button type="submit" class="sd-btn sd-btn-primary" :disabled="!mirrorInput.trim()">
+          {{ t('newSettings.mirrorAdd') }}
+        </button>
+      </form>
+      <div v-if="mirrorAddError" id="sd-mirror-add-error" class="sd-mirror-error" role="alert">
+        {{ mirrorAddError }}
+      </div>
+      <div v-else id="sd-mirror-add-hint" class="sd-mirror-add-hint">
+        {{ t('newSettings.mirrorAddHint') }}
+      </div>
+    </div>
+    <template #footer>
+      <span class="sd-mirror-footer-hint">{{ t('newSettings.mirrorApplyHint') }}</span>
+      <button type="button" class="sd-btn sd-btn-primary" @click="mirrorDialogVisible = false">
+        {{ t('newSettings.mirrorDone') }}
+      </button>
+    </template>
   </CreamDialog>
 
   <!-- 确认弹窗 -->
@@ -679,30 +828,35 @@
  * SettingsDialog — 全局设置弹窗（左侧分类导航 + 右侧设置面板）
  *
  * 分类：通用（自动运行/刷新间隔/默认服务方式/通知）、核心管理（版本检测、
- * 路径、5.10 镜像源延迟测试、下载与安装）、数据管理（清缓存/清日志）、
+ * 路径、下载与安装及加速源管理下级弹窗）、数据管理（清缓存/清日志）、
  * 安全（5.12 锁定密码）、关于（检查更新 5.11，入口由 UPDATE_CHECK_ENABLED 控制）。
  * 平台差异：Android 内核编译期内置，核心路径、快捷目录、镜像源与下载安装等
  * 桌面专属项一律隐藏；面板内确认操作统一使用 Promise 化内置确认弹窗替代原生 confirm。
  */
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { onClickOutside } from '@vueuse/core'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import BackupDialog from './BackupDialog.vue'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useCoreInstall } from '@/hooks/useCoreInstall'
-import { useMirrorProbe, LATENCY_GOOD, LATENCY_BAD } from '@/hooks/useMirrorProbe'
+import {
+  useMirrorProbe,
+  MIRROR_SOURCE_KEY,
+  LATENCY_GOOD,
+  LATENCY_BAD
+} from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
-import { useStorage } from '@/hooks/web/useStorage'
+import { clearAppCache } from '@/utils/cacheUtil'
 import { clearETLogs, clearLogs, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
+import { formatBytes } from '@/utils/easyTierUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
 import { hashLockPassword } from '@/utils/lockUtil'
 import { isAndroid } from '@/utils/platformUtil'
-import { CORE_VERSION_OPTIONS } from '@/constants/kernelCompat'
+import { CORE_VERSION_OPTIONS, DEFAULT_CORE_VERSION } from '@/constants/kernelCompat'
 import {
   CORE_PATH,
   getCoreDownloadUrl,
   getCoreFileName,
-  BUILTIN_CORE_VERSION,
   MANAGER_REPO_URL,
   MANAGER_REPO_HOME
 } from '@/constants/easytier'
@@ -710,7 +864,9 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { resourceDir, join } from '@tauri-apps/api/path'
 
-const props = defineProps<{ modelValue: boolean }>()
+const props = withDefaults(defineProps<{ modelValue: boolean; inline?: boolean }>(), {
+  inline: false
+})
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 // 内部可见态：与父组件 v-model 双向同步
@@ -724,7 +880,15 @@ watch(
 watch(visible, (v) => {
   emit('update:modelValue', v)
   // 关闭时丢弃未提交的密码输入（明文不在内存/界面残留）
-  if (!v) lockPwdInput.value = ''
+  if (!v) {
+    resetLockForm()
+    // 下级加速源弹窗一并关闭，未提交的输入与错误提示不残留
+    mirrorDialogVisible.value = false
+    mirrorInput.value = ''
+    mirrorAddError.value = ''
+    // 备份与恢复同样作为下级弹窗，关闭设置时一并收起
+    backupDialogVisible.value = false
+  }
 })
 
 const store = useEasyTierStore()
@@ -782,33 +946,83 @@ const tabs = [
   { key: 'about', label: t('newSettings.about') }
 ]
 
-// 安全：锁定密码（5.12）——输入为本地暂存，失焦/回车时加盐哈希后写入 store
+// 安全：锁定密码（5.12）——双输入显式提交（设置/修改/清除），失焦不再自动保存
 // （store.lockPassword 仅存校验串 sha256$salt$hash，随 pinia persist 持久化，绝不落明文）
 const lockPwdVisible = ref(false)
 const lockPwdInput = ref('')
+const lockPwdConfirm = ref('')
+const lockPwdError = ref('')
+const lockEditMode = ref(false)
+const lockPwdInputRef = ref<HTMLInputElement | null>(null)
+const LOCK_PWD_MIN_LENGTH = 6
+
+// 重置为“未在编辑”状态并清空明文
+const resetLockForm = () => {
+  lockPwdInput.value = ''
+  lockPwdConfirm.value = ''
+  lockPwdError.value = ''
+  lockPwdVisible.value = false
+  lockEditMode.value = false
+}
+
+// 已设置密码时，点“修改密码”展开双输入
+const startLockEdit = () => {
+  resetLockForm()
+  lockEditMode.value = true
+  nextTick(() => lockPwdInputRef.value?.focus())
+}
+
+const cancelLockEdit = () => {
+  resetLockForm()
+}
+
+// 显式提交：非空、至少 6 位、两次一致；错误就地展示并阻止写入
 const commitLockPassword = () => {
   const pwd = lockPwdInput.value
-  // 空输入不回写（解除保护需显式点“清除”，避免误清）
-  if (!pwd) return
+  if (!pwd) {
+    lockPwdError.value = t('newSettings.lockPasswordRequired')
+    return
+  }
+  if (pwd.length < LOCK_PWD_MIN_LENGTH) {
+    lockPwdError.value = t('newSettings.lockPasswordTooShort')
+    return
+  }
+  if (pwd !== lockPwdConfirm.value) {
+    lockPwdError.value = t('newSettings.lockPasswordMismatch')
+    return
+  }
+  const wasSet = !!store.lockPassword
   store.lockPassword = hashLockPassword(pwd)
-  lockPwdInput.value = ''
+  toast.success(
+    wasSet ? t('newSettings.lockPasswordChanged') : t('newSettings.lockPasswordSetSuccess')
+  )
+  resetLockForm()
 }
-const handleClearLockPassword = () => {
+
+// 清除需二次确认，避免误触解除保护
+const handleClearLockPassword = async () => {
+  if (
+    !(await showConfirm(
+      t('newSettings.lockPasswordClearTitle'),
+      t('newSettings.lockPasswordClearConfirm')
+    ))
+  )
+    return
   store.lockPassword = ''
-  lockPwdInput.value = ''
+  resetLockForm()
   toast.success(t('newSettings.lockPasswordCleared'))
 }
 
 // 关于：检查更新（5.11，版本基准用 getAppVersion() 权威值）
-// 开关：仓库地址已就绪（BeafJerky/LIghtTier），但 GitHub 上尚未发布 Release，
-// releases 接口返回空列表会被下方逻辑判为检查失败，故入口暂时隐藏；
-// 发布首个 Release 后改为 true 开放（请求与 UI 代码均已就绪）
-const UPDATE_CHECK_ENABLED = false
+// 三态：有更新（版本号 + 前往下载）/ 已是最新 / 请求失败或空列表（错误提示，重试按钮复用检查按钮）
+const UPDATE_CHECK_ENABLED = true
 
 const checkingUpdate = ref(false)
+const updateCheckError = ref(false)
 const latestManagerVersion = ref('')
 const hasManagerUpdate = computed(() => {
   if (
+    updateCheckError.value ||
     !latestManagerVersion.value ||
     !appVersion.value ||
     appVersion.value === '...' ||
@@ -818,6 +1032,7 @@ const hasManagerUpdate = computed(() => {
   return compareVersions(latestManagerVersion.value, appVersion.value) > 0
 })
 const updateDesc = computed(() => {
+  if (updateCheckError.value) return t('newSettings.checkUpdateFail')
   if (hasManagerUpdate.value)
     return t('newSettings.updateAvailable', { version: latestManagerVersion.value })
   if (latestManagerVersion.value) return t('newSettings.upToDateDesc')
@@ -826,11 +1041,15 @@ const updateDesc = computed(() => {
 
 const handleCheckUpdate = async () => {
   checkingUpdate.value = true
+  updateCheckError.value = false
   try {
-    const data = (await store.refreshManagerReleaseInfo()) as any[]
+    const data = (await store.refreshManagerReleaseInfo(mirrorSelected.value)) as any[]
+    // 空列表是接口异常，不能误报“已是最新”
     if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
     const latest = data.find((r) => !r.draft) || data[0]
-    latestManagerVersion.value = latest.tag_name || ''
+    const latestVersion = latest?.tag_name || ''
+    if (!latestVersion) throw new Error('missing tag_name')
+    latestManagerVersion.value = latestVersion
     if (hasManagerUpdate.value) {
       toast.info(t('newSettings.updateAvailable', { version: latestManagerVersion.value }))
     } else {
@@ -838,6 +1057,8 @@ const handleCheckUpdate = async () => {
     }
   } catch (e) {
     console.error('检查更新失败:', e)
+    latestManagerVersion.value = ''
+    updateCheckError.value = true
     toast.error(t('newSettings.checkUpdateFail'))
   } finally {
     checkingUpdate.value = false
@@ -860,102 +1081,113 @@ const coreVersion = computed(() => {
   return store.coreVersionRaw || t('newSettings.notInstalled')
 })
 
-// 核心版本下拉：点击外部收起
-const versionDropdownRef = ref<HTMLElement | null>(null)
-const versionTriggerRef = ref<HTMLButtonElement | null>(null)
-const versionDropdownOpen = ref(false)
-onClickOutside(versionDropdownRef, () => {
-  versionDropdownOpen.value = false
-})
+// Tab 导航键盘操作：Up/Down/Left/Right 循环，Home/End 跳首尾（UX-104）
+const tabRefs = ref<HTMLButtonElement[]>([])
+const navRef = ref<HTMLElement>()
+const contentRef = ref<HTMLElement>()
+const setTabRef = (el: unknown, idx: number) => {
+  if (el) tabRefs.value[idx] = el as HTMLButtonElement
+}
+// 窄屏横向 tab：切换后把当前分类滚入可视区。
+// 只滚动导航自身，避免 scrollIntoView 连带滚动弹窗或内容区等祖先容器。
+const scrollActiveTabIntoView = () => {
+  nextTick(() => {
+    const nav = navRef.value
+    const idx = tabs.findIndex((tab) => tab.key === activeTab.value)
+    const item = tabRefs.value[idx]
+    if (!nav || !item) return
+    const navRect = nav.getBoundingClientRect()
+    const itemRect = item.getBoundingClientRect()
+    let left = nav.scrollLeft
+    let top = nav.scrollTop
+    if (itemRect.left < navRect.left) left += itemRect.left - navRect.left - 8
+    else if (itemRect.right > navRect.right) left += itemRect.right - navRect.right + 8
+    if (itemRect.top < navRect.top) top += itemRect.top - navRect.top - 8
+    else if (itemRect.bottom > navRect.bottom) top += itemRect.bottom - navRect.bottom + 8
+    if (left !== nav.scrollLeft || top !== nav.scrollTop) {
+      nav.scrollTo({ left, top, behavior: 'smooth' })
+    }
+  })
+}
+const selectTab = (key: string) => {
+  activeTab.value = key
+  // 切换分类后内容区回到顶部，避免沿用上一个分类的滚动位置
+  nextTick(() => contentRef.value?.scrollTo({ top: 0 }))
+  scrollActiveTabIntoView()
+}
+const handleTabKeydown = (e: KeyboardEvent, idx: number) => {
+  const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  e.preventDefault()
+  let next = idx
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (idx + 1) % tabs.length
+  else if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = tabs.length - 1
+  selectTab(tabs[next].key)
+  nextTick(() => tabRefs.value[next]?.focus())
+}
 
-// 自动运行配置下拉：点击外部收起
-const configDropdownRef = ref<HTMLElement | null>(null)
-const configTriggerRef = ref<HTMLButtonElement | null>(null)
-const configDropdownOpen = ref(false)
-onClickOutside(configDropdownRef, () => {
-  configDropdownOpen.value = false
-})
-
-// 默认服务方式下拉：点击外部收起
-const methodDropdownRef = ref<HTMLElement | null>(null)
-const methodTriggerRef = ref<HTMLButtonElement | null>(null)
-const methodDropdownOpen = ref(false)
-onClickOutside(methodDropdownRef, () => {
-  methodDropdownOpen.value = false
-})
-
-// 下拉定位：面板 Teleport 到 body 后按触发按钮位置 fixed 定位
-//（避免被弹窗内部滚动容器裁剪）
-const dropdownStyle = computed(() => {
-  if (!versionTriggerRef.value) return {}
-  const rect = versionTriggerRef.value.getBoundingClientRect()
-  return {
-    position: 'fixed' as const,
-    top: `${rect.bottom + 4}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    zIndex: 9999
-  }
-})
-
-// 自动运行配置下拉的定位样式
-const configDropdownStyle = computed(() => {
-  if (!configTriggerRef.value) return {}
-  const rect = configTriggerRef.value.getBoundingClientRect()
-  return {
-    position: 'fixed' as const,
-    top: `${rect.bottom + 4}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    zIndex: 9999
-  }
-})
-
-// 默认服务方式下拉的定位样式
-const methodDropdownStyle = computed(() => {
-  if (!methodTriggerRef.value) return {}
-  const rect = methodTriggerRef.value.getBoundingClientRect()
-  return {
-    position: 'fixed' as const,
-    top: `${rect.bottom + 4}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    zIndex: 9999
-  }
-})
+// 原生下拉/单选的 change 处理器（替代自定义 dropdown 的点击逻辑）
+const handleAutoRunConfigSelect = (e: Event) => {
+  handleAutoRunConfigChange((e.target as HTMLSelectElement).value)
+}
+const handleServiceMethodSelect = (e: Event) => {
+  const val = (e.target as HTMLSelectElement).value
+  store.setDefaultServiceInstallMethod(val === 'nssm' ? 'nssm' : 'official')
+}
+const handleCoreVersionSelect = (e: Event) => {
+  coreVerSelect.value = (e.target as HTMLSelectElement).value
+}
 
 // 数据管理状态
 const clearingCache = ref(false)
 const clearingLogs = ref(false)
+const backupDialogVisible = ref(false)
 
 // 核心管理状态
 const checkingCore = ref(false)
 const corePath = ref('')
-// 可下载版本为固定列表（constants/kernelCompat.ts），默认选中内置版本（免下载）
+// 可下载版本为固定列表（constants/kernelCompat.ts），默认选中最新正式版（需自行下载）
 const coreVerOptions = CORE_VERSION_OPTIONS
-const coreVerSelect = ref(BUILTIN_CORE_VERSION)
+const coreVerSelect = ref(DEFAULT_CORE_VERSION)
 const downloadingCore = ref(false)
+// 是否已进入实际下载阶段（自动测速阶段不展示 0% 进度条）
+const downloadActive = ref(false)
+// 下载进度：total 为 null 表示服务端未返回 Content-Length（进度条转为不确定态）
+const downloadReceived = ref(0)
+const downloadTotal = ref<number | null>(null)
+const downloadPercent = computed<number | null>(() => {
+  if (!downloadTotal.value) return null
+  return Math.min(
+    100,
+    Math.max(0, Math.round((downloadReceived.value / downloadTotal.value) * 100))
+  )
+})
+const downloadProgressText = computed(() => {
+  const total = downloadTotal.value
+  if (downloadPercent.value === null || !total) {
+    return t('newSettings.downloadProgressReceived', { size: formatBytes(downloadReceived.value) })
+  }
+  return t('newSettings.downloadProgressPercent', {
+    percent: downloadPercent.value,
+    received: formatBytes(downloadReceived.value),
+    total: formatBytes(total)
+  })
+})
 const coreFileName = ref('')
-const selectedCoreOption = computed(() =>
-  coreVerOptions.find((o) => o.tag_name === coreVerSelect.value)
-)
 // 已下载的内核安装包版本（扫描 resource/core 下的 zip；安装后仍保留）
 const downloadedCoreVersions = ref<string[]>([])
 const isSelectedCoreDownloaded = computed(() =>
   downloadedCoreVersions.value.includes(coreVerSelect.value)
 )
-// 以本地 zip 实际存在为准（内置版本也可能因资源缺失/外部删除而不可安装）
+// 以本地 zip 实际存在为准：安装包不再内置，必须先下载
 const selectedCoreReady = computed(() => isSelectedCoreDownloaded.value)
-const corePackageStatusText = computed(() => {
-  if (isSelectedCoreDownloaded.value) {
-    return selectedCoreOption.value?.builtin
-      ? t('newSettings.corePackageBuiltin')
-      : t('newSettings.corePackageDownloaded')
-  }
-  return selectedCoreOption.value?.builtin
-    ? t('newSettings.corePackageBuiltinMissing')
+const corePackageStatusText = computed(() =>
+  isSelectedCoreDownloaded.value
+    ? t('newSettings.corePackageDownloaded')
     : t('newSettings.corePackageNotDownloaded')
-})
+)
 
 // 扫描 core 目录，按当前平台/架构的压缩包名判断各版本下载状态
 const refreshDownloadedCores = async () => {
@@ -976,12 +1208,6 @@ watch(activeTab, (tab) => {
   if (tab === 'core') void refreshDownloadedCores()
 })
 
-// 切换目标版本时展示的渠道/内置标记（正式版与预览版的配置行为不同，需明确提示）
-const selectedChannelLabel = computed(() =>
-  selectedCoreOption.value?.channel === 'prerelease'
-    ? t('newSettings.channelPrerelease')
-    : t('newSettings.channelStable')
-)
 // 当前内核的适配档案说明：让用户确认切换后表单/命令会跟随版本变化
 const compatProfileDesc = computed(() => {
   if (store.coreVersionDetecting) return t('newCommon.checking')
@@ -997,14 +1223,51 @@ const compatProfileDesc = computed(() => {
   })
 })
 
-// 5.10：镜像延迟测试
+// 5.10：加速源管理（下载安装区块的下级弹窗）
 const {
   sources: mirrorSources,
   probing: mirrorProbing,
   selected: mirrorSelected,
   probeAll,
-  selectSource: mirrorSelect
+  probeSource,
+  waitForProbe,
+  selectSource: mirrorSelect,
+  addSource: mirrorAddSource,
+  removeSource: mirrorRemoveSource,
+  canRestoreDefaults,
+  restoreDefaults: mirrorRestoreDefaults
 } = useMirrorProbe()
+
+// 加速源弹窗：入口按钮展示当前选中的源名，新增输入与错误提示随弹窗关闭清空
+const mirrorDialogVisible = ref(false)
+const mirrorInput = ref('')
+const mirrorAddError = ref('')
+// 未指定加速源时的自动测速每个设置会话只尝试一次，失败后直接回退官方源
+let autoMirrorProbeAttempted = false
+
+const currentMirrorLabel = computed(() => {
+  if (mirrorProbing.value) return t('newSettings.mirrorProbing')
+  const current = mirrorSources.value.find((s) => s.value === mirrorSelected.value)
+  return current
+    ? current.label || t('newSettings.mirrorOfficial')
+    : t('newSettings.mirrorOfficial')
+})
+
+// 下载按钮文案：自动测速阶段优先展示“测速中…”，避免误以为已在下载
+const downloadBtnText = computed(() => {
+  if (mirrorProbing.value) return t('newSettings.mirrorProbing')
+  return downloadingCore.value ? t('newSettings.downloading') : t('newSettings.downloadCore')
+})
+
+const openMirrorDialog = () => {
+  mirrorAddError.value = ''
+  mirrorDialogVisible.value = true
+  // 未指定加速源时，打开弹窗即自动测速并选用最快源；已显式选择则保留原选择
+  if (!localStorage.getItem(MIRROR_SOURCE_KEY) && coreFileName.value && !autoMirrorProbeAttempted) {
+    autoMirrorProbeAttempted = true
+    void probeAll(coreVerSelect.value, coreFileName.value)
+  }
+}
 
 // 测速全部镜像源（目标为所选版本的真实内核包），全部失败时给出提示
 const handleProbeMirrors = async () => {
@@ -1016,6 +1279,44 @@ const handleProbeMirrors = async () => {
   if (mirrorSources.value.every((s) => s.latency === null)) {
     toast.warning(t('newSettings.mirrorProbeFail'))
   }
+}
+
+// 新增自定义加速源：成功后自动选中并即时测速；不可达则回落到新增前的选择
+const handleAddMirror = async () => {
+  const previous = mirrorSelected.value
+  const result = mirrorAddSource(mirrorInput.value)
+  if (!result.ok) {
+    mirrorAddError.value =
+      result.reason === 'duplicate'
+        ? t('newSettings.mirrorAddDuplicate')
+        : t('newSettings.mirrorAddInvalid')
+    return
+  }
+  mirrorInput.value = ''
+  mirrorAddError.value = ''
+  // 无版本目标或已有测速任务时跳过即时测速（未测不视为不可达）
+  if (!coreFileName.value || mirrorProbing.value) return
+  const latency = await probeSource(result.value, coreVerSelect.value, coreFileName.value)
+  if (latency === null) {
+    mirrorSelect(previous)
+    toast.warning(t('newSettings.mirrorAddUnreachable'))
+  }
+}
+
+// 删除加速源：内置源可通过“恢复内置源”找回，自定义源需重新添加
+const handleRemoveMirror = (value: string) => {
+  mirrorRemoveSource(value)
+}
+
+// 整行可点选（删除按钮除外），与旧版整行 label 的点击范围保持一致
+const handleMirrorRowClick = (e: MouseEvent, value: string) => {
+  if ((e.target as HTMLElement).closest('button')) return
+  mirrorSelect(value)
+}
+
+// 恢复被删除的内置镜像（保留自定义源与已有测速结果）
+const handleRestoreMirrors = () => {
+  mirrorRestoreDefaults()
 }
 
 // 延迟展示：null 显示占位符，否则套用毫秒文案模板
@@ -1037,6 +1338,10 @@ const latencyClass = (lat: number | null): string => {
 watch(visible, async (v) => {
   if (v) {
     activeTab.value = 'general'
+    autoMirrorProbeAttempted = false
+    // 打开时让当前分类在窄屏横向 tab 中自动可见
+    scrollActiveTabIntoView()
+    syncRefreshInput()
     // 恢复持久化的自动运行设置
     const savedAutoRun = localStorage.getItem('settings.autoRunNetwork')
     if (savedAutoRun !== null) {
@@ -1057,28 +1362,41 @@ watch(visible, async (v) => {
     } catch {
       /* 探测失败按未安装处理，表单保持宽松展示 */
     }
-    if (!isAndroidPlatform) {
-      // 加载核心路径
+    if (isDesktopRuntime) {
+      // 加载核心路径（仅桌面 Tauri；浏览器预览避免调用 plugin-os/path）
       try {
         corePath.value = await join(await resourceDir(), CORE_PATH)
       } catch {
         corePath.value = t('newSettings.unknown')
       }
-      // 固定版本列表：已安装版本在列表内则默认选中它，否则回退内置版本
+      // 固定版本列表：已安装版本在列表内则默认选中它，否则回退最新正式版
       const installed = store.detectedCoreVersion
       const match = coreVerOptions.find((o) => o.tag_name === installed)
-      coreVerSelect.value = match ? match.tag_name : BUILTIN_CORE_VERSION
+      coreVerSelect.value = match ? match.tag_name : DEFAULT_CORE_VERSION
       updateCoreFileName()
       await refreshDownloadedCores()
     }
   }
 })
 
-// 工具函数：解析数字输入并夹取到 [min, max] 区间（非法输入回退 min）
-const clampNumber = (e: Event, min: number, max: number): number => {
-  const val = parseInt((e.target as HTMLInputElement).value, 10)
-  if (isNaN(val)) return min
-  return Math.max(min, Math.min(max, val))
+// 刷新间隔：本地文本承接输入，失焦/回车校验 1–60 的整数后再写回 store；
+// 非法输入保留原样并提示，不再逐键静默 clamp（UX-303）
+const refreshInput = ref(String(store.refreshInterval || 3))
+const refreshError = ref('')
+const syncRefreshInput = () => {
+  refreshInput.value = String(store.refreshInterval || 3)
+  refreshError.value = ''
+}
+const commitRefreshInterval = () => {
+  const raw = refreshInput.value.trim()
+  const val = Number(raw)
+  if (!raw || !Number.isInteger(val) || val < 1 || val > 60) {
+    refreshError.value = t('newSettings.refreshIntervalInvalid')
+    return
+  }
+  refreshError.value = ''
+  store.setRefreshInterval(val)
+  refreshInput.value = String(val)
 }
 
 // 自动运行设置：关闭开关时同步清除已选配置，并持久化到 localStorage
@@ -1100,16 +1418,18 @@ const handleAutoRunConfigChange = (val: string) => {
   }
 }
 
-// 清除缓存
+// 清除临时缓存：仅清除 STUN/公共节点等可再取的远端缓存，保留配置、主题、语言、锁屏密码等
 const handleClearCache = async () => {
   if (!(await showConfirm(t('newSettings.clearCacheTitle'), t('newSettings.clearCacheMsg')))) return
   clearingCache.value = true
   try {
-    const { clear } = useStorage('localStorage')
-    clear()
-    window.location.reload()
+    clearAppCache()
+    // 同步清空内存副本，下一次使用时会自然重新拉取
+    store.resetRemoteCache()
+    toast.success(t('newSettings.cacheCleared'))
   } catch (e) {
     console.error('清除缓存失败:', e)
+    toast.error(t('newCommon.loadFailed') + ': ' + String(e))
   } finally {
     clearingCache.value = false
   }
@@ -1185,10 +1505,27 @@ const handleDownloadCore = async () => {
   }
   downloadingCore.value = true
   try {
+    // 未指定加速源：先测速并自动选用最快源，再按该源下载
+    if (
+      !localStorage.getItem(MIRROR_SOURCE_KEY) &&
+      coreFileName.value &&
+      !autoMirrorProbeAttempted
+    ) {
+      autoMirrorProbeAttempted = true
+      toast.info(t('newSettings.mirrorAutoSelecting'))
+      await probeAll(coreVerSelect.value, coreFileName.value)
+      await waitForProbe()
+    }
     // 镜像前缀需要拼接完整 GitHub URL（官方源直链），与测速使用同一拼接规则
     const url = getCoreDownloadUrl(mirrorSelected.value, coreVerSelect.value, coreFileName.value)
-    toast.info(t('newSettings.downloadingHint'))
-    const ok = await downloadFile(url)
+    downloadReceived.value = 0
+    downloadTotal.value = null
+    downloadActive.value = true
+    // 进度条已常驻展示，不再重复弹“正在下载”提示
+    const ok = await downloadFile(url, (progress) => {
+      downloadReceived.value = progress.received
+      downloadTotal.value = progress.total
+    })
     if (ok) {
       toast.success(t('newSettings.downloadSuccess'))
       // 安装包保留在 core 目录，立即刷新“已下载”状态
@@ -1201,13 +1538,14 @@ const handleDownloadCore = async () => {
     toast.error(t('newSettings.downloadFailFull') + ': ' + String(e))
   } finally {
     downloadingCore.value = false
+    downloadActive.value = false
   }
 }
 
 // 安装所选版本内核（切换前停止全部实例与服务，成功后重新检测版本）
 const handleInstallCore = async () => {
   const target = coreVerSelect.value
-  // 只有内置包或已下载的 zip 才能安装（按钮已禁用，这里兜底提示）
+  // 只有已下载的 zip 才能安装（按钮已禁用，这里兜底提示）
   if (!selectedCoreReady.value) {
     toast.warning(t('newSettings.corePackageNotDownloaded'))
     return
@@ -1237,12 +1575,13 @@ const handleInstallCore = async () => {
 <style scoped>
 .sd-body {
   display: flex;
-  gap: var(--theme-space-4);
   min-height: 0;
+  overflow: hidden;
   flex: 1;
+  gap: var(--theme-space-4);
 }
 
-/* 左侧导航 */
+/* 左侧导航：独立滚动，不随右侧内容滚动 */
 .sd-nav {
   display: flex;
   width: 140px;
@@ -1255,6 +1594,7 @@ const handleInstallCore = async () => {
   flex-shrink: 0;
   flex-direction: column;
   gap: 2px;
+  overscroll-behavior: contain;
 }
 
 .sd-nav::-webkit-scrollbar {
@@ -1325,6 +1665,7 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-lg, 14px);
   flex: 1;
+  overscroll-behavior: contain;
 }
 
 .sd-content::-webkit-scrollbar {
@@ -1349,11 +1690,13 @@ const handleInstallCore = async () => {
 /* 设置行 */
 .sd-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  min-width: 0;
   padding: var(--theme-space-3) 0;
   border-bottom: 1px solid var(--theme-border-light, #f5ede6);
+  align-items: center;
+  justify-content: space-between;
   gap: var(--theme-space-3);
+  flex-wrap: wrap;
 }
 
 .sd-row:last-child {
@@ -1376,9 +1719,10 @@ const handleInstallCore = async () => {
 }
 
 .sd-row-desc {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--theme-text-muted, #c8bdb2);
+  overflow-wrap: anywhere;
 }
 
 /* 加速源列表（5.10） */
@@ -1401,8 +1745,23 @@ const handleInstallCore = async () => {
   gap: var(--theme-space-3);
 }
 
+.sd-mirror-pick {
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: var(--theme-space-3);
+  flex: 1;
+}
+
 .sd-mirror-item.active {
   border-color: var(--theme-color-success, #7fba8a);
+}
+
+/* 原生 radio 键盘聚焦：给自定义圆点画焦点环 */
+.sd-mirror-item input:focus-visible + .sd-mirror-radio {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
 }
 
 .sd-mirror-radio {
@@ -1420,17 +1779,36 @@ const handleInstallCore = async () => {
 }
 
 .sd-mirror-name {
+  display: flex;
   min-width: 0;
-  overflow: hidden;
   font-size: 12px;
   color: var(--theme-text-primary, #4a3728);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-items: center;
+  gap: 6px;
   flex: 1;
 }
 
+.sd-mirror-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 自定义源标签：与内置镜像区分 */
+.sd-mirror-tag {
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--theme-text-secondary, #8b7355);
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border, #e8ddd3);
+  border-radius: var(--theme-radius-pill, 100px);
+  flex-shrink: 0;
+}
+
 .sd-mirror-lat {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -1451,9 +1829,108 @@ const handleInstallCore = async () => {
 }
 
 .sd-mirror-inuse {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-color-success, #7fba8a);
   flex-shrink: 0;
+}
+
+/* 删除加速源：官方源不渲染，内置/自定义源可删 */
+.sd-mirror-remove {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--theme-text-muted, #c8bdb2);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-sm, 6px);
+  transition:
+    color 0.15s,
+    background 0.15s;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sd-mirror-remove:hover {
+  color: var(--theme-color-danger, #e8a0a0);
+  background: var(--theme-bg-hover, rgb(232 160 160 / 8%));
+}
+
+.sd-mirror-remove:focus-visible {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 1px;
+}
+
+/* 加速源下级弹窗 */
+.sd-mirror-dialog {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.sd-mirror-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+  flex-wrap: wrap;
+}
+
+.sd-mirror-dialog-desc {
+  min-width: 200px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+  flex: 1;
+}
+
+.sd-mirror-add {
+  display: flex;
+  margin-top: var(--theme-space-2);
+  gap: var(--theme-space-2);
+}
+
+.sd-mirror-input {
+  min-width: 0;
+  padding: var(--theme-space-2) var(--theme-space-3);
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 12px;
+  color: var(--theme-text-primary, #4a3728);
+  background: var(--theme-bg-tag, #f5ede6);
+  border: 1px solid var(--theme-border, #ede4db);
+  border-radius: var(--theme-radius-md, 10px);
+  outline: none;
+  transition: border-color 0.15s;
+  flex: 1;
+}
+
+.sd-mirror-input:focus {
+  border-color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.sd-mirror-input[aria-invalid='true'] {
+  border-color: var(--theme-color-danger, #e8a0a0);
+}
+
+.sd-mirror-error {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-color-danger, #e8a0a0);
+}
+
+.sd-mirror-add-hint,
+.sd-mirror-footer-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.sd-mirror-footer-hint {
+  min-width: 0;
+  flex: 1;
 }
 
 /* 纯 CSS 开关 */
@@ -1498,6 +1975,11 @@ const handleInstallCore = async () => {
   background: var(--theme-color-success, #7fba8a);
 }
 
+.sd-switch input:focus-visible + .sd-switch-slider {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
+}
+
 .sd-switch input:checked + .sd-switch-slider::before {
   transform: translateX(16px);
 }
@@ -1520,6 +2002,26 @@ const handleInstallCore = async () => {
 
 .sd-number:focus {
   border-color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.sd-number.invalid {
+  border-color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.sd-number-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sd-field-error {
+  max-width: 200px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-accent-primary, #e8a0a0);
+  text-align: right;
 }
 
 /* 下拉选择 */
@@ -1545,146 +2047,10 @@ const handleInstallCore = async () => {
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
-/* 自定义下拉 */
-.sd-select-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.sd-select-trigger {
-  display: flex;
-  min-width: 130px;
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-primary, #4a3728);
-  cursor: pointer;
-  background: var(--theme-bg-tag, #f5ede6);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: border-color 0.15s;
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.sd-select-trigger:hover {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.sd-select-arrow {
-  margin-left: auto;
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-
-.sd-select-arrow.open {
-  transform: rotate(180deg);
-}
-
-.sd-select-dropdown {
-  max-height: 160px;
-  padding: var(--theme-space-1);
-  overflow-y: auto;
-  background: var(--theme-bg-card, #fff);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-sm, 6px);
-  box-shadow: var(--theme-shadow-sm, 0 4px 12px rgb(0 0 0 / 12%));
-}
-
-.sd-select-dropdown-fixed {
-  position: fixed !important;
-}
-
-.sd-select-dropdown::-webkit-scrollbar {
-  width: 5px;
-}
-
-.sd-select-dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sd-select-dropdown::-webkit-scrollbar-thumb {
-  background: var(--theme-border, #ede4db);
-  border-radius: 10px;
-}
-
-.sd-select-option {
-  padding: var(--theme-space-2) var(--theme-space-3);
-  font-size: 12px;
-  color: var(--theme-text-secondary, #7a6e5e);
-  white-space: nowrap;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
-}
-
-.sd-select-option:hover {
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-}
-
-.sd-select-option.active {
-  font-weight: 500;
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-active, rgb(232 160 160 / 10%));
-}
-
-/* 内核版本下拉：固定列表需展示渠道/内置/已安装标记 */
-.sd-select-value {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-2);
-  min-width: 0;
-}
-
-.sd-version-dropdown {
-  min-width: 240px;
-}
-
-.sd-version-dropdown .sd-select-option {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.sd-select-option-label {
-  min-width: 52px;
-  font-family: var(--theme-font-body, 'Sora', monospace);
-}
-
-.sd-core-chip {
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.5;
-  white-space: nowrap;
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-  border-radius: 999px;
-}
-
-.sd-core-chip.stable {
-  color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
-}
-
-.sd-core-chip.pre {
-  color: var(--theme-color-warning, #d9a441);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 14%, transparent);
-}
-
-.sd-core-chip.builtin {
-  color: var(--theme-accent-primary, #d4a574);
-  background: color-mix(in srgb, var(--theme-accent-primary, #d4a574) 14%, transparent);
-}
-
-.sd-core-chip.installed {
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-border-light, #f5ede6);
-}
-
-.sd-core-chip.downloaded {
-  color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+/* 内核版本原生下拉：需容纳版本号 + 渠道/已安装标记文本 */
+.sd-core-version-select {
+  max-width: 280px;
+  min-width: 200px;
 }
 
 /* 确认弹窗内容 */
@@ -1783,8 +2149,10 @@ const handleInstallCore = async () => {
   font-family: var(--theme-font-body, 'Sora', sans-serif);
   font-size: 12px;
   color: var(--theme-text-muted, #c8bdb2);
+  white-space: nowrap;
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
   border-radius: var(--theme-radius-sm, 6px);
+  align-self: center;
 }
 
 .sd-core-ver-tag.sd-core-ver-ok {
@@ -1794,7 +2162,7 @@ const handleInstallCore = async () => {
 
 .sd-row-desc-mono {
   font-family: var(--theme-font-body, 'Sora', monospace);
-  font-size: 11px;
+  font-size: 12px;
   word-break: break-all;
 }
 
@@ -1808,6 +2176,51 @@ const handleInstallCore = async () => {
   gap: var(--theme-space-3);
 }
 
+.sd-core-install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-2);
+  flex-wrap: wrap;
+}
+
+/* 加速源入口：按钮内展示当前选中源，列表收进下级弹窗 */
+.sd-mirror-open {
+  display: flex;
+  max-width: 100%;
+  padding: 3px 10px;
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 12px;
+  color: var(--theme-text-secondary, #8b7355);
+  cursor: pointer;
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border, #e8ddd3);
+  border-radius: var(--theme-radius-pill, 100px);
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  align-items: center;
+  gap: 6px;
+}
+
+.sd-mirror-open:hover {
+  color: var(--theme-accent-primary, #d4a574);
+  border-color: var(--theme-accent-primary, #d4a574);
+}
+
+.sd-mirror-open:focus-visible {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
+}
+
+.sd-mirror-open-value {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--theme-text-muted, #c8bdb2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sd-core-install-title {
   font-size: 13px;
   font-weight: 600;
@@ -1815,7 +2228,7 @@ const handleInstallCore = async () => {
 }
 
 .sd-core-install-hint {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
 }
@@ -1825,7 +2238,7 @@ const handleInstallCore = async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--theme-color-warning, #d9a441);
 }
@@ -1848,6 +2261,64 @@ const handleInstallCore = async () => {
   align-items: center;
   gap: var(--theme-space-2);
   flex-wrap: wrap;
+}
+
+/* 内核下载进度：轨道用卡片底色，填充跟随主题强调色；无总大小时走不确定态 */
+.sd-download-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.sd-download-progress-track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border-light, #f5ede6);
+  border-radius: var(--theme-radius-pill, 100px);
+}
+
+.sd-download-progress-fill {
+  height: 100%;
+  background: var(--theme-accent-primary, #d4a574);
+  border-radius: inherit;
+  transition: width 0.12s linear;
+}
+
+.sd-download-progress-fill.is-indeterminate {
+  width: 30%;
+  animation: sd-download-indeterminate 1.1s ease-in-out infinite;
+}
+
+.sd-download-progress-text {
+  font-size: 12px;
+  color: var(--theme-text-muted, #c8bdb2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes sd-download-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(370%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-download-progress-fill {
+    transition: none;
+  }
+
+  .sd-download-progress-fill.is-indeterminate {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
 }
 
 /* 关于页 */
@@ -1924,44 +2395,76 @@ const handleInstallCore = async () => {
   background: var(--theme-bg-active, rgb(232 160 160 / 10%));
 }
 
-.sd-about-core {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--theme-space-3) 0;
-}
-
-.sd-about-core-label {
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-}
-
-.sd-about-core-ver {
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
-}
-
 /* 安全：锁定密码（5.12） */
-.sd-lock-wrap {
+.sd-security-card {
+  display: flex;
+  padding: var(--theme-space-4);
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  border: 1px solid var(--theme-border-light, #f5ede6);
+  border-radius: var(--theme-radius-lg, 14px);
+  flex-direction: column;
+  gap: var(--theme-space-4);
+}
+
+.sd-security-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sd-security-title {
   display: flex;
   align-items: center;
   gap: var(--theme-space-2);
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .sd-lock-status {
-  padding: 2px var(--theme-space-3);
+  padding: 2px var(--theme-space-2);
   font-size: 11px;
   color: var(--theme-text-muted, #c8bdb2);
   white-space: nowrap;
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  background: var(--theme-bg-tag, #f5ede6);
   border-radius: var(--theme-radius-pill, 100px);
 }
 
 .sd-lock-status.on {
   color: var(--theme-color-success, #7fba8a);
   background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+}
+
+/* 双输入表单：新密码 / 确认密码两列对齐，按钮右对齐 */
+.sd-lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-3);
+}
+
+.sd-lock-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--theme-space-3);
+}
+
+.sd-lock-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sd-lock-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.sd-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--theme-space-2);
 }
 
 .sd-lock-input-bar {
@@ -1971,8 +2474,9 @@ const handleInstallCore = async () => {
 }
 
 .sd-lock-input {
-  width: 160px;
-  padding: var(--theme-space-1) 30px var(--theme-space-1) var(--theme-space-3);
+  width: 100%;
+  min-height: 34px;
+  padding: var(--theme-space-2) 34px var(--theme-space-2) var(--theme-space-3);
   font-family: var(--theme-font-body, 'Sora', sans-serif);
   font-size: 12px;
   color: var(--theme-text-primary, #4a3728);
@@ -1980,7 +2484,13 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
+  box-sizing: border-box;
   transition: border-color 0.15s;
+}
+
+/* 确认密码没有眼睛按钮，右侧留白收窄 */
+.sd-lock-field > .sd-lock-input {
+  padding-right: var(--theme-space-3);
 }
 
 /* WebView2/Edge 自带密码揭示按钮，会与自定义眼睛图标重复，隐藏之 */
@@ -1996,7 +2506,7 @@ const handleInstallCore = async () => {
 .sd-lock-eye {
   position: absolute;
   top: 50%;
-  right: 3px;
+  right: 6px;
   display: flex;
   width: 22px;
   height: 22px;
@@ -2024,12 +2534,22 @@ const handleInstallCore = async () => {
   }
 
   .sd-nav {
-    width: 100%;
+    width: auto;
     flex-direction: row;
     gap: var(--theme-space-1);
     padding: var(--theme-space-2);
     overflow: auto hidden;
     scrollbar-width: none;
+    flex-shrink: 0;
+
+    /* 左右渐隐提示可横向滚动 */
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 10px,
+      #000 calc(100% - 10px),
+      transparent 100%
+    );
   }
 
   .sd-nav::-webkit-scrollbar {
@@ -2037,6 +2557,7 @@ const handleInstallCore = async () => {
   }
 
   .sd-nav-item {
+    width: auto;
     flex-shrink: 0;
     white-space: nowrap;
   }
@@ -2048,6 +2569,11 @@ const handleInstallCore = async () => {
   /* 行内控件过宽时允许换行，避免挤压描述文案 */
   .sd-row {
     flex-wrap: wrap;
+  }
+
+  /* 密码双输入在窄屏改为单列，避免字段被压缩 */
+  .sd-lock-fields {
+    grid-template-columns: 1fr;
   }
 }
 </style>
