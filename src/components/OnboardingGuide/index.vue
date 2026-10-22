@@ -82,9 +82,11 @@
             </div>
             <h2 id="og-title" class="og-title">{{ t('newOnboarding.doneTitle') }}</h2>
             <p class="og-desc">{{
-              isAndroidPlatform || easyTierStore.detectedCoreVersion
-                ? t('newOnboarding.installDoneDesc')
-                : t('newOnboarding.corePendingDesc')
+              isAndroidPlatform
+                ? t('newOnboarding.androidDoneDesc')
+                : easyTierStore.detectedCoreVersion
+                  ? t('newOnboarding.installDoneDesc')
+                  : t('newOnboarding.corePendingDesc')
             }}</p>
           </div>
         </div>
@@ -173,29 +175,47 @@ const notShowAgain = ref(true)
 const cardRef = ref<HTMLElement | null>(null)
 let prevFocus: HTMLElement | null = null
 
-// 核心功能简介（以快速上手为目标）
-const features = computed(() => [
-  {
-    title: t('newOnboarding.feature1Title'),
-    desc: t('newOnboarding.feature1Desc'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2l3.4 8.5M15.7 7.2l-3.4 8.5"/></svg>'
-  },
-  {
-    title: t('newOnboarding.feature2Title'),
-    desc: t('newOnboarding.feature2Desc'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-6"/></svg>'
-  },
-  {
-    title: t('newOnboarding.feature3Title'),
-    desc: t('newOnboarding.feature3Desc'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>'
-  },
-  {
-    title: t('newOnboarding.feature4Title'),
-    desc: t('newOnboarding.feature4Desc'),
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>'
-  }
-])
+// 核心功能简介（以快速上手为目标）；Web 配置与 Windows 服务仅桌面端，Android 展示主题与锁屏
+const features = computed(() => {
+  const common = [
+    {
+      title: t('newOnboarding.feature1Title'),
+      desc: t('newOnboarding.feature1Desc'),
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2l3.4 8.5M15.7 7.2l-3.4 8.5"/></svg>'
+    },
+    {
+      title: t('newOnboarding.feature2Title'),
+      desc: t('newOnboarding.feature2Desc'),
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-6"/></svg>'
+    }
+  ]
+  const platform = isAndroidPlatform
+    ? [
+        {
+          title: t('newOnboarding.androidThemeTitle'),
+          desc: t('newOnboarding.androidThemeDesc'),
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+        },
+        {
+          title: t('newOnboarding.androidLockTitle'),
+          desc: t('newOnboarding.androidLockDesc'),
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'
+        }
+      ]
+    : [
+        {
+          title: t('newOnboarding.feature3Title'),
+          desc: t('newOnboarding.feature3Desc'),
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>'
+        },
+        {
+          title: t('newOnboarding.feature4Title'),
+          desc: t('newOnboarding.feature4Desc'),
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>'
+        }
+      ]
+  return [...common, ...platform]
+})
 
 // 圆点跳转：只允许 1–3 步，第 4 步通过底部“下一步”到达
 const goToStep = (i: number) => {

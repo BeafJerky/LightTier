@@ -1904,6 +1904,7 @@ const handleInstallCore = async () => {
 }
 
 .sd-mirror-pick {
+  position: relative;
   display: flex;
   min-width: 0;
   cursor: pointer;

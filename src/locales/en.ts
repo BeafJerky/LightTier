@@ -787,13 +787,18 @@ export default {
     featuresTitle: 'Key Features',
     featuresDesc: 'Get started quickly — set up your first network in minutes',
     feature1Title: 'Network Config',
-    feature1Desc: 'Create configs with the form or TOML editor, then run or stop them in one click',
+    feature1Desc:
+      'Create configs with the form, templates, or TOML editor, then run or stop them in one click',
     feature2Title: 'Monitoring',
-    feature2Desc: 'Real-time node status, traffic, latency, and network topology',
+    feature2Desc: 'Real-time node status, traffic, and latency',
     feature3Title: 'Web Config',
-    feature3Desc: 'Manage Web config servers and push configurations remotely',
+    feature3Desc: 'Manage remote config-server connections for centrally managed network configs',
     feature4Title: 'Service Install',
     feature4Desc: 'Install configurations as Windows services with auto-start',
+    androidThemeTitle: 'Theme',
+    androidThemeDesc: 'Switch between multiple color themes and light or dark mode',
+    androidLockTitle: 'App Lock',
+    androidLockDesc: 'Set a password to protect your configs and running state',
     coreSetupBadge: 'On demand',
     coreSetupTitle: 'Install the Kernel on Demand',
     coreSetupDesc:
@@ -804,7 +809,9 @@ export default {
       'The EasyTier kernel is compiled into the app — no download or installation needed. Start networking right away.',
     doneTitle: 'Ready to Go',
     installDoneDesc:
-      'The kernel is ready. You can download or switch kernel versions anytime in Settings',
+      'The kernel is ready. You can download or switch kernel versions anytime in Settings.',
+    androidDoneDesc:
+      'The kernel is built in and updates with the app — start networking right away',
     corePendingDesc:
       'The kernel is not installed yet. Download and install it anytime in Settings → Kernel',
     doneBtn: 'Finish setup',

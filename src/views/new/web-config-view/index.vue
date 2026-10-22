@@ -1490,6 +1490,7 @@ onUnmounted(() => {
 }
 
 .wcf-radio {
+  position: relative;
   display: inline-flex;
   padding: var(--theme-space-2) var(--theme-space-4);
   font-size: 13px;

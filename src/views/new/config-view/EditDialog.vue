@@ -1830,6 +1830,7 @@ const handleImportToml = async () => {
 }
 
 .ed-form-switch {
+  position: relative;
   display: inline-flex;
   padding: 4px 16px;
   font-size: 12px;

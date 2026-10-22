@@ -298,6 +298,7 @@ watch(visible, (v) => {
 }
 
 .td-item {
+  position: relative;
   display: flex;
   padding: var(--theme-space-2) var(--theme-space-3);
   font-size: 13px;

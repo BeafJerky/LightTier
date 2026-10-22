@@ -1143,6 +1143,7 @@ onBeforeUnmount(() => {
 }
 
 .bk-cat {
+  position: relative;
   display: flex;
   min-width: 0;
   padding: 10px 12px;
@@ -1234,6 +1235,7 @@ onBeforeUnmount(() => {
 
 /* 备份方式 */
 .bk-mode {
+  position: relative;
   display: flex;
   padding: 10px 12px;
   cursor: pointer;

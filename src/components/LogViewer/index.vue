@@ -237,6 +237,7 @@ onUnmounted(() => {
 }
 
 .lv-auto {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--theme-space-2);
