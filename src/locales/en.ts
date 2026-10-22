@@ -551,7 +551,7 @@ export default {
     configDir: 'Config Directory',
     downloadInstall: 'Kernel Download & Install',
     downloadInstallHint:
-      'The kernel is no longer bundled with the installer. Download a version first; all running instances and EasyTier services will be stopped before installation. Downloaded packages are kept for later reinstall',
+      'Download a version first; all running instances and EasyTier services will be stopped before installation. Downloaded packages are kept for later reinstall',
     mirrorSource: 'Mirror Source',
     mirrorSourceDesc:
       'Probes and downloads use the real package of the selected version; when no source is chosen, mirrors are tested and the fastest reachable one is selected automatically',
@@ -802,7 +802,7 @@ export default {
     coreSetupBadge: 'On demand',
     coreSetupTitle: 'Install the Kernel on Demand',
     coreSetupDesc:
-      'The EasyTier kernel is no longer bundled with the installer. Install it here in one click, or pick a version later in Settings → Kernel.',
+      'Install the EasyTier kernel here in one click, or pick a version later in Settings → Kernel.',
     coreReadyBadge: 'Ready',
     coreReadyTitle: 'Kernel Ready',
     coreReadyDesc:

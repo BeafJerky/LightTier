@@ -530,7 +530,7 @@ export default {
     configDir: '配置目录',
     downloadInstall: '内核下载与安装',
     downloadInstallHint:
-      '内核不再随安装包内置，请选择版本后下载；安装前会自动停止运行中的实例与 EasyTier 服务，已下载的安装包会保留，可随时重装',
+      '请选择版本后下载；安装前会自动停止运行中的实例与 EasyTier 服务，已下载的安装包会保留，可随时重装',
     mirrorSource: '加速源',
     mirrorSourceDesc:
       '测速与下载均使用所选版本的真实内核包；未指定加速源时自动测速并选用最快可用源',
@@ -769,8 +769,7 @@ export default {
     androidLockDesc: '设置解锁密码，保护配置与运行状态',
     coreSetupBadge: '按需下载',
     coreSetupTitle: '按需安装内核',
-    coreSetupDesc:
-      'EasyTier 内核不再随安装包内置，可在此一键下载安装，也可稍后前往「设置 → 内核管理」手动选择版本。',
+    coreSetupDesc: 'EasyTier 内核可在此一键下载安装，也可稍后前往「设置 → 内核管理」手动选择版本。',
     coreReadyBadge: '已就绪',
     coreReadyTitle: '内核已就绪',
     coreReadyDesc: '已检测到内核 {version}，可直接开始组网；之后可在设置中下载或更换版本。',
