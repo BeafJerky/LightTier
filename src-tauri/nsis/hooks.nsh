@@ -10,5 +10,7 @@
     RMDir /r "$INSTDIR\config"
     RMDir /r "$INSTDIR\logs"
     RMDir /r "$INSTDIR\resource"
+    ; 旧版内核日志默认目录 ./log，日志改为绝对路径后已不再使用
+    RMDir /r "$INSTDIR\log"
   ${EndIf}
 !macroend
