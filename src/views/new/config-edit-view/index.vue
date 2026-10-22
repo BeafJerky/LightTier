@@ -88,7 +88,7 @@ watch(visible, (v) => {
 onBeforeRouteLeave(async () => {
   const edit = editRef.value
   if (!edit || !edit.isDirty()) return true
-  return edit.confirmDiscard()
+  return edit.confirmDiscardOnLeave()
 })
 
 // 保存回调：写盘后按模式提示成功/失败（移动端由本页直接完成落盘）
@@ -126,6 +126,15 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 
 <style scoped>
 .nce-page {
+  display: flex;
   height: 100%;
+  flex-direction: column;
+}
+
+/* 全屏编辑页：去掉内联卡片的外框，页面本身即编辑容器 */
+.nce-page :deep(.cd-dialog-inline) {
+  background: var(--theme-bg-card);
+  border: none;
+  border-radius: 0;
 }
 </style>

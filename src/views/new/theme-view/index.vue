@@ -19,11 +19,11 @@ onMounted(() => {
   visible.value = true
 })
 
-// 面板关闭（取消/应用主题后）→ 回退上一页；直达页面无历史时回退首页
+// 面板关闭（取消/应用主题后）→ 回退设置首页；无历史时同样回设置
 watch(visible, (v) => {
   if (!v) {
     if (window.history.state?.back) router.back()
-    else router.push('/new')
+    else router.push('/new/settings')
   }
 })
 </script>

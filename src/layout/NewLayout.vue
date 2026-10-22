@@ -80,8 +80,8 @@
     </div>
 
     <div class="nl-root">
-      <!-- 左侧边栏（窄屏抽屉化） -->
-      <aside class="nl-sidebar" :class="{ open: sidebarOpen }">
+      <!-- 左侧边栏（仅桌面；Android 使用底部导航） -->
+      <aside v-if="!isAndroidPlatform" class="nl-sidebar" :class="{ open: sidebarOpen }">
         <div class="nl-sidebar-header">
           <img class="nl-logo" src="/logo.png" alt="" />
           <span class="nl-brand">LightTier</span>
@@ -173,17 +173,24 @@
         </div>
       </aside>
 
-      <!-- 窄屏抽屉遮罩 -->
+      <!-- 窄屏抽屉遮罩（Android 无抽屉） -->
       <Transition name="nl-mask-fade">
-        <div v-if="sidebarOpen" class="nl-mask" @click="sidebarOpen = false"></div>
+        <div
+          v-if="sidebarOpen && !isAndroidPlatform"
+          class="nl-mask"
+          @click="sidebarOpen = false"
+        ></div>
       </Transition>
 
       <!-- 右侧内容区 -->
       <div class="nl-main">
-        <!-- 顶部工具栏 -->
-        <header class="nl-toolbar">
+        <!-- 顶部工具栏：Android 作为应用栏（一级页大标题，二级页返回 + 小标题） -->
+        <header
+          class="nl-toolbar"
+          :class="{ 'nl-toolbar-android': isAndroidPlatform, 'is-sub': isSubPage }"
+        >
           <div class="nl-toolbar-left">
-            <!-- 二级页面（设置/主题）：返回上一页；其余页面为窄屏菜单开关 -->
+            <!-- 二级页面：返回上一页；桌面一级页为窄屏菜单开关 -->
             <button
               v-if="isSubPage"
               class="nl-back-btn"
@@ -202,7 +209,7 @@
               </svg>
             </button>
             <button
-              v-else
+              v-else-if="!isAndroidPlatform"
               class="nl-hamburger"
               @click="sidebarOpen = true"
               :aria-label="t('newLayout.ariaOpenMenu')"
@@ -220,23 +227,127 @@
             </button>
             <div class="nl-page-header">
               <h1 class="nl-page-title">{{ pageTitle }}</h1>
-              <p class="nl-page-subtitle">{{ pageSubtitle }}</p>
+              <p v-if="showSubtitle && pageSubtitle" class="nl-page-subtitle">
+                {{ pageSubtitle }}
+              </p>
             </div>
           </div>
-          <div class="nl-toolbar-right"> </div>
+          <div class="nl-toolbar-right">
+            <!-- Android：一级页提供刷新（替代桌面悬浮菜单） -->
+            <button
+              v-if="showAndroidRefresh"
+              type="button"
+              class="nl-appbar-action"
+              :class="{ spinning: isRefreshing }"
+              :disabled="isRefreshing"
+              :aria-label="t('newCommon.refresh')"
+              :title="t('newCommon.refresh')"
+              @click="refreshCurrentPage"
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M23 4v6h-6M1 20v-6h6" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <!-- 页面内容 -->
-        <main class="nl-content">
+        <main
+          class="nl-content"
+          :class="{
+            'nl-content-android': isAndroidPlatform,
+            'nl-content-full': isAndroidPlatform && isFullBleed
+          }"
+        >
           <router-view />
         </main>
+
+        <!-- Android 底部导航：一级入口（子页面隐藏） -->
+        <nav v-if="showTabBar" class="nl-tabbar" :aria-label="t('newLayout.ariaBottomNav')">
+          <button
+            v-for="tab in androidTabs"
+            :key="tab.path"
+            type="button"
+            class="nl-tab"
+            :class="{ active: isTabActive(tab.path) }"
+            :aria-current="isTabActive(tab.path) ? 'page' : undefined"
+            @click="switchTab(tab.path)"
+          >
+            <span v-if="isTabActive(tab.path)" class="nl-tab-indicator"></span>
+            <svg
+              v-if="tab.icon === 'overview'"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="2" />
+              <rect x="14" y="3" width="7" height="7" rx="2" />
+              <rect x="3" y="14" width="7" height="7" rx="2" />
+              <rect x="14" y="14" width="7" height="7" rx="2" />
+            </svg>
+            <svg
+              v-else-if="tab.icon === 'config'"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <path d="M6 3h9l4 4v14H6z" />
+              <path d="M14 3v5h5M9 13h6M9 17h5" />
+            </svg>
+            <svg
+              v-else-if="tab.icon === 'monitor'"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <path d="M3 12h4l2-6 4 12 2-6h6" />
+            </svg>
+            <svg
+              v-else
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+            <span class="nl-tab-label">{{ t(tab.labelKey) }}</span>
+          </button>
+        </nav>
       </div>
     </div>
   </div>
 
   <!-- Toast 容器 -->
   <Teleport to="body">
-    <div class="cream-toast-container" role="alert" aria-live="polite">
+    <div
+      class="cream-toast-container"
+      :class="{ 'nl-toast-android': showTabBar }"
+      role="alert"
+      aria-live="polite"
+    >
       <TransitionGroup name="toast">
         <div v-for="t in toasts" :key="t.id" class="cream-toast" :class="t.type">
           {{ t.message }}
@@ -244,10 +355,10 @@
       </TransitionGroup>
     </div>
   </Teleport>
-  <!-- 设置/主题弹窗：仅桌面端；Android 走独立二级页面（settings-view / theme-view） -->
+  <!-- 设置/主题弹窗：仅桌面端；Android 走独立路由页面 -->
   <ThemeDialog v-if="!isAndroidPlatform" v-model="themeDialogVisible" />
   <SettingsDialog v-if="!isAndroidPlatform" v-model="settingsDialogVisible" />
-  <FloatingMenu />
+  <FloatingMenu v-if="!isAndroidPlatform" />
 </template>
 
 <script setup lang="ts">
@@ -333,6 +444,46 @@ const pageSubtitle = computed(() => {
 // 二级页面（设置/主题）：移动端以全屏页面形式进入，宽屏保留弹窗
 const isSubPage = computed(() => Boolean(route.meta?.subPage))
 
+// Android 底部导航仅一级入口展示，二级页（详情/设置子页/编辑器）隐藏
+const showTabBar = computed(() => isAndroidPlatform && Boolean(route.meta?.tabRoot))
+// 全屏内容：编辑器由页面自行管理内边距，壳层不再留白
+const isFullBleed = computed(() => Boolean(route.meta?.fullBleed))
+// Android 一级页只留大标题；二级页展示小标题 + 说明
+const showSubtitle = computed(() => !isAndroidPlatform || isSubPage.value)
+
+// Android 一级页的刷新入口（设置页为本地状态，无需刷新）
+const showAndroidRefresh = computed(
+  () => isAndroidPlatform && Boolean(route.meta?.tabRoot) && route.path !== '/new/settings'
+)
+const isRefreshing = ref(false)
+const refreshCurrentPage = async () => {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    await easyTierStore.loadConfigFiles()
+    easyTierStore.triggerPageRefresh()
+  } catch {
+    /* 刷新失败保留现有列表，避免打断当前页面 */
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+// 底部导航：对应桌面侧边栏一级入口（按 Android 习惯固定四项）
+const androidTabs = [
+  { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
+  { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
+  { path: '/new/monitor', labelKey: 'newLayout.monitor', icon: 'monitor' },
+  { path: '/new/settings', labelKey: 'newSettings.settings', icon: 'settings' }
+]
+const isTabActive = (path: string) =>
+  path === '/new' ? route.path === '/new' : route.path === path || route.path.startsWith(path + '/')
+// 底栏切换用 replace：一级入口之间不留历史栈，系统返回键直接退出应用
+const switchTab = (path: string) => {
+  if (route.path === path) return
+  router.replace(path)
+}
+
 // 打开设置：桌面弹窗；Android 跳二级页面（小屏避免弹窗遮挡）
 const openSettings = () => {
   // 先收抽屉：避免侧栏悬停在二级页面/弹窗之上
@@ -344,13 +495,19 @@ const openSettings = () => {
 // 打开主题设置（同设置，平台分流）
 const openTheme = () => {
   sidebarOpen.value = false
-  if (isAndroidPlatform) router.push('/new/theme')
+  if (isAndroidPlatform) router.push('/new/settings/theme')
   else themeDialogVisible.value = true
 }
 
-// 返回上一页；无历史记录时回首页（Android 返回键/返回按钮共用）
+// 返回上一页；无历史记录时按模块回到对应一级页（Android 返回键/返回按钮共用）
 const goBack = () => {
-  if (window.history.state?.back) router.back()
+  if (window.history.state?.back) {
+    router.back()
+    return
+  }
+  if (route.path.startsWith('/new/settings')) router.push('/new/settings')
+  else if (route.path.startsWith('/new/config')) router.push('/new/config')
+  else if (route.path.startsWith('/new/monitor')) router.push('/new/monitor')
   else router.push('/new')
 }
 
@@ -806,17 +963,6 @@ onBeforeUnmount(() => {
   background: var(--theme-overlay, rgb(0 0 0 / 30%));
 }
 
-/* Android：无窗口拖拽条（不渲染），抽屉/遮罩顶部对齐安全区（状态栏下方） */
-.nl-android .nl-sidebar,
-.nl-android .nl-mask {
-  top: var(--lt-safe-area-top, 0);
-}
-
-/* Android：抽屉底部让出手势导航条区域 */
-.nl-android .nl-sidebar {
-  bottom: var(--lt-safe-area-bottom, 0);
-}
-
 .nl-mask-fade-enter-active {
   transition: opacity var(--theme-duration) var(--theme-ease-out);
 }
@@ -969,6 +1115,184 @@ onBeforeUnmount(() => {
 
 .nl-content {
   scrollbar-width: thin;
+}
+
+/* ===== Android 壳层：应用栏 + 底部导航 ===== */
+.nl-window.nl-android {
+  --lt-fab-clearance: 0px;
+}
+
+/* 一级页：大标题应用栏；二级页：返回 + 小标题 + 说明 */
+.nl-toolbar-android {
+  height: 56px;
+  padding: 0 var(--theme-space-4);
+  background: var(--theme-bg);
+}
+
+.nl-toolbar-android.is-sub {
+  height: 54px;
+  background: var(--theme-bg-toolbar);
+}
+
+.nl-toolbar-android .nl-page-header {
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+}
+
+.nl-toolbar-android .nl-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.nl-toolbar-android.is-sub .nl-page-title {
+  font-size: 16px;
+}
+
+.nl-toolbar-android .nl-page-subtitle {
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--theme-text-muted);
+}
+
+.nl-toolbar-android .nl-back-btn {
+  width: 40px;
+  height: 40px;
+  margin-right: var(--theme-space-2);
+  margin-left: calc(-1 * var(--theme-space-2));
+  color: var(--theme-text-primary);
+  border-radius: var(--theme-radius-round);
+}
+
+/* 应用栏刷新：替代桌面悬浮菜单 */
+.nl-appbar-action {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  margin-right: calc(-1 * var(--theme-space-2));
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-round);
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nl-appbar-action:hover {
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-hover);
+}
+
+.nl-appbar-action:disabled {
+  cursor: default;
+}
+
+.nl-appbar-action.spinning svg {
+  animation: nl-appbar-spin 0.8s linear infinite;
+}
+
+@keyframes nl-appbar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 内容区：Android 收紧留白，页面自身负责卡片间距 */
+.nl-content-android {
+  padding: var(--theme-space-3) var(--theme-space-4);
+  padding-bottom: var(--theme-space-4);
+  background: var(--theme-bg);
+}
+
+/* 全屏页（编辑器）：去掉壳层留白，页面内部自行滚动 */
+.nl-content-full {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.nl-content-full > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 底部导航：Material 风格图标指示条，配色沿用主题令牌 */
+.nl-tabbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  height: 58px;
+  background: var(--theme-bg-card);
+  border-top: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  align-items: stretch;
+}
+
+.nl-tab {
+  position: relative;
+  display: flex;
+  padding: 0;
+  font-family: var(--theme-font-body);
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: color var(--theme-duration-fast) var(--theme-ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nl-tab:hover {
+  color: var(--theme-text-secondary);
+}
+
+.nl-tab.active {
+  color: var(--theme-accent-primary);
+}
+
+.nl-tab-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: min(68px, calc(100% - 12px));
+  height: 46px;
+  background: color-mix(in srgb, var(--theme-accent-primary) 14%, transparent);
+  border-radius: var(--theme-radius-pill);
+  transform: translate(-50%, -50%);
+}
+
+.nl-tab svg,
+.nl-tab-label {
+  position: relative;
+  z-index: 1;
+}
+
+.nl-tab svg {
+  flex-shrink: 0;
+}
+
+.nl-tab-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Toast 抬高到底栏之上，避免被导航条遮挡 */
+.nl-toast-android {
+  bottom: calc(78px + var(--lt-safe-area-bottom, 0px));
 }
 
 /* Toast 通知 */

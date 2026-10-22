@@ -177,7 +177,7 @@
       </ul>
     </div>
 
-    <div class="ed-body">
+    <div class="ed-body" :class="{ 'ed-body-full': inline }">
       <!-- 语法/保存错误条：代码模式实时校验，保存前同步复核 -->
       <div v-if="codeIssue" class="ed-code-error" role="alert">{{ codeIssue }}</div>
       <!-- 代码模式 -->
@@ -632,6 +632,7 @@
     :title="t('newCommon.discardTitle')"
     width="380px"
     :close-on-overlay="false"
+    :history-close="!discardFromRoute"
   >
     <p class="ed-discard-msg">{{ t('newCommon.discardMsg') }}</p>
     <template #footer>
@@ -879,6 +880,8 @@ const dirty = computed(() => {
 
 // 放弃确认：Promise 供 CreamDialog before-close 与 Android 路由守卫共同等待
 const discardVisible = ref(false)
+// 由路由离开守卫触发：返回事件已在路由导航流程中，确认面板不能注入 history 条目
+const discardFromRoute = ref(false)
 let discardResolve: ((ok: boolean) => void) | null = null
 const resolveDiscard = (ok: boolean) => {
   const resolve = discardResolve
@@ -891,10 +894,11 @@ const resolveDiscard = (ok: boolean) => {
   formBaseline.value = formSignature()
   resolve?.(true)
 }
-const confirmDiscard = (): Promise<boolean> => {
+const confirmDiscard = (fromRoute = false): Promise<boolean> => {
   if (!dirty.value) return Promise.resolve(true)
   if (discardVisible.value) return Promise.resolve(false)
   return new Promise<boolean>((resolve) => {
+    discardFromRoute.value = fromRoute
     discardResolve = resolve
     discardVisible.value = true
   })
@@ -920,6 +924,8 @@ const handleBeforeClose = async (): Promise<boolean> => {
 defineExpose({
   isDirty: () => dirty.value,
   confirmDiscard,
+  // 路由守卫入口：确认面板不注入 history 条目（见 CreamDialog historyClose）
+  confirmDiscardOnLeave: () => confirmDiscard(true),
   requestClose: () => dialogRef.value?.requestClose()
 })
 
@@ -1728,6 +1734,26 @@ const handleImportToml = async () => {
 
 .ed-body {
   min-height: 350px;
+}
+
+/* inline 全屏页面：编辑区占满剩余高度，底部操作栏由 CreamDialog 固定 */
+.ed-body-full {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.ed-body-full .ed-code-wrap {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.ed-body-full .ed-form-scroll {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
 }
 
 .ed-code-error {

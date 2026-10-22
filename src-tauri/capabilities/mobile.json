@@ -26,6 +26,14 @@
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://**"
+        }
+      ]
+    },
     "vpnservice:default",
     "vpnservice:allow-register-listener"
   ]

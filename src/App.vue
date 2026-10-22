@@ -168,7 +168,8 @@ onMounted(async () => {
   }
 
   // Android：注册 VPN 插件事件监听（vpn_service_start → TUN fd 注入），并同步一次 VPN 状态
-  if (isAndroidPlatform) {
+  // 浏览器 Mock 下 ?platform=android 仅用于布局验收，无 Tauri 事件系统
+  if (isAndroidPlatform && isTauriPlatform) {
     registerMobileVpnListeners().catch((e) => {
       console.error('Failed to register mobile vpn listeners:', e)
     })

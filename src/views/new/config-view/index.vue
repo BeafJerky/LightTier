@@ -1,11 +1,18 @@
 <template>
-  <div class="nw-root" :class="{ 'nw-detail-open': !!selectedDetail }">
+  <div
+    class="nw-root"
+    :class="{
+      'nw-android': isAndroidPlatform,
+      'nw-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedDetail
+    }"
+  >
     <!-- 左侧配置列表 -->
     <div class="nw-left">
       <div class="nw-left-header">
         <div class="nw-left-top">
           <div class="nw-left-label">{{ t('newConfig.configList') }}</div>
-          <div class="nw-left-btns">
+          <!-- Android 用右下角 FAB 承担新增，列表头部不再放按钮 -->
+          <div v-if="!isAndroidPlatform" class="nw-left-btns">
             <button
               type="button"
               class="nw-add-btn"
@@ -107,7 +114,7 @@
     <div class="nw-right" v-if="selectedDetail">
       <div class="nw-detail-header">
         <div class="nw-detail-title-row">
-          <button class="nw-back-btn" @click="closeDetail">
+          <button v-if="!isAndroidPlatform" class="nw-back-btn" @click="closeDetail">
             <svg
               width="14"
               height="14"
@@ -347,7 +354,7 @@
     <div class="nw-right" v-else-if="selectedConfig">
       <div class="nw-detail-header">
         <div class="nw-detail-title-row">
-          <button class="nw-back-btn" @click="closeDetail">
+          <button v-if="!isAndroidPlatform" class="nw-back-btn" @click="closeDetail">
             <svg
               width="14"
               height="14"
@@ -381,10 +388,37 @@
     </div>
 
     <div class="nw-right" v-else>
-      <div class="nw-empty"
+      <!-- Android 详情路由：配置列表尚未就绪时先展示加载态，避免闪出“请选择配置” -->
+      <div v-if="isAndroidDetailRoute" class="nw-empty" aria-live="polite">
+        <p>{{ t('newCommon.loading') }}</p>
+      </div>
+      <div v-else class="nw-empty"
         ><span class="nw-empty-icon">✦</span><p>{{ t('newConfig.selectConfig') }}</p></div
       >
     </div>
+
+    <!-- Android 新增配置 FAB：固定在底栏之上 -->
+    <button
+      v-if="isAndroidPlatform && !isAndroidDetailRoute"
+      type="button"
+      class="nw-fab"
+      @click="openAdd"
+      :title="t('newConfig.addConfig')"
+      :aria-label="t('newConfig.addConfig')"
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
   </div>
   <!-- 配置编辑弹窗：仅桌面端；Android 进入独立编辑页面（config-edit-view） -->
   <EditDialog
@@ -501,6 +535,11 @@ const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 
+// Android 详情为独立路由（列表/详情共用本组件），视图切换以路由为准
+const isAndroidDetailRoute = computed(
+  () => isAndroidPlatform && route.name === 'NewConfigDetailView'
+)
+
 // 详情面板 flags：已知字段 key → i18n 标签（与编辑表单同源定义），未知 key 回退原文
 const FLAG_LABEL_KEY_MAP: Record<string, string> = {}
 for (const def of [
@@ -606,8 +645,9 @@ const filteredConfigList = computed(() => {
 // 运行时状态刷新（FAB 已负责文件加载）
 const refreshRuntimeState = async () => {
   await updateRunningList()
-  // 窄屏（移动端）默认展示清单，不自动进入详情，由用户点卡片跳转
-  if (window.innerWidth > 900 && easyTierStore.configList.length > 0) {
+  // 窄屏（移动端）默认展示清单，不自动进入详情，由用户点卡片跳转；
+  // Android 详情由路由驱动，不在此自动选中
+  if (!isAndroidPlatform && window.innerWidth > 900 && easyTierStore.configList.length > 0) {
     const last = easyTierStore.getLastRunConfigName()
     const target = last
       ? easyTierStore.configList.find((c) => c.configFileName === last)
@@ -622,6 +662,12 @@ const refreshRuntimeState = async () => {
 
 // 选中配置卡片：加载详情、重置路由筛选，并记录选择（供下次进入页面恢复）
 const selectConfig = async (item: RunningItem) => {
+  // Android：先进入详情路由，由 syncDetailFromRoute 统一加载，避免重复请求
+  if (isAndroidPlatform && !isAndroidDetailRoute.value) {
+    easyTierStore.setLastSelectedConfig(item)
+    router.push({ name: 'NewConfigDetailView', query: { name: item.configFileName } })
+    return
+  }
   selectedConfig.value = item
   routeFilter.value = ''
   // 先清空旧详情，避免读取失败时仍显示上一个配置的内容
@@ -703,6 +749,55 @@ const loadConfigDetail = async (item: RunningItem) => {
     }
   }
 }
+
+// Android 详情路由 → 页面状态：进入时加载对应配置，返回列表时清空详情
+const syncDetailFromRoute = async () => {
+  if (!isAndroidPlatform) return
+  if (!isAndroidDetailRoute.value) {
+    closeDetail()
+    return
+  }
+  const name = typeof route.query.name === 'string' ? route.query.name : ''
+  if (!name) {
+    router.replace({ name: 'NewConfigView' })
+    return
+  }
+  if (!easyTierStore.configListLoaded) await easyTierStore.loadConfigFiles()
+  const item = easyTierStore.configList.find((c) => c.configFileName === name)
+  if (!item) {
+    // 列表仍在加载时不做“配置不存在”判定，加载完成后由 configListLoaded 监听重试
+    if (!easyTierStore.configListLoaded) return
+    toast(t('newConfig.configNotFound'), 'warning')
+    router.replace({ name: 'NewConfigView' })
+    return
+  }
+  selectedConfig.value = item
+  routeFilter.value = ''
+  selectedDetail.value = null
+  await loadConfigDetail(item)
+  easyTierStore.setLastSelectedConfig(item)
+}
+
+// 路由切换（系统返回键 / 直接打开详情）时同步详情态
+watch(
+  () => [route.name, route.query.name],
+  (next, prev) => {
+    if (!isAndroidPlatform) return
+    const [name] = next
+    const [prevName] = prev
+    if (name !== 'NewConfigDetailView' && prevName !== 'NewConfigDetailView') return
+    void syncDetailFromRoute()
+  }
+)
+// 配置列表加载完成（深链打开详情时列表可能滞后）后重试同步
+watch(
+  () => easyTierStore.configListLoaded,
+  (loaded) => {
+    if (loaded && isAndroidDetailRoute.value && !selectedConfig.value) {
+      void syncDetailFromRoute()
+    }
+  }
+)
 
 // 错误态重试 / 打开配置目录（桌面）
 const retryDetail = async () => {
@@ -918,14 +1013,15 @@ function getDemoConfig(name: string): EasyTierConfig {
 }
 
 // ===== 生命周期 =====
-onMounted(() => {
-  // 如果 store 尚未加载，先加载
+onMounted(async () => {
+  // 深链打开详情时先等列表就绪，避免误判配置不存在
   if (!easyTierStore.configListLoaded) {
-    easyTierStore.loadConfigFiles()
+    await easyTierStore.loadConfigFiles()
   }
   // 注册到全局刷新回调：托盘/任务栏等外部动作触发时同步刷新本页
   easyTierStore.registerPageRefresh(refreshRuntimeState)
-  refreshRuntimeState()
+  await refreshRuntimeState()
+  if (isAndroidPlatform) await syncDetailFromRoute()
 })
 
 onUnmounted(() => {
@@ -1046,6 +1142,8 @@ const deleteSelectedConfig = async () => {
     selectedDetail.value = null
     await easyTierStore.loadConfigFiles()
     await refreshRuntimeState()
+    // Android 详情为独立路由：删除后回到列表页
+    if (isAndroidPlatform) await router.replace({ name: 'NewConfigView' })
   } catch {
     toast(t('newCommon.deleteFail'), 'error')
   }
@@ -1634,6 +1732,62 @@ const handleUninstallService = async () => {
 @media (width <= 480px) {
   .nw-root .nw-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Android：详情为独立路由，任何宽度下列表与详情都互斥展示 */
+.nw-root.nw-android {
+  flex-direction: column;
+}
+
+.nw-root.nw-android .nw-left {
+  width: 100%;
+  flex: 1;
+}
+
+.nw-root.nw-android .nw-right {
+  display: none;
+}
+
+.nw-root.nw-android.nw-detail-open .nw-left {
+  display: none;
+}
+
+.nw-root.nw-android.nw-detail-open .nw-right {
+  display: block;
+  flex: 1;
+}
+
+/* Android 新增配置 FAB：位于底栏之上 */
+.nw-fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(76px + var(--lt-safe-area-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  width: 54px;
+  height: 54px;
+  color: var(--theme-text-on-accent);
+  cursor: pointer;
+  background: var(--theme-accent-primary);
+  border: none;
+  border-radius: var(--theme-radius-round);
+  box-shadow: var(--theme-shadow-md);
+  transition:
+    transform var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nw-fab:active {
+  transform: scale(0.94);
+}
+
+@media (hover: hover) {
+  .nw-fab:hover {
+    background: var(--theme-accent-hover);
   }
 }
 

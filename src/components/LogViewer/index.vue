@@ -243,6 +243,7 @@ onUnmounted(() => {
   gap: var(--theme-space-2);
   font-size: 11px;
   color: var(--theme-text-secondary);
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
 }
@@ -358,5 +359,17 @@ onUnmounted(() => {
 
 .lv-line-warn {
   color: var(--theme-color-warning);
+}
+
+@media (width <= 480px) {
+  .lv-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lv-toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 </style>

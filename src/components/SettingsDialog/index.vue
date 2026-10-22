@@ -7,10 +7,11 @@
     :inline="inline"
     :body-scroll="false"
   >
-    <div class="sd-body">
+    <div class="sd-body" :class="{ 'sd-single': !!section }">
       <!-- 左侧分类导航（tablist：方向键移动并激活，roving tabindex） -->
       <div
         ref="navRef"
+        v-if="!section"
         class="sd-nav"
         role="tablist"
         aria-orientation="vertical"
@@ -104,12 +105,12 @@
       <div ref="contentRef" class="sd-content">
         <!-- 通用设置 -->
         <div
-          v-if="activeTab === 'general'"
+          v-if="panelTab === 'general'"
           id="sd-panel-general"
           class="sd-section"
-          role="tabpanel"
-          aria-labelledby="sd-tab-general"
-          tabindex="0"
+          :role="section ? undefined : 'tabpanel'"
+          :aria-labelledby="section ? undefined : 'sd-tab-general'"
+          :tabindex="section ? undefined : 0"
         >
           <div class="sd-row">
             <div class="sd-row-info">
@@ -242,12 +243,12 @@
 
         <!-- 核心管理 -->
         <div
-          v-if="activeTab === 'core'"
+          v-if="panelTab === 'core'"
           id="sd-panel-core"
           class="sd-section"
-          role="tabpanel"
-          aria-labelledby="sd-tab-core"
-          tabindex="0"
+          :role="section ? undefined : 'tabpanel'"
+          :aria-labelledby="section ? undefined : 'sd-tab-core'"
+          :tabindex="section ? undefined : 0"
         >
           <!-- 浏览器预览：无 Tauri 运行时，内核检测/路径/下载安装等桌面能力不可用 -->
           <div v-if="!isDesktopRuntime && !isAndroidPlatform" class="sd-row">
@@ -476,12 +477,12 @@
 
         <!-- 数据管理 -->
         <div
-          v-if="activeTab === 'data'"
+          v-if="panelTab === 'data'"
           id="sd-panel-data"
           class="sd-section"
-          role="tabpanel"
-          aria-labelledby="sd-tab-data"
-          tabindex="0"
+          :role="section ? undefined : 'tabpanel'"
+          :aria-labelledby="section ? undefined : 'sd-tab-data'"
+          :tabindex="section ? undefined : 0"
         >
           <!-- 备份与恢复：Android 无可靠的绝对路径保存/读取能力，入口仅桌面与浏览器预览 -->
           <div v-if="!isAndroidPlatform" class="sd-row">
@@ -521,12 +522,12 @@
 
         <!-- 安全（锁定密码，5.12） -->
         <div
-          v-if="activeTab === 'security'"
+          v-if="panelTab === 'security'"
           id="sd-panel-security"
           class="sd-section"
-          role="tabpanel"
-          aria-labelledby="sd-tab-security"
-          tabindex="0"
+          :role="section ? undefined : 'tabpanel'"
+          :aria-labelledby="section ? undefined : 'sd-tab-security'"
+          :tabindex="section ? undefined : 0"
         >
           <div class="sd-security-card">
             <div class="sd-security-head">
@@ -659,12 +660,12 @@
 
         <!-- 关于 -->
         <div
-          v-if="activeTab === 'about'"
+          v-if="panelTab === 'about'"
           id="sd-panel-about"
           class="sd-section"
-          role="tabpanel"
-          aria-labelledby="sd-tab-about"
-          tabindex="0"
+          :role="section ? undefined : 'tabpanel'"
+          :aria-labelledby="section ? undefined : 'sd-tab-about'"
+          :tabindex="section ? undefined : 0"
         >
           <div class="sd-about">
             <img class="sd-about-logo" src="/logo.png" alt="" />
@@ -924,9 +925,13 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { resourceDir, join } from '@tauri-apps/api/path'
 
-const props = withDefaults(defineProps<{ modelValue: boolean; inline?: boolean }>(), {
-  inline: false
-})
+type SettingsSection = 'general' | 'core' | 'data' | 'security' | 'about'
+const props = withDefaults(
+  defineProps<{ modelValue: boolean; inline?: boolean; section?: SettingsSection }>(),
+  {
+    inline: false
+  }
+)
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 // 内部可见态：与父组件 v-model 双向同步
@@ -1005,6 +1010,8 @@ const tabs = [
   { key: 'security', label: t('newSettings.security') },
   { key: 'about', label: t('newSettings.about') }
 ]
+// 单页模式（Android 设置子路由）：section 直接决定渲染的分类，忽略内部 tab 状态
+const panelTab = computed(() => props.section || activeTab.value)
 
 // 安全：锁定密码（5.12）——双输入显式提交（设置/修改/清除），失焦不再自动保存
 // （store.lockPassword 仅存校验串 sha256$salt$hash，随 pinia persist 持久化，绝不落明文）
@@ -1367,8 +1374,9 @@ const refreshDownloadedCores = async () => {
 }
 
 // 切到内核页时重新扫描，外部新增/删除安装包也能及时反映
-watch(activeTab, (tab) => {
+watch(panelTab, (tab) => {
   closeCoreVerDropdown()
+  if (contentRef.value) contentRef.value.scrollTop = 0
   if (tab === 'core') void refreshDownloadedCores()
 })
 
@@ -1880,6 +1888,14 @@ const handleInstallCore = async () => {
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+/* 单页模式：去掉分类导航，内容卡片与外层弹窗合并为一层 */
+.sd-body.sd-single .sd-content {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 /* 设置行 */

@@ -45,7 +45,8 @@ export const listConfigs = async (): Promise<string[]> => {
  * Android 单实例约束（停旧起新与二次确认）由调用方负责
  */
 export const startConfig = async (fileName: string): Promise<void> => {
-  if (isAndroid()) {
+  // ?platform=android 浏览器预览无 Tauri 运行时，回退 mock 实现
+  if (isAndroid() && isTauri()) {
     await startMobileVpn(fileName)
     return
   }
@@ -61,7 +62,7 @@ export const startConfig = async (fileName: string): Promise<void> => {
  * @returns 是否停止成功（无 pid 的残留项视为成功，由调用方清理 UI 状态）
  */
 export const stopConfig = async (item: RunningItem): Promise<boolean> => {
-  if (isAndroid()) {
+  if (isAndroid() && isTauri()) {
     return await stopMobileVpn(true)
   }
   if (item.pid) {
@@ -72,7 +73,7 @@ export const stopConfig = async (item: RunningItem): Promise<boolean> => {
 
 /** 运行中列表（Android 来自进程内实例管理器，含虚拟 IP；桌面来自进程扫描） */
 export const getRunningList = async (configNames: string[]): Promise<RunningItem[]> => {
-  if (isAndroid()) {
+  if (isAndroid() && isTauri()) {
     const list = await invoke<RunningInstance[]>('list_instances')
     return list
       .filter((i) => i.running && i.config_file)
@@ -125,11 +126,12 @@ export const checkPortConflicts = async (fileName: string): Promise<PortConflict
 
 /** 内核版本（Android：内置内核编译版本；桌面：easytier-cli -V；浏览器 mock：默认稳定版本） */
 export const getCoreVersion = async (): Promise<string> => {
+  // 浏览器（pnpm dev）无 Tauri 运行时：返回默认稳定版本，便于预览版本适配后的表单/提示
+  // 必须先于平台分支判断：dev 下 ?platform=android 仅切换布局，Tauri 命令不可用
+  if (!isTauri()) return DEFAULT_CORE_VERSION
   if (isAndroid()) {
     return await invoke<string>('get_core_version')
   }
-  // 浏览器（pnpm dev）无 Tauri 运行时：返回默认稳定版本，便于预览版本适配后的表单/提示
-  if (!isTauri()) return DEFAULT_CORE_VERSION
   const { runEasyTierCli } = await import('./shellUtil')
   const res = await runEasyTierCli(['-V'])
   return String(res).trim()

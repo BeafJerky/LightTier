@@ -26,6 +26,11 @@ body,
   border: 0;
 }
 
+// 按钮文案不换行：空间不足时由外层布局换行，避免文字被挤成多行
+button {
+  white-space: nowrap;
+}
+
 // 键盘焦点环：统一沿用主题强调色，明暗主题均可辨认
 :where(button, a, [role='tab'], [role='option'], [role='button'], [tabindex='0']):focus-visible {
   outline: 2px solid var(--theme-accent-primary, #e8a0a0);

@@ -1,5 +1,5 @@
 <template>
-  <CreamDialog v-model="visible" :title="t('newLayout.theme')" width="700px">
+  <CreamDialog v-model="visible" :title="t('newLayout.theme')" width="700px" :inline="inline">
     <div class="td-body">
       <!-- 左侧：主题列表 -->
       <div class="td-sidebar">
@@ -67,7 +67,9 @@ import { systemDefaultTheme, useThemeLoader } from '@/hooks/useThemeLoader'
 import { useExternalThemes } from '@/hooks/useExternalThemes'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 
-const props = defineProps<{ modelValue: boolean }>()
+const props = withDefaults(defineProps<{ modelValue: boolean; inline?: boolean }>(), {
+  inline: false
+})
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 const { t } = useI18n()

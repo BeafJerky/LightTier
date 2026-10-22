@@ -114,6 +114,10 @@ const props = withDefaults(
     inline?: boolean
     // 关闭守卫：返回 false（或 resolve false）时取消本次关闭（未保存保护等）
     beforeClose?: () => boolean | Promise<boolean>
+    // 返回键关闭面板：通过注入 history 条目实现（默认开启）。
+    // 由路由离开守卫打开的弹窗须关闭此机制：此时返回事件已进入路由导航流程，
+    // 再注入条目会顶掉前进记录，导致守卫取消后的路由补偿失效，且本弹窗会被同一返回事件误关。
+    historyClose?: boolean
   }>(),
   {
     title: '',
@@ -122,7 +126,8 @@ const props = withDefaults(
     bodyScroll: true,
     closeOnOverlay: true,
     inline: false,
-    beforeClose: undefined
+    beforeClose: undefined,
+    historyClose: true
   }
 )
 
@@ -239,7 +244,7 @@ const sheetEntry: SheetHistoryEntry = {
 
 // 面板打开时向 history 注入同 URL 条目：返回键优先关闭面板而不是离开页面
 watch(visible, (v) => {
-  if (!sheetMode.value) return
+  if (!sheetMode.value || !props.historyClose) return
   if (v && !sheetPushed) {
     sheetPushed = true
     sheetStack.push(sheetEntry)
@@ -255,7 +260,7 @@ watch(visible, (v) => {
 
 // 卸载兜底：面板未关闭即随页面卸载时回收历史条目
 onUnmounted(() => {
-  if (!sheetPushed) return
+  if (!props.historyClose || !sheetPushed) return
   sheetPushed = false
   dropSheetEntry()
   sheetPopping = true

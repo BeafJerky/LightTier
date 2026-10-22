@@ -10,7 +10,8 @@ const routeChildren: AppRouteRecordRaw[] = [
       subtitle: '集中管理所有组网配置',
       titleKey: 'newLayout.overview',
       subtitleKey: 'newLayout.overviewSub',
-      icon: 'clarity:dashboard-line'
+      icon: 'clarity:dashboard-line',
+      tabRoot: true
     }
   },
   {
@@ -22,7 +23,19 @@ const routeChildren: AppRouteRecordRaw[] = [
       subtitle: '实时查看节点状态与网络拓扑',
       titleKey: 'newLayout.monitor',
       subtitleKey: 'newLayout.monitorSub',
-      icon: 'ep:monitor'
+      icon: 'ep:monitor',
+      tabRoot: true
+    }
+  },
+  {
+    // Android 二级页面：节点监控详情（系统返回键回列表）
+    path: 'monitor/detail',
+    component: () => import('@/views/new/monitor/index.vue'),
+    name: 'NewMonitorDetailView',
+    meta: {
+      titleKey: 'newLayout.monitorDetail',
+      subtitleKey: 'newLayout.monitorDetailSub',
+      subPage: true
     }
   },
   {
@@ -34,7 +47,19 @@ const routeChildren: AppRouteRecordRaw[] = [
       subtitle: '管理所有组网配置文件',
       titleKey: 'newLayout.config',
       subtitleKey: 'newLayout.configSub',
-      icon: 'hugeicons:google-doc'
+      icon: 'hugeicons:google-doc',
+      tabRoot: true
+    }
+  },
+  {
+    // Android 二级页面：配置详情（系统返回键回列表）
+    path: 'config/detail',
+    component: () => import('@/views/new/config-view/index.vue'),
+    name: 'NewConfigDetailView',
+    meta: {
+      titleKey: 'newLayout.configDetail',
+      subtitleKey: 'newLayout.configDetailSub',
+      subPage: true
     }
   },
   {
@@ -50,21 +75,78 @@ const routeChildren: AppRouteRecordRaw[] = [
     }
   },
   {
-    // 二级页面：移动端从侧栏入口进入（无 title，自动排除出主菜单）
+    // 设置首页：Android 底栏一级入口（分组列表）；桌面端仍以弹窗承载
     path: 'settings',
     component: () => import('@/views/new/settings-view/index.vue'),
     name: 'NewSettingsView',
     meta: {
       titleKey: 'newSettings.settings',
+      tabRoot: true
+    }
+  },
+  {
+    path: 'settings/general',
+    component: () => import('@/views/new/settings-view/SectionView.vue'),
+    name: 'NewSettingsGeneral',
+    meta: {
+      titleKey: 'newSettings.general',
+      subtitleKey: 'newSettings.generalDesc',
+      section: 'general',
       subPage: true
     }
   },
   {
-    path: 'theme',
+    path: 'settings/core',
+    component: () => import('@/views/new/settings-view/SectionView.vue'),
+    name: 'NewSettingsCore',
+    meta: {
+      titleKey: 'newSettings.coreMgmt',
+      subtitleKey: 'newSettings.coreMgmtDesc',
+      section: 'core',
+      subPage: true
+    }
+  },
+  {
+    path: 'settings/data',
+    component: () => import('@/views/new/settings-view/SectionView.vue'),
+    name: 'NewSettingsData',
+    meta: {
+      titleKey: 'newSettings.dataMgmt',
+      subtitleKey: 'newSettings.dataDesc',
+      section: 'data',
+      subPage: true
+    }
+  },
+  {
+    path: 'settings/security',
+    component: () => import('@/views/new/settings-view/SectionView.vue'),
+    name: 'NewSettingsSecurity',
+    meta: {
+      titleKey: 'newSettings.security',
+      subtitleKey: 'newSettings.securityDesc',
+      section: 'security',
+      subPage: true
+    }
+  },
+  {
+    path: 'settings/about',
+    component: () => import('@/views/new/settings-view/SectionView.vue'),
+    name: 'NewSettingsAbout',
+    meta: {
+      titleKey: 'newSettings.about',
+      subtitleKey: 'newSettings.aboutDesc',
+      section: 'about',
+      subPage: true
+    }
+  },
+  {
+    // 主题并入设置：Android 从设置首页进入全屏子页，桌面端仍走弹窗
+    path: 'settings/theme',
     component: () => import('@/views/new/theme-view/index.vue'),
     name: 'NewThemeView',
     meta: {
       titleKey: 'newLayout.theme',
+      subtitleKey: 'newSettings.themeDesc',
       subPage: true
     }
   },
@@ -75,7 +157,8 @@ const routeChildren: AppRouteRecordRaw[] = [
     name: 'NewConfigAddView',
     meta: {
       titleKey: 'newEdit.addTitle',
-      subPage: true
+      subPage: true,
+      fullBleed: true
     }
   },
   {
@@ -85,7 +168,8 @@ const routeChildren: AppRouteRecordRaw[] = [
     name: 'NewConfigEditView',
     meta: {
       titleKey: 'newEdit.editTitle',
-      subPage: true
+      subPage: true,
+      fullBleed: true
     }
   }
 ]

@@ -1,5 +1,11 @@
 <template>
-  <div class="nm-root" :class="{ 'nm-detail-open': !!selectedConfig }">
+  <div
+    class="nm-root"
+    :class="{
+      'nm-android': isAndroidPlatform,
+      'nm-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedConfig
+    }"
+  >
     <!-- 左侧配置列表 -->
     <div class="nm-left">
       <div class="nm-left-header">
@@ -49,7 +55,7 @@
     <div class="nm-right" v-if="selectedData">
       <div class="nm-detail-header">
         <div class="nm-detail-title-row">
-          <button class="nm-back-btn" @click="closeMonitorDetail">
+          <button v-if="!isAndroidPlatform" class="nm-back-btn" @click="closeMonitorDetail">
             <svg
               width="14"
               height="14"
@@ -245,7 +251,7 @@
     <div class="nm-right" v-else-if="selectedConfig">
       <div class="nm-detail-header">
         <div class="nm-detail-title-row">
-          <button class="nm-back-btn" @click="closeMonitorDetail">
+          <button v-if="!isAndroidPlatform" class="nm-back-btn" @click="closeMonitorDetail">
             <svg
               width="14"
               height="14"
@@ -282,7 +288,11 @@
     </div>
 
     <div class="nm-right" v-else>
-      <div class="nm-empty">
+      <!-- Android 详情路由：列表/运行态尚未就绪时先展示加载态 -->
+      <div v-if="isAndroidDetailRoute" class="nm-empty" aria-live="polite">
+        <p>{{ t('newCommon.loading') }}</p>
+      </div>
+      <div v-else class="nm-empty">
         <span class="nm-empty-icon">✦</span>
         <p>{{ t('newMonitor.selectConfig') }}</p>
       </div>
@@ -316,7 +326,7 @@ import { readFileContent } from '@/utils/fileUtil'
 import { CONFIG_PATH } from '@/constants/easytier'
 import * as toml from 'smol-toml'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import TrendChart from '@/components/TrendChart/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
@@ -328,6 +338,8 @@ defineOptions({ name: 'NewMonitor' })
 const easyTierStore = useEasyTierStore()
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
+const isAndroidPlatform = isAndroid()
 const { show: toast } = useCreamToast()
 
 let isMounted = false
@@ -349,6 +361,11 @@ const visibilityHandler = () => {
 // 页面加载态 / 当前选中实例（列表卡片数据）
 const loading = ref(false)
 const selectedConfig = ref<RunningItem | null>(null)
+
+// Android 详情为独立路由（列表/详情共用本组件），视图切换以路由为准
+const isAndroidDetailRoute = computed(
+  () => isAndroidPlatform && route.name === 'NewMonitorDetailView'
+)
 
 // 监控快照：一次轮询的完整结果（nodeInfo 已合并 TOML 展示字段与 NAT 映射结果）
 interface MonitorSnapshot {
@@ -670,8 +687,8 @@ const loadConfigs = async () => {
     await updateRunningList()
 
     // 从运行中的配置（displayList）中选择，避免选中已停止的配置导致左侧无高亮卡片
-    // 窄屏（移动端）默认展示清单，不自动进入详情，由用户点卡片跳转
-    if (window.innerWidth > 900 && displayList.value.length > 0) {
+    // 窄屏（移动端）默认展示清单，不自动进入详情；Android 详情由路由驱动
+    if (!isAndroidPlatform && window.innerWidth > 900 && displayList.value.length > 0) {
       const last = easyTierStore.getLastRunConfigName()
       const target = last
         ? displayList.value.find((c) => c.configFileName === last) || displayList.value[0]
@@ -833,6 +850,12 @@ const handleSnapshotSuccess = (configName: string, snapshot: MonitorSnapshot) =>
 // --- 选中配置 ---
 // 切换选中实例：重置详情/失败计数与趋势，运行中则开始轮询，否则停轮询
 const selectConfig = (item: RunningItem) => {
+  // Android：先进入详情路由，由 syncDetailFromRoute 统一选中并启动轮询
+  if (isAndroidPlatform && !isAndroidDetailRoute.value) {
+    easyTierStore.setLastSelectedConfig(item)
+    router.push({ name: 'NewMonitorDetailView', query: { name: item.configFileName } })
+    return
+  }
   selectedConfig.value = item
   syncTrend()
   selectedData.value = null
@@ -858,6 +881,53 @@ const closeMonitorDetail = () => {
   consecutiveFailures.value = 0
 }
 
+// Android 详情路由 → 页面状态：进入时选中对应运行实例，返回列表时停止轮询并清空
+const syncDetailFromRoute = async () => {
+  if (!isAndroidPlatform) return
+  if (!isAndroidDetailRoute.value) {
+    closeMonitorDetail()
+    return
+  }
+  const name = typeof route.query.name === 'string' ? route.query.name : ''
+  if (!name) {
+    router.replace({ name: 'NewMonitor' })
+    return
+  }
+  if (!easyTierStore.configListLoaded) await easyTierStore.loadConfigFiles()
+  // 路由直达时运行态可能尚未刷新，补一次扫描再判定实例是否存在
+  if (!displayList.value.some((c) => c.configFileName === name)) await updateRunningList()
+  const item = displayList.value.find((c) => c.configFileName === name)
+  if (!item) {
+    // 列表仍在加载时不做“实例不存在”判定，加载完成后由 configListLoaded 监听重试
+    if (!easyTierStore.configListLoaded) return
+    toast(t('newMonitor.configNotFound'), 'warning')
+    router.replace({ name: 'NewMonitor' })
+    return
+  }
+  selectConfig(item)
+}
+
+// 路由切换（系统返回键 / 直接打开详情）时同步详情态
+watch(
+  () => [route.name, route.query.name],
+  (next, prev) => {
+    if (!isAndroidPlatform) return
+    const [name] = next
+    const [prevName] = prev
+    if (name !== 'NewMonitorDetailView' && prevName !== 'NewMonitorDetailView') return
+    void syncDetailFromRoute()
+  }
+)
+// 配置列表加载完成（深链打开详情时列表可能滞后）后重试同步
+watch(
+  () => easyTierStore.configListLoaded,
+  (loaded) => {
+    if (loaded && isAndroidDetailRoute.value && !selectedConfig.value) {
+      void syncDetailFromRoute()
+    }
+  }
+)
+
 // --- 轮询 ---
 // 连续失败阈值：前两次保留快照并继续自动重试；达到上限停止轮询，
 // 但保留最后一份快照并提示数据可能已过期（UX-108），由手动重试恢复。
@@ -867,7 +937,7 @@ const pollFailed = computed(() => consecutiveFailures.value >= MAX_FAILURES)
 
 // 空态 CTA：新建配置（Android 走二级页，桌面打开配置页并自动拉起新增弹窗）
 const goCreateConfig = () => {
-  router.push(isAndroid() ? '/new/config-add' : '/new/config?create=1')
+  router.push(isAndroidPlatform ? '/new/config-add' : '/new/config?create=1')
 }
 const goConfigPage = () => {
   router.push('/new/config')
@@ -959,10 +1029,11 @@ watch(selectedRunning, (running) => {
 })
 
 // --- 生命周期 ---
-onMounted(() => {
+onMounted(async () => {
   isMounted = true
   easyTierStore.registerPageRefresh(refreshRuntimeState)
-  loadConfigs()
+  await loadConfigs()
+  if (isAndroidPlatform) await syncDetailFromRoute()
   document.addEventListener('visibilitychange', visibilityHandler)
 })
 
@@ -1221,6 +1292,29 @@ onUnmounted(() => {
   }
 }
 
+/* Android：详情为独立路由，任何宽度下列表与详情都互斥展示 */
+.nm-root.nm-android {
+  flex-direction: column;
+}
+
+.nm-root.nm-android .nm-left {
+  width: 100%;
+  flex: 1;
+}
+
+.nm-root.nm-android .nm-right {
+  display: none;
+}
+
+.nm-root.nm-android.nm-detail-open .nm-left {
+  display: none;
+}
+
+.nm-root.nm-android.nm-detail-open .nm-right {
+  display: block;
+  flex: 1;
+}
+
 /* 手机尺寸：字段网格降为单列，避免长值被挤成两行 */
 @media (width <= 480px) {
   .nm-root .nm-grid {
@@ -1228,9 +1322,13 @@ onUnmounted(() => {
   }
 
   /* 统计卡改为 2×2，避免四项横排把数值挤成两行 */
-  .nm-peer-summary {
+  .nm-root .nm-peer-summary {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nm-root .nm-peer-stat {
+    min-width: 0;
   }
 }
 
