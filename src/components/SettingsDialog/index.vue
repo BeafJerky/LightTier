@@ -358,31 +358,71 @@
               {{ corePackageStatusText }}
             </div>
             <div class="sd-core-install-actions">
-              <select
-                class="sd-select sd-core-version-select"
-                :value="coreVerSelect"
-                :aria-label="t('newSettings.coreVersion')"
-                :disabled="downloadingCore"
-                @change="handleCoreVersionSelect"
-              >
-                <option v-for="item in coreVerOptions" :key="item.tag_name" :value="item.tag_name">
-                  {{
-                    `${item.tag_name} · ${
-                      item.channel === 'prerelease'
-                        ? t('newSettings.channelPrerelease')
-                        : t('newSettings.channelStable')
-                    }${
-                      downloadedCoreVersions.includes(item.tag_name)
-                        ? ` · ${t('newSettings.downloadedBadge')}`
-                        : ''
-                    }${
-                      item.tag_name === store.detectedCoreVersion
-                        ? ` · ${t('newSettings.installedBadge')}`
-                        : ''
-                    }`
-                  }}
-                </option>
-              </select>
+              <div class="sd-core-version-select">
+                <button
+                  ref="coreVerTriggerRef"
+                  type="button"
+                  class="sd-select sd-core-version-trigger"
+                  :aria-label="t('newSettings.coreVersion')"
+                  aria-haspopup="listbox"
+                  :aria-expanded="coreVerDropdownOpen"
+                  :disabled="downloadingCore"
+                  @click.stop="toggleCoreVerDropdown"
+                  @keydown.down.prevent="openCoreVerDropdown(1)"
+                  @keydown.up.prevent="openCoreVerDropdown(-1)"
+                  @keydown.esc="closeCoreVerDropdown()"
+                >
+                  <span class="sd-core-version-label">{{ coreVerOptionLabel(coreVerSelect) }}</span>
+                  <svg
+                    class="sd-core-version-caret"
+                    width="10"
+                    height="6"
+                    viewBox="0 0 10 6"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M1 1l4 4 4-4"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </button>
+                <Teleport to="body">
+                  <Transition name="sd-select-drop">
+                    <div
+                      v-if="coreVerDropdownOpen"
+                      ref="coreVerMenuRef"
+                      class="sd-core-version-menu"
+                      :style="coreVerMenuStyle"
+                      role="listbox"
+                      :aria-label="t('newSettings.coreVersion')"
+                      @keydown.down.prevent="focusCoreVerOption(coreVerHighlighted + 1)"
+                      @keydown.up.prevent="focusCoreVerOption(coreVerHighlighted - 1)"
+                      @keydown.home.prevent="focusCoreVerOption(0)"
+                      @keydown.end.prevent="focusCoreVerOption(coreVerOptions.length - 1)"
+                      @keydown.esc.prevent="closeCoreVerDropdown(true)"
+                      @keydown.tab="closeCoreVerDropdown()"
+                    >
+                      <button
+                        v-for="(item, idx) in coreVerOptions"
+                        :key="item.tag_name"
+                        type="button"
+                        role="option"
+                        class="sd-core-version-option"
+                        :class="{ active: item.tag_name === coreVerSelect }"
+                        :aria-selected="item.tag_name === coreVerSelect"
+                        @click="selectCoreVersion(item.tag_name)"
+                        @focus="coreVerHighlighted = idx"
+                        @mouseenter="coreVerHighlighted = idx"
+                      >
+                        {{ coreVerOptionLabel(item.tag_name) }}
+                      </button>
+                    </div>
+                  </Transition>
+                </Teleport>
+              </div>
             </div>
             <div class="sd-core-install-actions">
               <button
@@ -841,7 +881,7 @@
  * 平台差异：Android 内核编译期内置，核心路径、快捷目录、镜像源与下载安装等
  * 桌面专属项一律隐藏；面板内确认操作统一使用 Promise 化内置确认弹窗替代原生 confirm。
  */
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import BackupDialog from './BackupDialog.vue'
@@ -1149,9 +1189,106 @@ const handleServiceMethodSelect = (e: Event) => {
   const val = (e.target as HTMLSelectElement).value
   store.setDefaultServiceInstallMethod(val === 'nssm' ? 'nssm' : 'official')
 }
-const handleCoreVersionSelect = (e: Event) => {
-  coreVerSelect.value = (e.target as HTMLSelectElement).value
+// 内核版本自定义下拉：原生 <select> 的弹层由系统绘制，无法跟随主题
+const coreVerTriggerRef = ref<HTMLButtonElement | null>(null)
+const coreVerMenuRef = ref<HTMLElement | null>(null)
+const coreVerDropdownOpen = ref(false)
+const coreVerHighlighted = ref(0)
+const coreVerMenuStyle = ref<Record<string, string>>({})
+
+const coreVerOptionLabel = (tag: string) => {
+  const item = coreVerOptions.find((o) => o.tag_name === tag)
+  if (!item) return tag
+  const channel =
+    item.channel === 'prerelease'
+      ? t('newSettings.channelPrerelease')
+      : t('newSettings.channelStable')
+  const downloaded = downloadedCoreVersions.value.includes(tag)
+    ? ` · ${t('newSettings.downloadedBadge')}`
+    : ''
+  const installed = tag === store.detectedCoreVersion ? ` · ${t('newSettings.installedBadge')}` : ''
+  return `${tag} · ${channel}${downloaded}${installed}`
 }
+
+// 弹层 Teleport 到 body，用 fixed 坐标贴合触发器；空间不足时向上展开
+const positionCoreVerMenu = () => {
+  const trigger = coreVerTriggerRef.value
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const menuHeight = coreVerMenuRef.value?.offsetHeight || coreVerOptions.length * 32 + 10
+  // WebView 在极端情况下可能报告 0 视口，回退到触发器尺寸避免负数宽度
+  const viewportWidth = window.innerWidth || rect.width + 16
+  const viewportHeight = window.innerHeight || rect.bottom + menuHeight + 8
+  const openUp = viewportHeight - rect.bottom < menuHeight + 8 && rect.top > menuHeight + 8
+  const width = Math.max(120, Math.min(rect.width, viewportWidth - 16))
+  coreVerMenuStyle.value = {
+    left: `${Math.max(8, Math.min(rect.left, viewportWidth - width - 8))}px`,
+    width: `${width}px`,
+    ...(openUp ? { bottom: `${viewportHeight - rect.top + 4}px` } : { top: `${rect.bottom + 4}px` })
+  }
+}
+
+const focusCoreVerOption = (idx: number) => {
+  const options = coreVerMenuRef.value?.querySelectorAll<HTMLElement>('[role="option"]')
+  if (!options?.length) return
+  const next = ((idx % options.length) + options.length) % options.length
+  coreVerHighlighted.value = next
+  options[next].focus()
+}
+
+const openCoreVerDropdown = async (direction = 0) => {
+  if (downloadingCore.value) return
+  coreVerDropdownOpen.value = true
+  const selectedIdx = Math.max(
+    0,
+    coreVerOptions.findIndex((o) => o.tag_name === coreVerSelect.value)
+  )
+  coreVerHighlighted.value =
+    direction === 0
+      ? selectedIdx
+      : (selectedIdx + direction + coreVerOptions.length) % coreVerOptions.length
+  await nextTick()
+  positionCoreVerMenu()
+  focusCoreVerOption(coreVerHighlighted.value)
+}
+
+const closeCoreVerDropdown = (restoreFocus = false) => {
+  if (!coreVerDropdownOpen.value) return
+  coreVerDropdownOpen.value = false
+  if (restoreFocus) nextTick(() => coreVerTriggerRef.value?.focus())
+}
+
+const toggleCoreVerDropdown = () => {
+  if (coreVerDropdownOpen.value) closeCoreVerDropdown()
+  else void openCoreVerDropdown()
+}
+
+const selectCoreVersion = (tag: string) => {
+  coreVerSelect.value = tag
+  closeCoreVerDropdown(true)
+}
+
+const handleCoreVerOutsideClick = (e: MouseEvent) => {
+  if (!coreVerDropdownOpen.value) return
+  const target = e.target as Node
+  if (coreVerTriggerRef.value?.contains(target) || coreVerMenuRef.value?.contains(target)) return
+  closeCoreVerDropdown()
+}
+
+// 内容区滚动或窗口尺寸变化时关闭，避免弹层与触发器分离
+const handleCoreVerViewportChange = () => closeCoreVerDropdown()
+
+onMounted(() => {
+  document.addEventListener('click', handleCoreVerOutsideClick)
+  window.addEventListener('resize', handleCoreVerViewportChange)
+  window.addEventListener('scroll', handleCoreVerViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleCoreVerOutsideClick)
+  window.removeEventListener('resize', handleCoreVerViewportChange)
+  window.removeEventListener('scroll', handleCoreVerViewportChange, true)
+})
 
 // 数据管理状态
 const clearingCache = ref(false)
@@ -1218,6 +1355,7 @@ const refreshDownloadedCores = async () => {
 
 // 切到内核页时重新扫描，外部新增/删除安装包也能及时反映
 watch(activeTab, (tab) => {
+  closeCoreVerDropdown()
   if (tab === 'core') void refreshDownloadedCores()
 })
 
@@ -1389,6 +1527,8 @@ watch(visible, async (v) => {
       updateCoreFileName()
       await refreshDownloadedCores()
     }
+  } else {
+    closeCoreVerDropdown()
   }
 })
 
@@ -2065,10 +2205,102 @@ const handleInstallCore = async () => {
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
-/* 内核版本原生下拉：需容纳版本号 + 渠道/已安装标记文本 */
+/* 内核版本自定义下拉：需容纳版本号 + 渠道/已安装标记文本 */
 .sd-core-version-select {
   max-width: 280px;
   min-width: 200px;
+}
+
+.sd-core-version-trigger {
+  display: flex;
+  width: 100%;
+  color: var(--theme-text-primary, #4a3728);
+  background-image: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-2);
+}
+
+.sd-core-version-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sd-core-version-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-core-version-caret {
+  color: var(--theme-text-secondary, #7a6e5e);
+  transition: transform var(--theme-duration-fast) var(--theme-ease-out);
+  flex-shrink: 0;
+}
+
+.sd-core-version-trigger[aria-expanded='true'] .sd-core-version-caret {
+  transform: rotate(180deg);
+}
+
+/* 弹层 Teleport 到 body：避免被 .sd-content 的滚动容器裁剪 */
+.sd-core-version-menu {
+  position: fixed;
+  z-index: 2100;
+  display: flex;
+  max-height: 240px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border, #ede4db);
+  border-radius: var(--theme-radius-md, 12px);
+  box-shadow: var(--theme-shadow-md);
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 2px;
+  overscroll-behavior: contain;
+}
+
+.sd-core-version-option {
+  display: flex;
+  width: 100%;
+  padding: var(--theme-space-2) var(--theme-space-3);
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 12px;
+  color: var(--theme-text-secondary, #7a6e5e);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-sm, 6px);
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
+  align-items: center;
+}
+
+.sd-core-version-option:hover,
+.sd-core-version-option:focus-visible {
+  color: var(--theme-text-primary, #4a3728);
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  outline: none;
+}
+
+.sd-core-version-option.active {
+  color: var(--theme-accent-primary, #e8a0a0);
+  background: var(--theme-bg-active, rgb(232 160 160 / 10%));
+}
+
+.sd-select-drop-enter-active {
+  transition: opacity var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+.sd-select-drop-leave-active {
+  transition: opacity var(--theme-duration-fast) var(--theme-ease-in);
+}
+
+.sd-select-drop-enter-from,
+.sd-select-drop-leave-to {
+  opacity: 0;
 }
 
 /* 确认弹窗内容 */

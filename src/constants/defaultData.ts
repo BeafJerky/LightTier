@@ -384,14 +384,16 @@ export const SECRET_MASK = '••••••'
 export interface ConfigTemplate {
   id: 'server' | 'client' | 'custom'
   labelKey: string
+  descriptionKey: string
   values: Record<string, any>
 }
 export const CONFIG_TEMPLATES: ConfigTemplate[] = [
   {
     id: 'server',
     labelKey: 'newEdit.templateServer',
+    descriptionKey: 'newEdit.templateServerDesc',
     values: {
-      dhcp: false,
+      dhcp: true,
       listeners: ['tcp://0.0.0.0:11010', 'udp://0.0.0.0:11010'],
       flags: {
         enable_exit_node: true,
@@ -403,6 +405,7 @@ export const CONFIG_TEMPLATES: ConfigTemplate[] = [
   {
     id: 'client',
     labelKey: 'newEdit.templateClient',
+    descriptionKey: 'newEdit.templateClientDesc',
     values: {
       dhcp: true,
       flags: {
@@ -414,6 +417,7 @@ export const CONFIG_TEMPLATES: ConfigTemplate[] = [
   {
     id: 'custom',
     labelKey: 'newEdit.templateCustom',
+    descriptionKey: 'newEdit.templateCustomDesc',
     values: {}
   }
 ]

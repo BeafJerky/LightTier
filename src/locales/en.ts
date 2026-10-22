@@ -408,8 +408,13 @@ export default {
     removeFlag: 'Remove custom flag',
     templateLabel: 'Configuration template',
     templateServer: 'Server Template',
+    templateServerDesc:
+      'Listens on port 11010 and enables exit node, suitable for a relay/server with a public address',
     templateClient: 'Client Template',
+    templateClientDesc:
+      'Obtains a virtual IP automatically with low-latency and multi-thread enabled, suitable for phones or computers joining an existing network',
     templateCustom: 'Custom (Empty)',
+    templateCustomDesc: 'Clears template parameters while keeping the rest of your input',
     editModeLabel: 'Edit mode'
   },
   coreCompat: {

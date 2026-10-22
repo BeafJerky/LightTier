@@ -394,8 +394,11 @@ export default {
     removeFlag: '删除自定义参数',
     templateLabel: '配置模板',
     templateServer: '服务器模板',
+    templateServerDesc: '监听 11010 端口并开启出口节点，适合有公网地址的中继/服务器',
     templateClient: '客户端模板',
+    templateClientDesc: '自动获取虚拟 IP，开启低延迟与多线程，适合手机、电脑加入现有网络',
     templateCustom: '自定义（空）',
+    templateCustomDesc: '清除模板参数，保留其余已填内容',
     editModeLabel: '编辑模式'
   },
   coreCompat: {

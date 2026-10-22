@@ -6,7 +6,7 @@ license = ""
 name = "lighttier"
 repository = ""
 rust-version = "1.92.0"
-version = "1.7.4"
+version = "1.7.5"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

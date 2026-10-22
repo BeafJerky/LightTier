@@ -19,17 +19,90 @@
         :placeholder="t('newEdit.configNamePlaceholder')"
       />
       <span v-if="nameError" class="ed-name-error" role="alert">{{ nameError }}</span>
-      <!-- 模板选择（5.8）：原生 select，仅派生表单初始值，不落入 TOML 序列化管线 -->
-      <select
-        class="ed-select"
-        :value="templateId"
-        :aria-label="t('newEdit.templateLabel')"
-        @change="handleTemplateSelect"
-      >
-        <option v-for="tpl in CONFIG_TEMPLATES" :key="tpl.id" :value="tpl.id">
-          {{ t(tpl.labelKey) }}
-        </option>
-      </select>
+      <!-- 模板选择：主题化下拉，选项附带用途说明；仅更新模板相关字段，不覆盖已填写的其他内容 -->
+      <div class="ed-template-select">
+        <button
+          :id="fieldId('template-trigger')"
+          ref="templateTriggerRef"
+          type="button"
+          class="ed-template-trigger"
+          :aria-label="t('newEdit.templateLabel')"
+          aria-haspopup="listbox"
+          :aria-expanded="templateDropdownOpen"
+          :aria-controls="fieldId('template-menu')"
+          @click.stop="toggleTemplateDropdown"
+          @keydown.down.prevent="openTemplateDropdown(1)"
+          @keydown.up.prevent="openTemplateDropdown(-1)"
+          @keydown.esc="closeTemplateDropdown()"
+        >
+          <span class="ed-template-trigger-label">{{ t(currentTemplate.labelKey) }}</span>
+          <svg
+            class="ed-template-caret"
+            width="10"
+            height="6"
+            viewBox="0 0 10 6"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M1 1l4 4 4-4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <Teleport to="body">
+          <Transition name="ed-template-drop">
+            <div
+              v-if="templateDropdownOpen"
+              :id="fieldId('template-menu')"
+              ref="templateMenuRef"
+              class="ed-template-menu"
+              :style="templateMenuStyle"
+              role="listbox"
+              :aria-label="t('newEdit.templateLabel')"
+              @keydown.down.prevent="focusTemplateOption(templateHighlighted + 1)"
+              @keydown.up.prevent="focusTemplateOption(templateHighlighted - 1)"
+              @keydown.home.prevent="focusTemplateOption(0)"
+              @keydown.end.prevent="focusTemplateOption(CONFIG_TEMPLATES.length - 1)"
+              @keydown.esc.prevent="closeTemplateDropdown(true)"
+              @keydown.tab="closeTemplateDropdown()"
+            >
+              <button
+                v-for="(tpl, idx) in CONFIG_TEMPLATES"
+                :key="tpl.id"
+                type="button"
+                role="option"
+                class="ed-template-option"
+                :class="{ active: tpl.id === templateId }"
+                :aria-selected="tpl.id === templateId"
+                @click="selectTemplate(tpl.id)"
+                @focus="templateHighlighted = idx"
+                @mouseenter="templateHighlighted = idx"
+              >
+                <span class="ed-template-option-text">
+                  <span class="ed-template-option-label">{{ t(tpl.labelKey) }}</span>
+                  <span class="ed-template-option-desc">{{ t(tpl.descriptionKey) }}</span>
+                </span>
+                <svg
+                  v-if="tpl.id === templateId"
+                  class="ed-template-check"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  aria-hidden="true"
+                >
+                  <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </Transition>
+        </Teleport>
+      </div>
       <button
         type="button"
         class="ed-import-btn"
@@ -581,7 +654,7 @@
  * 保存前统一经 normalizeToml 清洗（合并默认值、剔除空参数，5.7），保证落盘 TOML 简洁。
  * 关键点：secret 字段以掩码展示、真实值暂存 secretBackup，未改动则原值写回。
  */
-import { ref, watch, computed, onUnmounted, useId, nextTick } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount, onUnmounted, useId, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CodeEditor } from '@/components/CodeEditor'
 import * as toml from 'smol-toml'
@@ -656,28 +729,31 @@ watch(
       newConfigName.value = props.dialogMode === 'add' ? '' : props.configName
       nameError.value = ''
       templateId.value = 'custom'
-      // 重新打开时回到代码模式：避免上一次打开留下的表单值被保存到新配置
-      editMode.value = 'code'
-      formParsedOk.value = false
+      templateDropdownOpen.value = false
       codeIssue.value = ''
       saveError.value = ''
       tomlContent.value = props.tomlContent
       initialToml.value = props.tomlContent
       initialName.value = props.dialogMode === 'add' ? '' : props.configName
       formBaseline.value = ''
-      runCodeValidation()
+      // 默认表单模式：按传入 TOML 重新解析，避免沿用上一次打开留下的表单值；
+      // 解析失败时 switchToForm 会回退代码模式并给出语法提示
+      editMode.value = 'code'
+      formParsedOk.value = false
+      switchToForm()
     }
   }
 )
 watch(visible, (v) => {
   emit('update:modelValue', v)
+  if (!v) closeTemplateDropdown()
 })
 
 const dialogMode = computed(() => props.dialogMode || 'edit')
 const newConfigName = ref(props.configName || '')
 const nameError = ref('')
-// 编辑模式：code 代码直编 / form 结构化表单（默认代码模式）
-const editMode = ref<'code' | 'form'>('code')
+// 编辑模式：code 代码直编 / form 结构化表单（默认表单模式）
+const editMode = ref<'code' | 'form'>('form')
 // 保存中标志：避免重复提交
 const saving = ref(false)
 // 代码语法问题（实时校验与保存前复核共用；空串表示无问题）
@@ -1118,24 +1194,138 @@ const handleEditTabKeydown = (e: KeyboardEvent) => {
 }
 
 // === 配置模板（5.8） ===
-const templateId = ref<'server' | 'client' | 'custom'>('custom')
+type TemplateId = 'server' | 'client' | 'custom'
+const templateId = ref<TemplateId>('custom')
+const currentTemplate = computed(
+  () => CONFIG_TEMPLATES.find((tpl) => tpl.id === templateId.value) ?? CONFIG_TEMPLATES[0]
+)
 
-// 原生 select 变更 → 应用模板
-const handleTemplateSelect = (e: Event) => {
-  applyTemplate((e.target as HTMLSelectElement).value as 'server' | 'client' | 'custom')
+// 模板接管的字段：切换模板时先清空再合并，保留主机名 / 网络身份 / Peer 等已填内容
+const TEMPLATE_TOP_LEVEL_KEYS = new Set(
+  CONFIG_TEMPLATES.flatMap((tpl) => Object.keys(tpl.values).filter((key) => key !== 'flags'))
+)
+const TEMPLATE_FLAG_KEYS = new Set(
+  CONFIG_TEMPLATES.flatMap((tpl) => Object.keys(tpl.values.flags ?? {}))
+)
+
+const templateTriggerRef = ref<HTMLButtonElement | null>(null)
+const templateMenuRef = ref<HTMLElement | null>(null)
+const templateDropdownOpen = ref(false)
+const templateHighlighted = ref(0)
+const templateMenuStyle = ref<Record<string, string>>({})
+
+// 弹层 Teleport 到 body，用 fixed 坐标贴合触发器；空间不足时向上展开
+const positionTemplateMenu = () => {
+  const trigger = templateTriggerRef.value
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const menuHeight = templateMenuRef.value?.offsetHeight || CONFIG_TEMPLATES.length * 54 + 8
+  // WebView 在极端情况下可能报告 0 视口，回退到触发器尺寸避免负数宽度
+  const viewportWidth = window.innerWidth || rect.width + 16
+  const viewportHeight = window.innerHeight || rect.bottom + menuHeight + 8
+  const openUp = viewportHeight - rect.bottom < menuHeight + 8 && rect.top > menuHeight + 8
+  const width = Math.min(Math.max(rect.width, 260), viewportWidth - 16)
+  templateMenuStyle.value = {
+    left: `${Math.max(8, Math.min(rect.left, viewportWidth - width - 8))}px`,
+    width: `${width}px`,
+    ...(openUp ? { bottom: `${viewportHeight - rect.top + 4}px` } : { top: `${rect.bottom + 4}px` })
+  }
 }
 
-// 应用模板：覆写代码区 TOML，表单模式下同步重解析（模板不落盘、仅影响初始值）
-const applyTemplate = (id: 'server' | 'client' | 'custom') => {
-  const tpl = CONFIG_TEMPLATES.find((t) => t.id === id)
+const focusTemplateOption = (idx: number) => {
+  const options = templateMenuRef.value?.querySelectorAll<HTMLElement>('[role="option"]')
+  if (!options?.length) return
+  const next = ((idx % options.length) + options.length) % options.length
+  templateHighlighted.value = next
+  options[next].focus()
+}
+
+const openTemplateDropdown = async (direction = 0) => {
+  templateDropdownOpen.value = true
+  const selectedIdx = Math.max(
+    0,
+    CONFIG_TEMPLATES.findIndex((tpl) => tpl.id === templateId.value)
+  )
+  templateHighlighted.value =
+    direction === 0
+      ? selectedIdx
+      : (selectedIdx + direction + CONFIG_TEMPLATES.length) % CONFIG_TEMPLATES.length
+  await nextTick()
+  positionTemplateMenu()
+  focusTemplateOption(templateHighlighted.value)
+}
+
+const closeTemplateDropdown = (restoreFocus = false) => {
+  if (!templateDropdownOpen.value) return
+  templateDropdownOpen.value = false
+  if (restoreFocus) nextTick(() => templateTriggerRef.value?.focus())
+}
+
+const toggleTemplateDropdown = () => {
+  if (templateDropdownOpen.value) closeTemplateDropdown()
+  else void openTemplateDropdown()
+}
+
+const handleTemplateOutsideClick = (e: MouseEvent) => {
+  if (!templateDropdownOpen.value) return
+  const target = e.target as Node
+  if (templateTriggerRef.value?.contains(target) || templateMenuRef.value?.contains(target)) return
+  closeTemplateDropdown()
+}
+
+// 内容区滚动或窗口尺寸变化时关闭，避免弹层与触发器分离
+const handleTemplateViewportChange = () => closeTemplateDropdown()
+
+onMounted(() => {
+  document.addEventListener('click', handleTemplateOutsideClick)
+  window.addEventListener('resize', handleTemplateViewportChange)
+  window.addEventListener('scroll', handleTemplateViewportChange, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleTemplateOutsideClick)
+  window.removeEventListener('resize', handleTemplateViewportChange)
+  window.removeEventListener('scroll', handleTemplateViewportChange, true)
+})
+
+// 应用模板：只替换模板接管的字段，保留用户已填写的主机名 / 网络身份 / Peer 等
+const applyTemplate = (id: TemplateId) => {
+  const tpl = CONFIG_TEMPLATES.find((item) => item.id === id)
   if (!tpl) return
   templateId.value = id
-  tomlContent.value = Object.keys(tpl.values).length ? toml.stringify(tpl.values) : ''
+  // 以当前内容为底：表单模式先收集表单改动，避免模板覆盖尚未回写的输入
+  let base: Record<string, any> = {}
+  try {
+    const current =
+      editMode.value === 'form' && formParsedOk.value ? buildFormToml() : tomlContent.value
+    if (current.trim()) base = toml.parse(current) as Record<string, any>
+  } catch {
+    base = {}
+  }
+  // 清空上一个模板接管的字段，再合并新模板值
+  TEMPLATE_TOP_LEVEL_KEYS.forEach((key) => delete base[key])
+  const flags =
+    base.flags && typeof base.flags === 'object' && !Array.isArray(base.flags)
+      ? { ...base.flags }
+      : {}
+  TEMPLATE_FLAG_KEYS.forEach((key) => delete flags[key])
+  Object.entries(tpl.values).forEach(([key, value]) => {
+    if (key === 'flags' && value && typeof value === 'object') Object.assign(flags, value)
+    else base[key] = value
+  })
+  if (Object.keys(flags).length) base.flags = flags
+  else delete base.flags
+  tomlContent.value = Object.keys(base).length ? toml.stringify(base) : ''
   if (editMode.value === 'form') {
     formParsedOk.value = parseFormData()
   }
   codeIssue.value = ''
   saveError.value = ''
+}
+
+const selectTemplate = (id: TemplateId) => {
+  applyTemplate(id)
+  closeTemplateDropdown(true)
 }
 
 // 校验配置名：非空、仅字母数字下划线连字符、新增时不得与现有配置重名
@@ -1241,6 +1431,11 @@ const handleImportToml = async () => {
     // 校验 TOML 格式
     toml.parse(content)
     tomlContent.value = content
+    // 表单模式下同步重解析，避免表单仍显示旧值并在保存时覆盖导入内容
+    if (editMode.value === 'form') {
+      formParsedOk.value = parseFormData()
+      if (formParsedOk.value) codeIssue.value = ''
+    }
     // 从文件名提取配置名
     const fileName = selected.split(/[\\/]/).pop() || ''
     const nameWithoutExt = fileName.replace(/\.toml$/i, '')
@@ -1303,28 +1498,138 @@ const handleImportToml = async () => {
   border-style: solid;
 }
 
-/* 模板原生下拉 */
-.ed-select {
-  padding: 6px 28px 6px 12px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-secondary, #7a6e5e);
-  cursor: pointer;
-  background: var(--theme-bg-card, #fff);
-  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237a6e5e' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-position: right 10px center;
-  background-repeat: no-repeat;
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-  appearance: none;
+/* 模板下拉：触发器沿用胶囊边框，菜单 Teleport 到 body 避免被弹窗裁剪 */
+.ed-template-select {
+  position: relative;
   flex-shrink: 0;
 }
 
-.ed-select:hover,
-.ed-select:focus {
+.ed-template-trigger {
+  display: flex;
+  height: 29px;
+  padding: 0 10px 0 12px;
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-text-secondary, #7a6e5e);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--theme-bg-card, #fff);
+  border: 1.5px solid var(--theme-border, #ede4db);
+  border-radius: var(--theme-radius-pill, 100px);
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration) var(--theme-ease-out);
+  align-items: center;
+  gap: 6px;
+}
+
+.ed-template-trigger:hover,
+.ed-template-trigger:focus-visible,
+.ed-template-trigger[aria-expanded='true'] {
+  color: var(--theme-text-primary, #4a3728);
   border-color: var(--theme-accent-primary, #e8a0a0);
+  outline: none;
+}
+
+.ed-template-caret {
+  color: var(--theme-text-muted, #c8bdb2);
+  transition: transform var(--theme-duration-fast) var(--theme-ease-out);
+  flex-shrink: 0;
+}
+
+.ed-template-trigger[aria-expanded='true'] .ed-template-caret {
+  transform: rotate(180deg);
+}
+
+.ed-template-menu {
+  position: fixed;
+  z-index: 2100;
+  display: flex;
+  max-height: 300px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border, #ede4db);
+  border-radius: var(--theme-radius-md, 12px);
+  box-shadow: var(--theme-shadow-md);
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 2px;
+  overscroll-behavior: contain;
+}
+
+.ed-template-option {
+  display: flex;
+  width: 100%;
+  padding: 8px 10px;
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-sm, 6px);
+  transition: background-color var(--theme-duration-fast) var(--theme-ease-out);
+  align-items: center;
+  gap: 8px;
+}
+
+.ed-template-option:hover,
+.ed-template-option:focus-visible {
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  outline: none;
+}
+
+.ed-template-option.active {
+  background: var(--theme-bg-active, rgb(232 160 160 / 10%));
+}
+
+.ed-template-option-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ed-template-option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-primary, #4a3728);
+}
+
+.ed-template-option.active .ed-template-option-label {
+  color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.ed-template-option-desc {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--theme-text-muted, #c8bdb2);
+  white-space: normal;
+}
+
+.ed-template-check {
+  color: var(--theme-accent-primary, #e8a0a0);
+  flex-shrink: 0;
+}
+
+.ed-template-drop-enter-active {
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+.ed-template-drop-leave-active {
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
+}
+
+.ed-template-drop-enter-from,
+.ed-template-drop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .ed-tabs {
