@@ -45,25 +45,66 @@
             </div>
           </div>
 
-          <!-- 第 3 步：内核获取方式（桌面按需下载，Android 编译期内置） -->
+          <!-- 第 3 步：内核获取方式（桌面可快捷安装，Android 编译期内置） -->
           <div v-else-if="step === 3" class="og-install">
             <div class="og-badge">
               {{
                 isAndroidPlatform
                   ? t('newOnboarding.androidBuiltinBadge')
-                  : t('newOnboarding.coreSetupBadge')
+                  : isCoreReady
+                    ? t('newOnboarding.coreReadyBadge')
+                    : t('newOnboarding.coreSetupBadge')
               }}
             </div>
             <h2 id="og-title" class="og-title">{{
               isAndroidPlatform
                 ? t('newOnboarding.androidBuiltinTitle')
-                : t('newOnboarding.coreSetupTitle')
+                : isCoreReady
+                  ? t('newOnboarding.coreReadyTitle')
+                  : t('newOnboarding.coreSetupTitle')
             }}</h2>
             <p class="og-desc">{{
               isAndroidPlatform
                 ? t('newOnboarding.androidBuiltinDesc')
-                : t('newOnboarding.coreSetupDesc')
+                : isCoreReady
+                  ? t('newOnboarding.coreReadyDesc', { version: easyTierStore.detectedCoreVersion })
+                  : t('newOnboarding.coreSetupDesc')
             }}</p>
+
+            <!-- 桌面且内核未就绪：提供快捷安装；Android 已内置，浏览器预览无 Tauri API -->
+            <div v-if="!isAndroidPlatform && !isCoreReady" class="og-core-action">
+              <p v-if="coreChecking" class="og-core-hint">
+                {{ t('newOnboarding.coreDetecting') }}
+              </p>
+              <p v-else-if="!canQuickInstall" class="og-core-hint">
+                {{ t('newOnboarding.coreBrowserHint') }}
+              </p>
+              <template v-else>
+                <button
+                  type="button"
+                  class="og-btn og-btn-primary og-install-btn"
+                  :disabled="quickBusy"
+                  @click="quickInstallCore"
+                >
+                  {{ quickInstallButtonText }}
+                </button>
+                <div v-if="quickInstallState === 'downloading'" class="og-download">
+                  <div class="og-download-track">
+                    <div
+                      class="og-download-fill"
+                      :style="{ width: (quickProgress ?? 0) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="og-download-text">{{ quickProgressText }}</span>
+                </div>
+                <p v-else class="og-core-hint">
+                  {{ t('newOnboarding.quickInstallHint', { version: DEFAULT_CORE_VERSION }) }}
+                </p>
+                <p v-if="quickInstallState === 'error'" class="og-core-error" role="alert">
+                  {{ t(quickInstallError) }}
+                </p>
+              </template>
+            </div>
           </div>
 
           <!-- 第 4 步：完成 -->
@@ -84,7 +125,7 @@
             <p class="og-desc">{{
               isAndroidPlatform
                 ? t('newOnboarding.androidDoneDesc')
-                : easyTierStore.detectedCoreVersion
+                : isCoreReady
                   ? t('newOnboarding.installDoneDesc')
                   : t('newOnboarding.corePendingDesc')
             }}</p>
@@ -145,16 +186,24 @@
 /**
  * OnboardingGuide — 首次启动引导（4 步流程）
  *
- * 步骤：1 欢迎 → 2 功能简介 → 3 内核获取方式（桌面按需下载，Android 编译期内置）
- * → 4 完成；桌面内核不再随安装包内置，第 3 步仅说明获取入口，不执行安装。
+ * 步骤：1 欢迎 → 2 功能简介 → 3 内核获取方式（桌面可快捷安装，Android 编译期内置）
+ * → 4 完成；桌面内核不再随安装包内置，第 3 步支持一键测速加速源、下载并安装默认版本。
  * 结束时勾选“下次不再显示”则写入 localStorage（settings.onboardingDone）持久化，
  * finish 事件交由父组件控制显隐。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import { getCoreDownloadUrl, getCoreFileName } from '@/constants/easytier'
+import { DEFAULT_CORE_VERSION } from '@/constants/kernelCompat'
+import { useCoreInstall } from '@/hooks/useCoreInstall'
+import { MIRROR_SOURCE_KEY, useMirrorProbe } from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
+import { formatBytes } from '@/utils/easyTierUtil'
+import { downloadFile } from '@/utils/fileUtil'
 import { isAndroid } from '@/utils/platformUtil'
+import { getArch, getOsType } from '@/utils/sysUtil'
 
 const emit = defineEmits<{ finish: [] }>()
 
@@ -168,8 +217,98 @@ const step = ref(1)
 const isAndroidPlatform = isAndroid()
 // 是否已有配置：决定完成页主 CTA（创建第一个配置 / 结束引导）
 const hasConfigs = computed(() => easyTierStore.configList.length > 0)
+// 浏览器 Mock 的版本探测返回默认值，不代表真实安装；仅 Tauri 桌面探测成功才算内核就绪
+const isCoreReady = computed(() => isTauriRuntime() && !!easyTierStore.detectedCoreVersion)
+// 仅桌面 Tauri 支持快捷安装（Android 内核内置，浏览器无 Tauri API）
+const canQuickInstall = computed(() => !isAndroidPlatform && isTauriRuntime())
+// App 启动即触发内核探测，未出结果前不展示安装按钮，避免与探测结果打架
+const coreChecking = computed(
+  () => !isAndroidPlatform && !isCoreReady.value && easyTierStore.coreVersionDetecting
+)
 // 下次不再显示（默认勾选：完成引导后不再出现，取消勾选则每次启动显示）
 const notShowAgain = ref(true)
+
+// 快捷安装内核：测速选源 → 下载默认版本 → 解压安装，进度与错误就地反馈
+type QuickInstallState = 'idle' | 'probing' | 'downloading' | 'installing' | 'error'
+const quickInstallState = ref<QuickInstallState>('idle')
+// 失败提示保存 i18n key，语言切换后随模板重新翻译
+const quickInstallError = ref('newOnboarding.quickInstallDownloadFail')
+const quickReceived = ref(0)
+const quickTotal = ref<number | null>(null)
+const { installCore } = useCoreInstall()
+const { selected: mirrorSelected, probeAll, waitForProbe } = useMirrorProbe()
+
+const quickBusy = computed(() =>
+  ['probing', 'downloading', 'installing'].includes(quickInstallState.value)
+)
+const quickProgress = computed(() =>
+  quickTotal.value && quickTotal.value > 0
+    ? Math.min(100, Math.round((quickReceived.value / quickTotal.value) * 100))
+    : null
+)
+const quickProgressText = computed(() => {
+  const received = formatBytes(quickReceived.value)
+  if (quickProgress.value === null) return received
+  return `${quickProgress.value}% · ${received} / ${formatBytes(quickTotal.value)}`
+})
+const quickInstallButtonText = computed(() => {
+  switch (quickInstallState.value) {
+    case 'probing':
+      return t('newOnboarding.quickInstallProbing')
+    case 'downloading':
+      return t('newOnboarding.quickInstallDownloading')
+    case 'installing':
+      return t('newOnboarding.quickInstallInstalling')
+    case 'error':
+      return t('newOnboarding.quickInstallRetry')
+    default:
+      return t('newOnboarding.quickInstall')
+  }
+})
+
+const quickInstallCore = async () => {
+  if (!canQuickInstall.value || quickBusy.value) return
+  const version = DEFAULT_CORE_VERSION
+  const filename = getCoreFileName(getOsType(), getArch(), version)
+  quickInstallError.value = ''
+  quickReceived.value = 0
+  quickTotal.value = null
+  try {
+    quickInstallState.value = 'probing'
+    // 未显式选择加速源时先测速，自动选用最快可用源再下载（与设置页同一规则）
+    if (!localStorage.getItem(MIRROR_SOURCE_KEY)) {
+      await probeAll(version, filename)
+      await waitForProbe()
+    }
+    quickInstallState.value = 'downloading'
+    const downloaded = await downloadFile(
+      getCoreDownloadUrl(mirrorSelected.value, version, filename),
+      (progress) => {
+        quickReceived.value = progress.received
+        quickTotal.value = progress.total
+      }
+    )
+    if (!downloaded) {
+      quickInstallState.value = 'error'
+      quickInstallError.value = 'newOnboarding.quickInstallDownloadFail'
+      return
+    }
+    quickInstallState.value = 'installing'
+    const installed = await installCore(version)
+    if (!installed) {
+      quickInstallState.value = 'error'
+      quickInstallError.value = 'newOnboarding.quickInstallInstallFail'
+      return
+    }
+    // 安装流程会置停止标记，恢复后用户可正常启动实例
+    easyTierStore.setStopLoop(false)
+    quickInstallState.value = 'idle'
+  } catch (e) {
+    console.error('快捷安装内核失败:', e)
+    quickInstallState.value = 'error'
+    quickInstallError.value = 'newOnboarding.quickInstallDownloadFail'
+  }
+}
 
 // 焦点管理：打开时记录来源并聚焦引导卡片，关闭时还原
 const cardRef = ref<HTMLElement | null>(null)
@@ -480,6 +619,66 @@ onBeforeUnmount(() => {
   color: var(--theme-accent-primary, #e8a0a0);
   background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 14%, transparent);
   border-radius: var(--theme-radius-pill, 100px);
+}
+
+/* 快捷安装：按钮、下载进度与就地提示 */
+.og-core-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.og-install-btn {
+  min-width: 160px;
+}
+
+.og-core-hint {
+  max-width: 380px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.og-core-error {
+  max-width: 380px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--theme-color-danger, #e57373);
+}
+
+.og-download {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+.og-download-track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  background: var(--theme-border-light, #f5ede6);
+  border-radius: var(--theme-radius-pill, 100px);
+}
+
+.og-download-fill {
+  height: 100%;
+  background: var(--theme-accent-primary, #e8a0a0);
+  border-radius: inherit;
+  transition: width var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+.og-download-text {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-muted, #c8bdb2);
 }
 
 /* 第 4 步：完成 */

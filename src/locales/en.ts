@@ -802,7 +802,22 @@ export default {
     coreSetupBadge: 'On demand',
     coreSetupTitle: 'Install the Kernel on Demand',
     coreSetupDesc:
-      'The EasyTier kernel is no longer bundled with the installer. After onboarding, go to Settings → Kernel to download and install a version.',
+      'The EasyTier kernel is no longer bundled with the installer. Install it here in one click, or pick a version later in Settings → Kernel.',
+    coreReadyBadge: 'Ready',
+    coreReadyTitle: 'Kernel Ready',
+    coreReadyDesc:
+      'Kernel {version} detected — start networking right away. You can switch versions later in Settings.',
+    coreDetecting: 'Checking the installed kernel…',
+    coreBrowserHint:
+      'Kernel installation is unavailable in the browser preview. Please install it in the desktop app.',
+    quickInstall: 'Install kernel',
+    quickInstallHint: 'Find the fastest mirror, then download and install kernel {version}',
+    quickInstallProbing: 'Finding the fastest mirror…',
+    quickInstallDownloading: 'Downloading kernel…',
+    quickInstallInstalling: 'Installing kernel…',
+    quickInstallRetry: 'Retry',
+    quickInstallDownloadFail: 'Kernel download failed. Check your network and try again.',
+    quickInstallInstallFail: 'Kernel installation failed. Retry in Settings → Kernel.',
     androidBuiltinBadge: 'Built in',
     androidBuiltinTitle: 'Built-in Kernel',
     androidBuiltinDesc:
