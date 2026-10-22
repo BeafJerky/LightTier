@@ -83,7 +83,7 @@
       <!-- 左侧边栏（窄屏抽屉化） -->
       <aside class="nl-sidebar" :class="{ open: sidebarOpen }">
         <div class="nl-sidebar-header">
-          <div class="nl-logo">ET</div>
+          <img class="nl-logo" src="/logo.png" alt="" />
           <span class="nl-brand">LightTier</span>
         </div>
 
@@ -105,42 +105,14 @@
         </nav>
 
         <div class="nl-sidebar-footer">
-          <!-- 上行：语言 + 主题 -->
-          <div class="nl-footer-toolbar">
-            <div class="nl-footer-actions">
-              <!-- 语言切换 -->
-              <div class="nl-lang-wrap">
-                <button
-                  class="nl-action-btn"
-                  @click.stop="langDropdownVisible = !langDropdownVisible"
-                  :title="currentLangName"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18l3-6 3 6" />
-                  </svg>
-                </button>
-                <Transition name="lang-drop">
-                  <div v-if="langDropdownVisible" class="nl-lang-dropdown">
-                    <button
-                      v-for="item in langMap"
-                      :key="item.lang"
-                      class="nl-lang-option"
-                      :class="{ active: currentLang === item.lang }"
-                      @click="switchLang(item.lang)"
-                      >{{ item.name }}</button
-                    >
-                  </div>
-                </Transition>
-              </div>
-              <!-- 主题切换 -->
-              <button class="nl-action-btn" @click="openTheme" :title="t('newLayout.theme')">
+          <div class="nl-footer-actions">
+            <!-- 语言切换 -->
+            <div class="nl-lang-wrap">
+              <button
+                class="nl-action-btn"
+                @click.stop="langDropdownVisible = !langDropdownVisible"
+                :title="currentLangName"
+              >
                 <svg
                   width="14"
                   height="14"
@@ -149,21 +121,38 @@
                   stroke="currentColor"
                   stroke-width="2"
                 >
-                  <circle cx="12" cy="12" r="5" />
-                  <path
-                    d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
-                  />
+                  <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18l3-6 3 6" />
                 </svg>
               </button>
+              <Transition name="lang-drop">
+                <div v-if="langDropdownVisible" class="nl-lang-dropdown">
+                  <button
+                    v-for="item in langMap"
+                    :key="item.lang"
+                    class="nl-lang-option"
+                    :class="{ active: currentLang === item.lang }"
+                    @click="switchLang(item.lang)"
+                    >{{ item.name }}</button
+                  >
+                </div>
+              </Transition>
             </div>
-          </div>
-          <!-- 下行：用户信息 + 设置 -->
-          <div class="nl-user">
-            <div class="nl-user-avatar">C</div>
-            <div class="nl-user-info">
-              <span class="nl-user-name">LightTier</span>
-              <span class="nl-user-status">{{ t('newLayout.managerLabel') }}</span>
-            </div>
+            <!-- 主题切换 -->
+            <button class="nl-action-btn" @click="openTheme" :title="t('newLayout.theme')">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="5" />
+                <path
+                  d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                />
+              </svg>
+            </button>
             <!-- 设置 -->
             <button class="nl-action-btn" @click="openSettings" :title="t('newSettings.settings')">
               <svg
@@ -555,17 +544,10 @@ onBeforeUnmount(() => {
 }
 
 .nl-logo {
-  display: flex;
   width: 32px;
   height: 32px;
-  font-family: var(--theme-font-display);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text-white);
-  background: linear-gradient(135deg, var(--theme-accent-primary), var(--theme-accent-secondary));
-  border-radius: var(--theme-radius-sm);
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .nl-brand {
@@ -662,16 +644,6 @@ onBeforeUnmount(() => {
   display: flex;
   padding: var(--theme-space-3) var(--theme-space-4) var(--theme-space-4);
   border-top: 1px solid var(--theme-border);
-  flex-direction: column;
-  gap: 0;
-}
-
-/* 上行工具栏 */
-.nl-footer-toolbar {
-  display: flex;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--theme-border, #ede4db);
   justify-content: flex-end;
 }
 
@@ -679,17 +651,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 2px;
-}
-
-/* 下行：用户信息行 */
-.nl-user {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-3);
-}
-
-.nl-user .nl-action-btn {
-  margin-left: auto;
 }
 
 .nl-action-btn {
@@ -780,35 +741,6 @@ onBeforeUnmount(() => {
 .lang-drop-leave-to {
   opacity: 0;
   transform: translateY(4px);
-}
-
-.nl-user-avatar {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text-white);
-  background: linear-gradient(135deg, var(--theme-accent-secondary), var(--theme-accent-primary));
-  border-radius: var(--theme-radius-round);
-  align-items: center;
-  justify-content: center;
-}
-
-.nl-user-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.nl-user-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--theme-text-primary);
-}
-
-.nl-user-status {
-  font-size: 11px;
-  color: var(--theme-text-muted);
 }
 
 /* 右侧区域 */

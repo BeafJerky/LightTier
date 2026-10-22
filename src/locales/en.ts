@@ -10,7 +10,6 @@ export default {
     webConfigSub: 'Manage web config server connections',
     theme: 'Theme Settings',
     sectionNav: 'Navigation',
-    managerLabel: 'Manager',
     ariaMainNav: 'Main navigation',
     ariaOpenMenu: 'Open menu',
     minimize: 'Minimize',

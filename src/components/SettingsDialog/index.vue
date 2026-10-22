@@ -615,7 +615,7 @@
           tabindex="0"
         >
           <div class="sd-about">
-            <div class="sd-about-logo">L</div>
+            <img class="sd-about-logo" src="/logo.png" alt="" />
             <div class="sd-about-info">
               <h3 class="sd-about-name">LightTier</h3>
               <span class="sd-about-ver">v{{ appVersion }}</span>
@@ -2350,21 +2350,9 @@ const handleInstallCore = async () => {
 }
 
 .sd-about-logo {
-  display: flex;
   width: 44px;
   height: 44px;
-  font-family: var(--theme-font-display, 'Quicksand', sans-serif);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--theme-text-on-accent, #fff);
-  background: linear-gradient(
-    135deg,
-    var(--theme-accent-primary, #e8a0a0),
-    var(--theme-color-success, #7fba8a)
-  );
-  border-radius: var(--theme-radius-lg, 14px);
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
   flex-shrink: 0;
 }
 

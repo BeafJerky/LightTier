@@ -42,7 +42,7 @@
     <template #footer>
       <div class="td-footer">
         <n-button @click="handleReset">{{ t('newTheme.resetDefault') }}</n-button>
-        <div>
+        <div class="td-footer-actions">
           <n-button @click="visible = false">{{ t('newCommon.cancel') }}</n-button>
           <n-button type="primary" @click="handleApply">{{ t('newTheme.applyTheme') }}</n-button>
         </div>
@@ -362,6 +362,12 @@ watch(visible, (v) => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+}
+
+.td-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
 }
 
 /* 桌面端：主题列表独立滚动，标题/预览/底部按钮保持固定，避免长列表把整个弹窗撑出滚动 */

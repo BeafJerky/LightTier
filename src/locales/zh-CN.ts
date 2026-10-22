@@ -10,7 +10,6 @@ export default {
     webConfigSub: '管理 Web 配置服务器连接',
     theme: '主题设置',
     sectionNav: '导航',
-    managerLabel: '管理器',
     ariaMainNav: '主导航',
     ariaOpenMenu: '打开菜单',
     minimize: '最小化',
