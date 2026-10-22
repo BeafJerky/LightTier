@@ -6,7 +6,7 @@ LightTier 是一款专为 [EasyTier](https://github.com/EasyTier/EasyTier) 内�
 
 - 可视化配置管理：表单 + TOML 代码双模式编辑，支持导入/模板/高级字段（安全模式、凭据、IPv6、SOCKS5 等）
 - 一键启动/停止组网：并发启动串行队列、端口冲突预检、P2P 直连通知
-- 实时运行监控：节点列表、Peer 详情、NAT 类型、上传/下载/延迟趋势图（120 点环形缓冲）、快照导出
+- 实时运行监控：节点列表、Peer 详情、NAT 类型、上传/下载/延迟趋势图（120 点环形缓冲）
 - Web 配置管理：远程配置服务器（config-server）连接管理与服务化
 - 服务管理：nssm / 官方 CLI 双模式安装 Windows 服务，开机自启
 - 退出节点路由：启用后自动写入系统路由表，停止自动清除，异常退出残留自动补清
@@ -17,10 +17,14 @@ LightTier 是一款专为 [EasyTier](https://github.com/EasyTier/EasyTier) 内�
 
 ## 技术栈
 
-- 前端：Vue 3.5（Composition API）+ Vite 7 + TypeScript + Pinia + vue-i18n + Element Plus
+- 前端：Vue 3.5（Composition API）+ Vite 7 + TypeScript + Pinia + vue-i18n + Naive UI
 - 编辑器：Monaco Editor（TOML 代码编辑）
 - 桌面端：Tauri 2（fs / dialog / http / shell / os / log / notification / window-state / store 插件）
 - 测试：Vitest
+
+## 文档
+
+项目规范、设计文档与历史归档见 [`doc/README.md`](doc/README.md)。
 
 ## 开发
 
@@ -47,7 +51,7 @@ pnpm test
 
 ```bash
 # 前端生产构建（两端共用产物 dist/）
-pnpm build:pro
+pnpm build
 
 # Windows 64 位安装包（NSIS；不带参数的 pnpm tauri:build 亦可）
 pnpm build:win64
@@ -116,7 +120,7 @@ src-tauri/           # Tauri 2 后端（进程/命令执行、单实例、托盘
 
 ## 环境要求
 
-- Node.js >= 18，pnpm >= 8
+- Node.js 20.19+（Vite 7 要求），pnpm >= 8
 - Rust（构建桌面端时需要）
 - Windows 10/11（服务安装、退出路由等能力依赖 Windows）
 - Android 打包：JDK 17、Android NDK 与 protoc、Rust `aarch64-linux-android` target（详见「构建与打包」）

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.3 (2026-10-22)
+
+> 仓库整理与代码质量清理：归档历史文档、移除冗余资源，统一 Rust 排版并清零 clippy 告警。
+
+- 文档
+  - 将 `docs/` 与 `fnPack/` 并入文档中心 `doc/`：UI 审查报告与修复规划归档到 `doc/archive/ui-review-v1.5.0/`，`bind_device` 根因报告与 fnOS fpk 调研归档到 `doc/archive/`，v2.7.0 全字段 TOML 示例移到 `doc/design/`
+  - 移除 18 张历史截图（约 1.1MB），归档报告中的图片改为文字说明
+  - README 技术栈更新为 Naive UI、构建命令改为 `pnpm build`、移除已下线的快照导出说明，并补充文档入口
+  - README 与 `package.json` 的 Node.js 要求同步为 Vite 7 的 `^20.19.0 || >=22.12.0`
+- 清理
+  - 删除无引用的 `src-tauri/icons/icon.rgba`（约 1MB）
+- Rust
+  - 清理 3 个 clippy 告警（`is_ok`、多余 `return`、无意义 `let _`）
+  - 对 `src-tauri/src` 执行 rustfmt，统一代码排版
+- 验证
+  - vue-tsc、18 个测试文件 205 项用例、ESLint、Stylelint、Prettier 通过
+  - `cargo clippy --all-targets` 0 告警，`cargo fmt --check` 通过
+
 ## 1.7.2 (2026-10-22)
 
 > 修复 Web 配置运行态首帧闪变与 Windows 任务栏窗口标题回退。

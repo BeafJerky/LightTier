@@ -92,10 +92,7 @@ async fn init_kernel() -> Result<Arc<NetworkInstanceManager>, String> {
 
 /// 获取内核实例管理器；首次调用时同步完成初始化（初始化失败可在下次调用时重试）。
 async fn instance_manager() -> Result<Arc<NetworkInstanceManager>, String> {
-    INSTANCE_MANAGER
-        .get_or_try_init(init_kernel)
-        .await
-        .cloned()
+    INSTANCE_MANAGER.get_or_try_init(init_kernel).await.cloned()
 }
 
 async fn resolve_instance_id(instance_id: Option<String>) -> Result<Uuid, String> {
@@ -183,7 +180,10 @@ fn subscribe_instance_events(
     instance_manager: &Arc<NetworkInstanceManager>,
     instance_id: Uuid,
 ) {
-    let Some(instance) = instance_manager.iter().find(|item| *item.key() == instance_id) else {
+    let Some(instance) = instance_manager
+        .iter()
+        .find(|item| *item.key() == instance_id)
+    else {
         return;
     };
     let Some(mut event_receiver) = instance.value().subscribe_event() else {
@@ -232,7 +232,10 @@ pub async fn start_instance(app: AppHandle, config_file: String) -> Result<Strin
 
     let stale = instance_manager.list_network_instance_ids();
     if !stale.is_empty() {
-        log::info!("stopping {} stale instance(s) before starting new one", stale.len());
+        log::info!(
+            "stopping {} stale instance(s) before starting new one",
+            stale.len()
+        );
         instance_manager
             .delete_network_instance(stale)
             .map_err(|e| e.to_string())?;
@@ -469,8 +472,12 @@ fn compare_peer_items(a: &PeerTableItem, b: &PeerTableItem) -> Ordering {
         };
     }
 
-    let a_is_public = a.hostname.starts_with(easytier::peers::PUBLIC_SERVER_HOSTNAME_PREFIX);
-    let b_is_public = b.hostname.starts_with(easytier::peers::PUBLIC_SERVER_HOSTNAME_PREFIX);
+    let a_is_public = a
+        .hostname
+        .starts_with(easytier::peers::PUBLIC_SERVER_HOSTNAME_PREFIX);
+    let b_is_public = b
+        .hostname
+        .starts_with(easytier::peers::PUBLIC_SERVER_HOSTNAME_PREFIX);
     if a_is_public != b_is_public {
         return if a_is_public {
             Ordering::Less

@@ -139,8 +139,7 @@ fn run_cli(app: tauri::AppHandle, program: String, args: Vec<String>) -> Result<
             log::error!("run_cli exited with {:?}: {}", output.status.code(), stderr);
             return Err(if stderr.is_empty() { stdout } else { stderr });
         }
-        String::from_utf8(output.stdout)
-            .map_err(|e| format!("输出解码失败: {e}"))
+        String::from_utf8(output.stdout).map_err(|e| format!("输出解码失败: {e}"))
     }
 
     // 移动端：不支持子进程调用
@@ -152,7 +151,11 @@ fn run_cli(app: tauri::AppHandle, program: String, args: Vec<String>) -> Result<
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> Result<String, String> {
+fn run_command(
+    app: tauri::AppHandle,
+    program: String,
+    args: Vec<String>,
+) -> Result<String, String> {
     // 桌面端：通过子进程在后台启动命令
     #[cfg(not(mobile))]
     {
@@ -184,10 +187,7 @@ fn run_command(app: tauri::AppHandle, program: String, args: Vec<String>) -> Res
 
 #[tauri::command]
 fn check_port_available(port: u16) -> bool {
-    match std::net::TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
 #[tauri::command]
@@ -206,7 +206,7 @@ fn get_exe_directory(app: tauri::AppHandle) -> String {
     #[cfg(not(mobile))]
     {
         let _ = &app;
-        return desktop_exe_directory();
+        desktop_exe_directory()
     }
 }
 
@@ -286,7 +286,7 @@ pub fn run() {
     #[cfg(not(mobile))]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = show_window(app);
+            show_window(app);
         }));
     }
 

@@ -1,5 +1,7 @@
 # LightTier 飞牛 fnOS（fpk）打包方案 · 详细版
 
+> [已归档 2026-10-22] 飞牛 fnOS fpk 打包调研，保留备查。
+
 > 版本：2026-10-19 **v2** v1 → v2 的改动（均为源码取证后推翻 v1 结论）：① 新增 **F1 / F2** 两条路线（复用官方 web 后端、只重做界面），成本结构优于 v1 的推荐方案；② **推翻** v1 写的"官方控制台是单设备单节点、不支持多实例"——core 与 web 都原生支持多实例（第十一节）；③ 新增上游前端生态事实：web 前端是独立 Vite 工程 + 官方发布的 `easytier-frontend-lib` protobuf-ts 客户端（第十节）；④ 选型判据从"要不要多实例"改为"统一观感还是统一代码"；⑤ 新增前端可移植性审计的确切数据（组件库不兼容、无鉴权、类型语义）与一条待真机定案的关键问题（第十一、十三节）。
 >
 > 依据：LightTier 当前源码（`master`，v1.1.0 后）· 飞牛官方开发文档（本地 `fnos-dev-docs/`，抓取 2026-10-16）· `fnos/fpk-packaging-reference.md`（官方 fnpack 1.2.3 实测 + 真机日志归属）· `fnos/easytier/easytier-fpk-调研结论.md`（双容器包，已真机安装 🖥）· EasyTier 上游 tag `v2.7.0` 源码（经 `api.github.com/.../contents?ref=v2.7.0` 逐文件取回）· `easytier-mini` 上游 README

@@ -1,6 +1,6 @@
 # LightTier 文档中心
 
-> 生成时间：2026-09-20用途：`doc/` 目录的分类导航与维护约定。新增文档前先阅读本文，按「用途」放入对应文件夹。
+> 最近更新：2026-10-22。用途：`doc/` 目录的分类导航与维护约定。新增文档前先阅读本文，按「用途」放入对应文件夹。
 
 ## 目录结构
 
@@ -8,9 +8,9 @@
 | --- | --- | --- | --- |
 | [conventions/](conventions/) | 开发规范：提交、版本、代码、主题等约束性规则 | 推送 | Git提交与版本号规范.md |
 | [guides/](guides/) | 操作指南：构建、打包、发布、使用、排障 | 推送 | （预留） |
-| [design/](design/) | 设计与方案：架构、UI、功能设计 | 推送 | EasyTier-v2.7.0-升级适配方案.md、EasyTier-各版本配置字段与CLI对照.md、EasyTier接入架构调研-从CLI多进程到内嵌内核.md |
+| [design/](design/) | 设计与方案：架构、UI、功能设计 | 推送 | EasyTier-v2.7.0-升级适配方案.md、EasyTier-各版本配置字段与CLI对照.md、EasyTier接入架构调研-从CLI多进程到内嵌内核.md、easytier-v2.7.0-full.toml |
 | [tracking/](tracking/) | 跟踪与记录：待修复清单、审查报告、进度（本地） | 不推送 | 待修复问题清单.md |
-| [archive/](archive/) | 公开归档：过时、一次性文档（只读保留） | 推送 | （预留） |
+| [archive/](archive/) | 公开归档：过时、一次性文档（只读保留） | 推送 | ui-review-v1.5.0/、easytier-bind-device-connect-timeout-report.md、fnpack/ |
 | [assets/](assets/) | 文档资源：被推送文档引用的图片等 | 推送 | （预留） |
 | [local/](local/) | 本地专用：草稿、私人笔记、临时分析 | 不推送 | （仅 README 入库） |
 

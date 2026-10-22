@@ -1,5 +1,7 @@
 # EasyTier Windows 内核 `bind_device = true` 导致连接超时的根因报告
 
+> [已归档 2026-10-22] 上游内核问题根因报告，保留备查。
+
 > 涉及版本：EasyTier 2.6.4、2.7.0（对照：2.4.5）  
 > 平台：Windows 11 家庭中文版 10.0.26300  
 > 客户端：LightTier 1.3.0（Tauri 桌面端），另用独立 `easytier-core.exe` 复现  

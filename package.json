@@ -1,6 +1,6 @@
 {
   "name": "lighttier",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "LightTier，EasyTier 内核的可视化桌面管理器，支持通过界面一键启动/停止组网、修改内核参数（支持表单和文本编辑器两种模式）、实时查看运行日志，并可一键下载任意版本内核，简化配置管理，提升操作效率。",
   "displayName": "LightTier",
   "author": {
@@ -120,7 +120,7 @@
     "vue-tsc": "^3.2.6"
   },
   "engines": {
-    "node": ">=18.0.0",
+    "node": "^20.19.0 || >=22.12.0",
     "pnpm": ">=8.1.0"
   },
   "license": "AGPL-3.0"
