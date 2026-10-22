@@ -14,7 +14,9 @@
       "nsis": {
         "displayLanguageSelector": true,
         "installMode": "perMachine",
-        "languages": ["SimpChinese", "English"]
+        "languages": ["SimpChinese", "English"],
+        // 勾选“删除应用数据”时同时清理安装目录下的运行期数据（config/logs/resource）
+        "installerHooks": "nsis/hooks.nsh"
       }
     }
   }

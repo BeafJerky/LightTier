@@ -4,7 +4,7 @@
   // 应用程序名称
   "productName": "LightTier",
   // 应用程序版本号
-  "version": "1.7.8",
+  "version": "1.7.9",
   // 应用程序唯一标识符
   "identifier": "com.lighttier.app",
   // 构建相关配置
