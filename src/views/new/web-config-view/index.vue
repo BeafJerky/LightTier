@@ -29,7 +29,9 @@
               <span class="nwc-dot" :class="getStatusClass(item)"></span>
               <span class="nwc-status-text">{{ mapCardStatus(item) }}</span>
             </div>
-            <span v-if="item.pid" class="nwc-card-pid">PID {{ item.pid }}</span>
+            <span v-if="item.pid && !isChecking(item)" class="nwc-card-pid"
+              >PID {{ item.pid }}</span
+            >
           </div>
           <div class="nwc-card-name">{{ item.configFileName }}</div>
           <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
@@ -39,6 +41,7 @@
               type="button"
               class="nwc-btn"
               :class="isRunning(item) ? 'nwc-btn-stop' : 'nwc-btn-run'"
+              :disabled="isChecking(item)"
               @click="isRunning(item) ? stopWeb(item) : startWeb(item)"
               >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
             >
@@ -72,11 +75,18 @@
             {{ t('newCommon.back') }}
           </button>
           <h3 class="nwc-detail-title">{{ selectedConfig.configFileName }}</h3>
-          <span class="nwc-badge" :class="isRunning(selectedConfig) ? 'on' : 'off'">
+          <span
+            class="nwc-badge"
+            :class="
+              isChecking(selectedConfig) ? 'checking' : isRunning(selectedConfig) ? 'on' : 'off'
+            "
+          >
             {{
-              isRunning(selectedConfig)
-                ? '● ' + t('newCommon.running')
-                : '○ ' + t('newCommon.stopped')
+              isChecking(selectedConfig)
+                ? t('newCommon.checking')
+                : isRunning(selectedConfig)
+                  ? '● ' + t('newCommon.running')
+                  : '○ ' + t('newCommon.stopped')
             }}
           </span>
         </div>
@@ -89,12 +99,17 @@
             type="button"
             class="nwc-btn-lg nwc-detail-lifecycle"
             :class="isRunning(selectedConfig) ? 'nwc-btn-kill' : 'nwc-btn-start'"
+            :disabled="isChecking(selectedConfig)"
             @click="isRunning(selectedConfig) ? stopWeb(selectedConfig) : startWeb(selectedConfig)"
             >{{ isRunning(selectedConfig) ? t('newCommon.stop') : t('newCommon.run') }}</button
           >
-          <button type="button" class="nwc-btn-lg nwc-btn-del" @click="deleteConfig">{{
-            t('newCommon.delete')
-          }}</button>
+          <button
+            type="button"
+            class="nwc-btn-lg nwc-btn-del"
+            :disabled="isChecking(selectedConfig)"
+            @click="deleteConfig"
+            >{{ t('newCommon.delete') }}</button
+          >
         </div>
       </div>
 
@@ -154,7 +169,7 @@
                 >{{ t('newWebConfig.installService') }}</button
               >
             </template>
-            <template v-else>
+            <template v-else-if="currentServiceStatus">
               <button
                 type="button"
                 class="nwc-btn-sm nwc-btn-svc-start"
@@ -392,6 +407,16 @@ const selectedConfig = ref<FormWebData | null>(null)
 // 类型化的 Web 配置列表
 const webConfigList = computed(() => easyTierStore.configWebList as unknown as FormWebData[])
 
+// 首帧即丢弃缓存/文件中的运行态快照：status/pid 必须由本次进程与服务扫描重新判定。
+// 否则会先渲染上次会话的“运行中”，扫描完成后才跳回真实状态。
+const markRuntimeChecking = () => {
+  for (const item of webConfigList.value) {
+    item.status = 'checking'
+    item.pid = undefined
+  }
+}
+markRuntimeChecking()
+
 // 表单
 const formVisible = ref(false)
 const formMode = ref<'add' | 'edit'>('add')
@@ -414,7 +439,8 @@ const uid = useId()
 const fieldId = (key: string) => `nwc-${uid}-${key}`
 const currentServiceStatus = computed(() => {
   if (!selectedConfig.value) return ''
-  return serviceStatusMap.value.get(selectedConfig.value.configFileName) || 'notInstalled'
+  // 未检测到结果时保持空串（显示“检测中”），不能默认成“未安装”误导用户
+  return serviceStatusMap.value.get(selectedConfig.value.configFileName) || ''
 })
 
 // 确认弹窗
@@ -446,8 +472,12 @@ watch(cfmVisible, (v) => {
 // 运行判定：独立进程（running）或 Windows 服务（runningService）均视为运行中
 const isRunning = (item: FormWebData) =>
   item.status === 'running' || item.status === 'runningService'
-const getStatusClass = (item: FormWebData) => (isRunning(item) ? 'on' : 'off')
+// 运行态未知（持久化旧值已丢弃 / 正在进行进程与服务扫描）时不得猜测运行或停止
+const isChecking = (item: FormWebData) => !item.status || item.status === 'checking'
+const getStatusClass = (item: FormWebData) =>
+  isChecking(item) ? 'checking' : isRunning(item) ? 'on' : 'off'
 const mapCardStatus = (item: FormWebData): string => {
+  if (isChecking(item)) return t('newCommon.checking')
   switch (item.status) {
     case 'running':
       return t('newCommon.running')
@@ -456,7 +486,7 @@ const mapCardStatus = (item: FormWebData): string => {
     case 'notRunning':
       return t('newCommon.stopped')
     default:
-      return item.status ? String(item.status) : t('newCommon.stopped')
+      return String(item.status)
   }
 }
 const getServiceDotClass = computed(() => {
@@ -480,10 +510,17 @@ const extractConfigServerUrl = (cmdLine: string): string | null => {
 // 刷新运行时状态：进程扫描 + 服务状态合并到列表项，并恢复/初始化选中项（FAB 已负责文件加载）
 const refreshWebRuntimeState = async () => {
   const list = webConfigList.value
+  // 扫描完成前统一显示“检测中”，避免把上一轮/持久化状态当作当前状态
+  for (const item of list) item.status = 'checking'
+  // 列表已被重新加载替换为全新对象：选中项立即指向新对象，避免详情继续渲染旧状态
+  if (selectedConfig.value) {
+    const selectedName = selectedConfig.value.configFileName
+    selectedConfig.value = list.find((c) => c.configFileName === selectedName) || null
+  }
   // 检测运行中的进程
   const runList = await getRunningWebProcesses()
   for (const item of list) {
-    item.status = 'notRunning'
+    let matched = false
     if (runList?.length) {
       for (const r of runList) {
         const cmd = r.commandLine || ''
@@ -492,10 +529,16 @@ const refreshWebRuntimeState = async () => {
         // 精确比较 --config-server 的参数值（另保留 pid 记录匹配）
         if (extractConfigServerUrl(cmd) === expectedUrl || (item.pid && item.pid === pid)) {
           item.status = 'running'
-          if (!item.pid) item.pid = pid
+          item.pid = pid
+          matched = true
           break
         }
       }
+    }
+    if (!matched) {
+      item.status = 'notRunning'
+      // 进程已不存在：清掉旧 pid，避免展示过期 PID 或后续按失效 PID 误配
+      item.pid = undefined
     }
   }
   // 检测服务状态
@@ -507,12 +550,8 @@ const refreshWebRuntimeState = async () => {
     }
     serviceStatusMap.value.set(item.configFileName, svcKey)
   }
-  // 恢复选中
-  if (selectedConfig.value) {
-    const found = list.find((c) => c.configFileName === selectedConfig.value!.configFileName)
-    selectedConfig.value = found || list[0] || null
-  } else if (window.innerWidth > 900 && list.length > 0) {
-    // 窄屏（移动端）默认展示清单，不自动进入详情
+  // 未选中时自动选中首项（窄屏移动端默认展示清单，不自动进入详情）
+  if (!selectedConfig.value && window.innerWidth > 900 && list.length > 0) {
     selectedConfig.value = list[0]
   }
 }
@@ -583,6 +622,8 @@ const handleFormSaved = async (data: FormWebData, done: (ok: boolean) => void) =
 // 删除配置（二次确认；写回列表后刷新）
 const deleteConfig = async () => {
   if (!selectedConfig.value) return
+  // 运行态未判定完成时不允许删除，避免误删仍在运行的配置
+  if (isChecking(selectedConfig.value)) return
   // 进程/服务仍在使用时禁止删除，否则会留下无法从 UI 停止的孤儿进程或服务
   if (isRunning(selectedConfig.value)) {
     toast(t('newCommon.deleteBlockedRunning'), 'warning', 4000)
@@ -906,6 +947,11 @@ onUnmounted(() => {
   background: var(--theme-text-muted);
 }
 
+.nwc-dot.checking {
+  background: var(--theme-border);
+  animation: nwc-pulse 1s infinite;
+}
+
 .nwc-status-text {
   font-size: 12px;
   color: var(--theme-text-muted);
@@ -1091,6 +1137,12 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
   background: color-mix(in srgb, var(--theme-text-muted) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
+}
+
+.nwc-badge.checking {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-text-muted) 24%, transparent);
 }
 
 .nwc-detail-actions {

@@ -58,7 +58,8 @@ const mockRunningMap = ref<Map<string, number>>(new Map())
 let mockPidCounter = 1000
 
 // --- Web 配置 Mock 数据 ---
-const mockWebRunningMap = ref<Map<string, number>>(new Map())
+// 记录 pid 与启动参数：进程扫描需按 --config-server 的真实 URL 精确匹配
+const mockWebRunningMap = ref<Map<string, { pid: number; url: string }>>(new Map())
 let mockWebPidCounter = 2000
 const DEFAULT_MOCK_WEB_CONFIGS: FormWebData[] = [
   {
@@ -87,6 +88,13 @@ const loadMockWebConfigs = (): FormWebData[] => {
   return Array.isArray(loaded) ? (loaded as FormWebData[]) : [...DEFAULT_MOCK_WEB_CONFIGS]
 }
 const mockWebConfigList = ref<FormWebData[]>(loadMockWebConfigs())
+
+/**
+ * 剔除持久化的运行时字段：status/pid 只能由本次进程/服务扫描在内存中重新判定。
+ * 持久化值可能来自上次会话，直接渲染会出现“先显示运行中再跳回真实状态”。
+ */
+const stripWebRuntimeState = (list: FormWebData[]): FormWebData[] =>
+  list.map(({ status: _status, pid: _pid, ...rest }) => rest)
 
 // Tauri 环境检测：浏览器 dev 模式无 Tauri 运行时，全部走 mock
 // 注：withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri()（读 __TAURI_INTERNALS__）
@@ -266,6 +274,13 @@ export const useMockData = () => {
     for (const [name, p] of mockRunningMap.value.entries()) {
       if (p === pid) {
         mockRunningMap.value.delete(name)
+        return true
+      }
+    }
+    // Web 配置进程与内核实例共用同一进程终止入口
+    for (const [name, info] of mockWebRunningMap.value.entries()) {
+      if (info.pid === pid) {
+        mockWebRunningMap.value.delete(name)
         return true
       }
     }
@@ -551,18 +566,18 @@ export const useMockData = () => {
 
   // --- Mock Web 函数 ---
   const mockReadWebConfigList = async (): Promise<FormWebData[]> => {
-    return JSON.parse(JSON.stringify(mockWebConfigList.value))
+    return stripWebRuntimeState(JSON.parse(JSON.stringify(mockWebConfigList.value)))
   }
   const mockWriteWebConfigList = async (list: FormWebData[]): Promise<void> => {
     mockWebConfigList.value = JSON.parse(JSON.stringify(list))
     saveMockJson(MOCK_WEB_CONFIGS_KEY, mockWebConfigList.value)
   }
   const mockGetRunningWebProcesses = async (): Promise<any[]> => {
-    return Array.from(mockWebRunningMap.value.entries()).map(([name, pid]) => ({
+    return Array.from(mockWebRunningMap.value.entries()).map(([name, info]) => ({
       name: 'easytier-core',
-      commandLine: `easytier-core --config-server udp://mock-host:22020/${name}`,
+      commandLine: `easytier-core --config-server ${info.url}`,
       path: 'C:\\Program Files\\easytier\\easytier-core.exe',
-      pid,
+      pid: info.pid,
       fileName: name
     }))
   }
@@ -572,9 +587,9 @@ export const useMockData = () => {
       setTimeout(() => {
         const key = _url.split('/').pop() || 'web-config'
         if (!mockWebRunningMap.value.has(key)) {
-          mockWebRunningMap.value.set(key, ++mockWebPidCounter)
+          mockWebRunningMap.value.set(key, { pid: ++mockWebPidCounter, url: _url })
         }
-        resolve(mockWebRunningMap.value.get(key))
+        resolve(mockWebRunningMap.value.get(key)!.pid)
       }, 800)
     })
   }
@@ -595,7 +610,7 @@ export const useMockData = () => {
       if (!Array.isArray(parsed)) {
         throw new Error('invalid_web_config_list')
       }
-      return parsed
+      return stripWebRuntimeState(parsed as FormWebData[])
     }
   }
 

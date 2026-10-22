@@ -450,18 +450,25 @@ export const useEasyTierStore = defineStore(
     }
 
     // 加载 Web 配置服务列表（config-server 托管的连接信息）
-    const loadWebConfigFiles = async () => {
-      if (webConfigListLoading.value) return
+    // 并发调用共享同一任务：早退会让调用方在旧列表上继续做运行态扫描，
+    // 随后加载完成又用持久化旧状态覆盖扫描结果，造成状态闪变/卡错
+    let webConfigLoadTask: Promise<void> | null = null
+    const loadWebConfigFiles = async (): Promise<void> => {
+      if (webConfigLoadTask) return webConfigLoadTask
       webConfigListLoading.value = true
-      try {
-        const { readWebConfigList } = useMockData()
-        configWebList.value = (await readWebConfigList()) as any
-        webConfigListLoaded.value = true
-      } catch {
-        /* 彻底失败 */
-      } finally {
-        webConfigListLoading.value = false
-      }
+      webConfigLoadTask = (async () => {
+        try {
+          const { readWebConfigList } = useMockData()
+          configWebList.value = (await readWebConfigList()) as any
+          webConfigListLoaded.value = true
+        } catch {
+          /* 彻底失败 */
+        } finally {
+          webConfigListLoading.value = false
+          webConfigLoadTask = null
+        }
+      })()
+      return webConfigLoadTask
     }
 
     return {

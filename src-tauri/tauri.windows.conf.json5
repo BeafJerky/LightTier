@@ -1,14 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "identifier": "com.lighttier.app",
-  "app": {
-    "windows": [
-      {
-        "decorations": false,
-        "shadow": true
-      }
-    ]
-  },
+  // 平台配置按 JSON Merge Patch 合并：数组会整体替换而非逐项合并。
+  // 这里不能出现 app.windows，否则会覆盖基础配置的窗口数组（丢失 title/尺寸/visible 等），
+  // 窗口标题会回退为 Tauri 默认的 "Tauri App"。
   "bundle": {
     "windows": {
       "allowDowngrades": true,
