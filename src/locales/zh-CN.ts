@@ -560,6 +560,13 @@ export default {
     installedBadge: '已安装',
     corePackageDownloaded: '所选版本安装包已下载，可直接安装',
     corePackageNotDownloaded: '所选版本安装包未下载，请先下载',
+    deleteCorePackage: '删除安装包',
+    deletingPackage: '删除中…',
+    deleteCorePackageTitle: '删除内核安装包',
+    deleteCorePackageMsg:
+      '确定删除内核 {version} 的本地安装包吗？已安装的内核不受影响；删除后需重新下载才能再次安装。',
+    deleteCorePackageSuccess: '已删除内核 {version} 安装包',
+    deleteCorePackageFail: '删除内核安装包失败',
     compatProfile: '版本适配',
     compatUnknown: '未检测到内核版本，表单按最新格式展示',
     compatOutOfRange: '内核 {version} 不在已适配范围内，将按最新格式宽松处理',

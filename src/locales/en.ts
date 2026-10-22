@@ -582,6 +582,13 @@ export default {
     installedBadge: 'Installed',
     corePackageDownloaded: 'Selected package is downloaded and ready to install',
     corePackageNotDownloaded: 'Selected package is not downloaded yet',
+    deleteCorePackage: 'Delete Package',
+    deletingPackage: 'Deleting…',
+    deleteCorePackageTitle: 'Delete Kernel Package',
+    deleteCorePackageMsg:
+      'Delete the local package for kernel {version}? The installed kernel is not affected; you will need to download it again to reinstall.',
+    deleteCorePackageSuccess: 'Deleted kernel {version} package',
+    deleteCorePackageFail: 'Failed to delete kernel package',
     compatProfile: 'Version compatibility',
     compatUnknown: 'No kernel version detected; forms use the latest format',
     compatOutOfRange:

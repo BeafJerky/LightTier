@@ -439,6 +439,18 @@
               >
                 {{ installingCore ? t('newCommon.installing') : t('newSettings.installCore') }}
               </button>
+              <button
+                v-if="isSelectedCoreDownloaded"
+                class="sd-btn sd-btn-danger"
+                @click="handleDeleteCorePackage"
+                :disabled="deletingCore || downloadingCore || installingCore"
+              >
+                {{
+                  deletingCore
+                    ? t('newSettings.deletingPackage')
+                    : t('newSettings.deleteCorePackage')
+                }}
+              </button>
             </div>
             <!-- 下载进度：已知总大小时显示百分比进度条，缺失 Content-Length 时显示不确定态 -->
             <div v-if="downloadActive" class="sd-download-progress">
@@ -895,7 +907,7 @@ import {
 } from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { clearAppCache } from '@/utils/cacheUtil'
-import { clearAllLogs, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
+import { clearAllLogs, deleteFileOrDir, downloadFile, listFiles, openPath } from '@/utils/fileUtil'
 import { formatBytes } from '@/utils/easyTierUtil'
 import { getAppVersion, getArch, getOsType, compareVersions } from '@/utils/sysUtil'
 import { hashLockPassword } from '@/utils/lockUtil'
@@ -1302,6 +1314,7 @@ const corePath = ref('')
 const coreVerOptions = CORE_VERSION_OPTIONS
 const coreVerSelect = ref(DEFAULT_CORE_VERSION)
 const downloadingCore = ref(false)
+const deletingCore = ref(false)
 // 是否已进入实际下载阶段（自动测速阶段不展示 0% 进度条）
 const downloadActive = ref(false)
 // 下载进度：total 为 null 表示服务端未返回 Content-Length（进度条转为不确定态）
@@ -1697,6 +1710,30 @@ const handleDownloadCore = async () => {
   } finally {
     downloadingCore.value = false
     downloadActive.value = false
+  }
+}
+
+// 删除所选版本的本地安装包；已安装的内核文件与运行状态不受影响
+const handleDeleteCorePackage = async () => {
+  if (!isSelectedCoreDownloaded.value || !coreFileName.value) return
+  const version = coreVerSelect.value
+  if (
+    !(await showConfirm(
+      t('newSettings.deleteCorePackageTitle'),
+      t('newSettings.deleteCorePackageMsg', { version })
+    ))
+  )
+    return
+  deletingCore.value = true
+  try {
+    await deleteFileOrDir(await join(CORE_PATH, coreFileName.value))
+    await refreshDownloadedCores()
+    toast.success(t('newSettings.deleteCorePackageSuccess', { version }))
+  } catch (e) {
+    console.error('删除内核安装包失败:', e)
+    toast.error(t('newSettings.deleteCorePackageFail') + ': ' + String(e))
+  } finally {
+    deletingCore.value = false
   }
 }
 
