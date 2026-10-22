@@ -46,7 +46,7 @@ const labelText = computed(() => props.label || t('newCommon.loading'))
 
 .lt-loading-fade-enter-active,
 .lt-loading-fade-leave-active {
-  transition: opacity 0.18s ease;
+  transition: opacity var(--theme-duration) var(--theme-ease-out);
 }
 
 .lt-loading-fade-enter-from,

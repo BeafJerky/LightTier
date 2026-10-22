@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 12px 36px rgb(74 55 40 / 7%));
-  animation: og-card-in 0.35s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  animation: og-card-in var(--theme-duration-slow) var(--theme-ease-out);
 }
 
 /* 容器仅作为程序化焦点落点，不显示焦点环 */
@@ -329,9 +329,16 @@ onBeforeUnmount(() => {
 }
 
 /* 步骤切换动画 */
-.og-step-enter-active,
+.og-step-enter-active {
+  transition:
+    opacity var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
+}
+
 .og-step-leave-active {
-  transition: all 0.25s ease;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
 }
 
 .og-step-enter-from {
@@ -538,7 +545,10 @@ onBeforeUnmount(() => {
   height: 8px;
   background: var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-round, 50%);
-  transition: all 0.25s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  transition:
+    width var(--theme-duration) var(--theme-ease-out),
+    background-color var(--theme-duration) var(--theme-ease-out),
+    border-radius var(--theme-duration) var(--theme-ease-out);
 }
 
 .og-dot.active {
@@ -561,7 +571,12 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out),
+    opacity var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 .og-btn:disabled {

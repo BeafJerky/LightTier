@@ -38,9 +38,6 @@ importers:
       '@vueuse/core':
         specifier: ^14.2.1
         version: 14.2.1(vue@3.5.32(typescript@5.9.3))
-      animate.css:
-        specifier: ^4.1.1
-        version: 4.1.1
       dayjs:
         specifier: ^1.11.20
         version: 1.11.20
@@ -2387,9 +2384,6 @@ packages:
 
   alien-signals@3.1.2:
     resolution: {integrity: sha512-d9dYqZTS90WLiU0I5c6DHj/HcKkF8ZyGN3G5x8wSbslulz70KOxaqCT0hQCo9KOyhVqzqGojvNdJXoTumZOtcw==}
-
-  animate.css@4.1.1:
-    resolution: {integrity: sha512-+mRmCTv6SbCmtYJCN4faJMNFVNN5EuCTTprDTAo7YzIGji2KADmakjVA3+8mVDkZ2Bf09vayB35lSQIex2+QaQ==}
 
   ansi-escapes@7.3.0:
     resolution: {integrity: sha512-BvU8nYgGQBxcmMuEeUEmNTvrMVjJNSH7RgW24vXexN4Ven6qCvy4TntnvlnwnMLTVlcRQQdbRY8NKnaIoeWDNg==}
@@ -6706,8 +6700,6 @@ snapshots:
       require-from-string: 2.0.2
 
   alien-signals@3.1.2: {}
-
-  animate.css@4.1.1: {}
 
   ansi-escapes@7.3.0:
     dependencies:

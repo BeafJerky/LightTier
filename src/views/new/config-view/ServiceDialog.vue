@@ -204,7 +204,7 @@ const handleInstall = async () => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .svc-input:focus {
@@ -220,7 +220,7 @@ const handleInstall = async () => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-md, 10px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
   resize: vertical;
 }
 
@@ -241,7 +241,7 @@ const handleInstall = async () => {
   cursor: pointer;
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: 6px;
 }
@@ -257,7 +257,7 @@ const handleInstall = async () => {
   height: 10px;
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: 50%;
-  transition: all 0.2s;
+  transition: var(--theme-transition-colors);
 }
 
 .svc-radio.active .svc-radio-dot {
@@ -275,7 +275,7 @@ const handleInstall = async () => {
   cursor: pointer;
   background: color-mix(in srgb, var(--theme-text-muted, #c8bdb2) 10%, transparent);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .svc-switch.on {
@@ -312,7 +312,7 @@ const handleInstall = async () => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
 }
 
 .svc-btn:disabled {

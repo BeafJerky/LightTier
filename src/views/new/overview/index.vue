@@ -461,7 +461,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--theme-accent-primary) 8%, transparent);
   border: 1.5px dashed color-mix(in srgb, var(--theme-accent-primary) 35%, transparent);
   border-radius: var(--theme-radius-lg);
-  animation: ndQueueIn 0.3s var(--theme-ease-spring);
+  animation: ndQueueIn var(--theme-duration) var(--theme-ease-out);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -515,7 +515,7 @@ onUnmounted(() => {
   background: var(--theme-bg);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
-  transition: all 0.25s;
+  transition: var(--theme-transition-surface);
   flex: 1;
   align-items: center;
   gap: var(--theme-space-4);
@@ -582,7 +582,7 @@ onUnmounted(() => {
   background: var(--theme-bg);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
-  transition: all 0.3s var(--theme-ease-spring);
+  transition: var(--theme-transition-surface);
 }
 
 .nd-config-card:hover {
@@ -612,7 +612,7 @@ onUnmounted(() => {
 }
 
 .ndc-conflict {
-  animation: ndcConflictFlash 0.3s var(--theme-ease-spring) 4;
+  animation: ndcConflictFlash var(--theme-duration-slow) var(--theme-ease-out) 2;
 }
 
 @keyframes ndcConflictFlash {
@@ -702,7 +702,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .ndc-btn-run {
@@ -774,7 +774,7 @@ onUnmounted(() => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nd-empty-cta:hover {
@@ -842,7 +842,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-sm, 6px);
-  transition: all 0.18s ease;
+  transition: var(--theme-transition-interactive);
 }
 
 .nd-btn-cfm-cancel {

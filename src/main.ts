@@ -29,9 +29,6 @@ import '@/styles/theme.css'
 // 引入自适应层（触屏命中区/按压态、系统减少动效、触屏窄屏字号）
 import '@/styles/adaptive.css'
 
-// 引入动画
-import '@/plugins/animate.css'
-
 // 路由
 import { setupRouter } from './router'
 

@@ -835,7 +835,7 @@ onUnmounted(() => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border);
   border-radius: var(--theme-radius-round);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   justify-content: center;
 }
@@ -865,7 +865,7 @@ onUnmounted(() => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border);
   border-radius: var(--theme-radius-xl);
-  transition: all 0.3s var(--theme-ease-spring);
+  transition: var(--theme-transition-surface);
   flex-shrink: 0;
 }
 
@@ -943,7 +943,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nwc-btn-run {
@@ -993,7 +993,7 @@ onUnmounted(() => {
   background: var(--theme-bg-hover);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -1113,7 +1113,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nwc-btn-start {
@@ -1338,7 +1338,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nwc-btn-svc-install {
@@ -1351,7 +1351,7 @@ onUnmounted(() => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nwc-btn-svc-install:hover:not(:disabled) {
@@ -1430,7 +1430,7 @@ onUnmounted(() => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .wcf-input:focus {
@@ -1446,7 +1446,7 @@ onUnmounted(() => {
   background: transparent;
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -1472,7 +1472,7 @@ onUnmounted(() => {
   height: 10px;
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: 50%;
-  transition: all 0.2s;
+  transition: var(--theme-transition-colors);
 }
 
 .wcf-radio.active .wcf-radio-dot {
@@ -1521,7 +1521,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nwc-btn-cfm:disabled {

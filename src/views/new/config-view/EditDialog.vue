@@ -1291,7 +1291,7 @@ const handleImportToml = async () => {
   background: none;
   border: 1.5px dashed var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
@@ -1317,7 +1317,7 @@ const handleImportToml = async () => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
   appearance: none;
   flex-shrink: 0;
 }
@@ -1408,7 +1408,7 @@ const handleImportToml = async () => {
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
   border: 1.5px solid transparent;
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .ed-tab.active {
@@ -1513,7 +1513,7 @@ const handleImportToml = async () => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .ed-form-input:focus {
@@ -1533,7 +1533,7 @@ const handleImportToml = async () => {
   cursor: pointer;
   background: color-mix(in srgb, var(--theme-text-muted, #c8bdb2) 10%, transparent);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
 }
 
@@ -1579,7 +1579,7 @@ const handleImportToml = async () => {
   background: none;
   border: none;
   border-radius: 50%;
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   justify-content: center;
 }
@@ -1598,7 +1598,7 @@ const handleImportToml = async () => {
   background: none;
   border: 1.5px dashed var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-self: flex-start;
 }
 
@@ -1733,7 +1733,7 @@ const handleImportToml = async () => {
   background: var(--theme-bg-card, #fff);
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .ed-btn-sm:hover {
@@ -1765,7 +1765,7 @@ const handleImportToml = async () => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: var(--theme-radius-sm, 10px);
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
 }
 
 .ed-btn:disabled {

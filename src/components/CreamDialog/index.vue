@@ -291,6 +291,7 @@ onUnmounted(() => {
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 20px 60px rgb(0 0 0 / 12%));
   flex-direction: column;
+  transition: transform var(--theme-duration-slow) var(--theme-ease-out);
 }
 
 .cd-header {
@@ -317,7 +318,9 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-round, 50%);
-  transition: all 0.2s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -365,13 +368,13 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* 动画 */
+/* 动画：遮罩只过渡透明度，弹窗自身过渡 transform（子元素不继承 transition） */
 .cd-enter-active {
-  transition: all 0.3s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  transition: opacity var(--theme-duration-slow) var(--theme-ease-out);
 }
 
 .cd-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity var(--theme-duration) var(--theme-ease-in);
 }
 
 .cd-enter-from {

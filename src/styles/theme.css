@@ -76,9 +76,35 @@
   /* 等宽字体（监控页 RPC 地址等等宽展示场景） */
   --theme-font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
 
-  /* ===== 动效 ===== */
-  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --theme-duration: 0.3s;
+  /* ===== 动效 =====
+     统一节奏：悬停/按压 150ms，浮层/提示 200ms，弹窗/抽屉 280ms。
+     入场用 ease-out（响应快、收尾稳），离场用 ease-in；
+     过渡只声明实际变化的属性，避免 all 隐式触发布局与绘制。 */
+  --theme-duration-fast: 0.15s;
+  --theme-duration: 0.2s;
+  --theme-duration-slow: 0.28s;
+  --theme-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --theme-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 常用过渡集合：只列出会变化的属性，避免 all 把布局/绘制属性一起卷入 */
+  --theme-transition-colors:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out);
+  --theme-transition-surface:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
+  --theme-transition-interactive:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out),
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
 
   /* ===== 遮罩（弹窗/抽屉，外部主题也复用） ===== */
   --theme-overlay: rgba(0, 0, 0, 0.3);

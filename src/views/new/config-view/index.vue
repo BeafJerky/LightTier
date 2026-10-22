@@ -41,40 +41,43 @@
       </div>
       <div class="nw-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.configListLoading" />
-        <div
-          v-for="item in filteredConfigList"
-          :key="item.configFileName"
-          class="nw-card"
-          :class="{ active: selectedConfig?.configFileName === item.configFileName }"
-          @click="selectConfig(item)"
-        >
-          <div class="nw-card-top">
-            <div class="nw-card-status">
-              <span class="nw-dot" :class="getRunning(item) ? 'on' : 'off'"></span>
-              <span class="nw-status-text">{{
-                getRunning(item) ? t('newCommon.running') : t('newCommon.stopped')
-              }}</span>
+        <!-- 重排（启停后运行态优先）与搜索过滤使用 FLIP 过渡，避免卡片瞬移 -->
+        <TransitionGroup name="nw-card" tag="div" class="nw-card-list">
+          <div
+            v-for="item in filteredConfigList"
+            :key="item.configFileName"
+            class="nw-card"
+            :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+            @click="selectConfig(item)"
+          >
+            <div class="nw-card-top">
+              <div class="nw-card-status">
+                <span class="nw-dot" :class="getRunning(item) ? 'on' : 'off'"></span>
+                <span class="nw-status-text">{{
+                  getRunning(item) ? t('newCommon.running') : t('newCommon.stopped')
+                }}</span>
+              </div>
+              <span v-if="getRunningItem(item)?.pid" class="nw-card-pid"
+                >PID {{ getRunningItem(item)?.pid }}</span
+              >
+              <span v-else-if="getRunningItem(item)?.virtualIp" class="nw-card-pid"
+                >IP {{ getRunningItem(item)?.virtualIp }}</span
+              >
             </div>
-            <span v-if="getRunningItem(item)?.pid" class="nw-card-pid"
-              >PID {{ getRunningItem(item)?.pid }}</span
-            >
-            <span v-else-if="getRunningItem(item)?.virtualIp" class="nw-card-pid"
-              >IP {{ getRunningItem(item)?.virtualIp }}</span
-            >
+            <div class="nw-card-name">{{ item.configFileName }}</div>
+            <div class="nw-card-sub">{{ item.fileName }}</div>
+            <div class="nw-card-actions" @click.stop>
+              <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
+              <button
+                type="button"
+                class="nw-btn"
+                :class="getRunning(item) ? 'nw-btn-stop' : 'nw-btn-run'"
+                @click="getRunning(item) ? stopAction(item) : startAction(item)"
+                >{{ getRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
+              >
+            </div>
           </div>
-          <div class="nw-card-name">{{ item.configFileName }}</div>
-          <div class="nw-card-sub">{{ item.fileName }}</div>
-          <div class="nw-card-actions" @click.stop>
-            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-            <button
-              type="button"
-              class="nw-btn"
-              :class="getRunning(item) ? 'nw-btn-stop' : 'nw-btn-run'"
-              @click="getRunning(item) ? stopAction(item) : startAction(item)"
-              >{{ getRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
-            >
-          </div>
-        </div>
+        </TransitionGroup>
         <div
           v-if="easyTierStore.configList.length === 0 && !easyTierStore.configListLoading"
           class="nw-empty-cards"
@@ -1363,7 +1366,7 @@ const handleUninstallService = async () => {
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .nw-search-input:focus {
@@ -1409,7 +1412,7 @@ const handleUninstallService = async () => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border);
   border-radius: var(--theme-radius-round);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   justify-content: center;
 }
@@ -1432,6 +1435,15 @@ const handleUninstallService = async () => {
   gap: var(--theme-space-3);
 }
 
+.nw-card-list {
+  /* 保持块级流：离场卡片绝对定位时仍停在原槽位 */
+  display: block;
+}
+
+.nw-card-list .nw-card + .nw-card {
+  margin-top: var(--theme-space-3);
+}
+
 .nw-card {
   padding: var(--theme-space-4);
   overflow: hidden;
@@ -1439,7 +1451,7 @@ const handleUninstallService = async () => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border);
   border-radius: var(--theme-radius-xl);
-  transition: all 0.3s var(--theme-ease-spring);
+  transition: var(--theme-transition-surface);
   flex-shrink: 0;
 }
 
@@ -1451,6 +1463,38 @@ const handleUninstallService = async () => {
 .nw-card.active {
   border-color: var(--theme-accent-primary);
   box-shadow: 0 0 0 2px var(--theme-bg-active);
+}
+
+/* 列表重排：Vue TransitionGroup 的 FLIP 只动 transform，避免布局重算 */
+.nw-card-move {
+  transition: transform var(--theme-duration) var(--theme-ease-out);
+}
+
+.nw-card-enter-active {
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+/* 离场脱离文档流，让其余卡片立即开始补位 */
+.nw-card-leave-active {
+  position: absolute;
+  right: var(--theme-space-3);
+  left: var(--theme-space-3);
+  pointer-events: none;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
+}
+
+.nw-card-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.nw-card-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .nw-card-top {
@@ -1517,7 +1561,7 @@ const handleUninstallService = async () => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-btn-run {
@@ -1606,7 +1650,7 @@ const handleUninstallService = async () => {
   background: var(--theme-bg-hover);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -1725,7 +1769,7 @@ const handleUninstallService = async () => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-btn-start {
@@ -1866,7 +1910,7 @@ const handleUninstallService = async () => {
   border-radius: var(--theme-radius-pill);
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .nw-route-filter:focus {
@@ -1974,7 +2018,7 @@ const handleUninstallService = async () => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-empty-cta:hover {
@@ -2062,7 +2106,7 @@ const handleUninstallService = async () => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-btn-svc-install {
@@ -2075,7 +2119,7 @@ const handleUninstallService = async () => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-btn-svc-install:hover:not(:disabled) {
@@ -2143,7 +2187,7 @@ const handleUninstallService = async () => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-sm, 6px);
-  transition: all 0.18s ease;
+  transition: var(--theme-transition-interactive);
 }
 
 .nw-btn-cfm-cancel {

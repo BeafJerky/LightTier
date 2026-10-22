@@ -277,7 +277,7 @@ watch(visible, (v) => {
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .td-refresh-btn:hover {
@@ -304,7 +304,7 @@ watch(visible, (v) => {
   color: var(--theme-text-primary, #4a3728);
   cursor: pointer;
   border-radius: 10px;
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }

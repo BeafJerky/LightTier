@@ -1641,7 +1641,7 @@ const handleInstallCore = async () => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-md, 10px);
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -1758,7 +1758,7 @@ const handleInstallCore = async () => {
   background: var(--theme-bg-tag, rgb(245 237 230 / 50%));
   border: 1.5px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-md, 12px);
-  transition: border-color 0.15s;
+  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   gap: var(--theme-space-3);
 }
@@ -1864,8 +1864,8 @@ const handleInstallCore = async () => {
   border: none;
   border-radius: var(--theme-radius-sm, 6px);
   transition:
-    color 0.15s,
-    background 0.15s;
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -1921,7 +1921,7 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-md, 10px);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
   flex: 1;
 }
 
@@ -1973,7 +1973,7 @@ const handleInstallCore = async () => {
   inset: 0;
   background: var(--theme-border, #ede4db);
   border-radius: 20px;
-  transition: all 0.2s;
+  transition: background-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .sd-switch-slider::before {
@@ -1986,7 +1986,7 @@ const handleInstallCore = async () => {
   border-radius: 50%;
   content: '';
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  transition: all 0.2s;
+  transition: transform var(--theme-duration) var(--theme-ease-out);
 }
 
 .sd-switch input:checked + .sd-switch-slider {
@@ -2014,7 +2014,7 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
   flex-shrink: 0;
 }
 
@@ -2056,7 +2056,7 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
   appearance: none;
   flex-shrink: 0;
 }
@@ -2101,7 +2101,7 @@ const handleInstallCore = async () => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
   flex-shrink: 0;
 }
 
@@ -2215,8 +2215,8 @@ const handleInstallCore = async () => {
   border: 1px solid var(--theme-border, #e8ddd3);
   border-radius: var(--theme-radius-pill, 100px);
   transition:
-    color 0.15s,
-    border-color 0.15s;
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   gap: 6px;
 }
@@ -2403,7 +2403,7 @@ const handleInstallCore = async () => {
   text-decoration: none;
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
   border-radius: var(--theme-radius-sm, 6px);
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -2503,7 +2503,7 @@ const handleInstallCore = async () => {
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.15s;
+  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 /* 确认密码没有眼睛按钮，右侧留白收窄 */
@@ -2534,7 +2534,7 @@ const handleInstallCore = async () => {
   border: none;
   border-radius: 50%;
   transform: translateY(-50%);
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   justify-content: center;
 }

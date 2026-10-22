@@ -143,7 +143,13 @@ onBeforeUnmount(() => {
   border-radius: var(--theme-radius-round, 50%);
   opacity: 0.65;
   box-shadow: var(--theme-shadow-sm);
-  transition: all 0.3s var(--theme-ease-spring, ease);
+  transition:
+    opacity var(--theme-duration) var(--theme-ease-out),
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -184,6 +190,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--theme-shadow-md);
   flex-direction: column;
   gap: 2px;
+  transform-origin: bottom center;
 }
 
 /* 菜单项 */
@@ -201,7 +208,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -223,23 +232,21 @@ onBeforeUnmount(() => {
 
 /* 菜单动画 */
 .fab-menu-enter-active {
-  animation: fabMenuIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    opacity var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
 }
 
 .fab-menu-leave-active {
-  animation: fabMenuIn 0.15s ease reverse;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
 }
 
-@keyframes fabMenuIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.fab-menu-enter-from,
+.fab-menu-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
 }
 
 /* 触屏：没有 hover 可用于「唤起」，半透明会让入口几乎不可见；

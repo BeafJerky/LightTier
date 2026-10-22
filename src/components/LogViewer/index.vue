@@ -266,7 +266,7 @@ onUnmounted(() => {
   inset: 0;
   background: var(--theme-border);
   border-radius: 20px;
-  transition: all 0.2s;
+  transition: background-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .lv-switch-slider::before {
@@ -279,7 +279,7 @@ onUnmounted(() => {
   border-radius: 50%;
   content: '';
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  transition: all 0.2s;
+  transition: transform var(--theme-duration) var(--theme-ease-out);
 }
 
 .lv-auto input:checked + .lv-switch .lv-switch-slider {
@@ -300,7 +300,7 @@ onUnmounted(() => {
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .lv-btn:hover:not(:disabled) {

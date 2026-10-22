@@ -287,7 +287,7 @@ body {
   border: 1px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 8px 32px rgb(0 0 0 / 10%));
-  animation: lock-card-in 0.3s var(--theme-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  animation: lock-card-in var(--theme-duration-slow) var(--theme-ease-out);
 }
 
 @keyframes lock-card-in {
@@ -340,7 +340,7 @@ body {
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .lock-input:focus {
@@ -369,7 +369,10 @@ body {
   background: var(--theme-accent-primary, #e8a0a0);
   border: none;
   border-radius: var(--theme-radius-pill, 100px);
-  transition: all 0.2s;
+  transition:
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out),
+    opacity var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 .lock-btn:hover {

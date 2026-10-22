@@ -515,7 +515,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
@@ -606,7 +608,9 @@ onBeforeUnmount(() => {
   background: none;
   border: none;
   border-radius: var(--theme-radius-md);
-  transition: all var(--theme-duration) var(--theme-ease-spring);
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   gap: var(--theme-space-3);
 }
@@ -697,7 +701,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -741,7 +747,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
 }
 
@@ -755,25 +763,23 @@ onBeforeUnmount(() => {
   background: var(--theme-bg-active);
 }
 
-/* 下拉动画 */
+/* 下拉动画：只做 4px 位移与透明度，交给合成层处理 */
 .lang-drop-enter-active {
-  animation: langDropIn 0.2s ease;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 .lang-drop-leave-active {
-  animation: langDropIn 0.15s ease reverse;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
 }
 
-@keyframes langDropIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.lang-drop-enter-from,
+.lang-drop-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .nl-user-avatar {
@@ -825,7 +831,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -846,7 +854,9 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: all 0.15s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -875,9 +885,12 @@ onBeforeUnmount(() => {
   bottom: var(--lt-safe-area-bottom, 0);
 }
 
-.nl-mask-fade-enter-active,
+.nl-mask-fade-enter-active {
+  transition: opacity var(--theme-duration) var(--theme-ease-out);
+}
+
 .nl-mask-fade-leave-active {
-  transition: opacity 0.25s;
+  transition: opacity var(--theme-duration-fast) var(--theme-ease-in);
 }
 
 .nl-mask-fade-enter-from,
@@ -939,7 +952,7 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   border-radius: var(--theme-radius-sm);
-  transition: background 0.2s;
+  transition: background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
 }
@@ -960,7 +973,10 @@ onBeforeUnmount(() => {
   background: var(--theme-bg-hover);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -990,7 +1006,7 @@ onBeforeUnmount(() => {
     z-index: 100;
     transform: translateX(-100%);
     box-shadow: 0 8px 30px rgb(0 0 0 / 18%);
-    transition: transform 0.3s var(--theme-ease-spring);
+    transition: transform var(--theme-duration-slow) var(--theme-ease-out);
   }
 
   .nl-sidebar.open {
@@ -1075,34 +1091,24 @@ onBeforeUnmount(() => {
 }
 
 .toast-enter-active {
-  animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    opacity var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
 }
 
 .toast-leave-active {
-  animation: toastOut 0.25s ease forwards;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
 }
 
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
 }
 
-@keyframes toastOut {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.95);
-  }
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.96);
 }
 </style>

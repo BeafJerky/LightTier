@@ -377,7 +377,7 @@ const handleSave = async () => {
   border: 1.5px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-pill, 100px);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--theme-duration) var(--theme-ease-out);
 }
 
 .wcf-select {
@@ -420,7 +420,7 @@ const handleSave = async () => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
 }
 
 .wcf-btn:disabled {

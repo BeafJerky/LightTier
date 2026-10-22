@@ -1038,8 +1038,8 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: var(--theme-radius-pill, 100px);
   transition:
-    color 0.15s,
-    background 0.15s;
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -1151,8 +1151,8 @@ onBeforeUnmount(() => {
   border: 1.5px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-md, 10px);
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: flex-start;
   gap: 9px;
 }
@@ -1182,8 +1182,8 @@ onBeforeUnmount(() => {
   border: 1.5px solid var(--theme-border, #e8ddd3);
   border-radius: 4px;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -1241,8 +1241,8 @@ onBeforeUnmount(() => {
   border: 1.5px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-md, 10px);
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
   flex-direction: column;
   gap: 3px;
 }
@@ -1556,8 +1556,8 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   transition:
-    color 0.15s,
-    background 0.15s;
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 .bk-choice button:hover {
@@ -1673,7 +1673,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: var(--theme-transition-interactive);
   flex-shrink: 0;
 }
 
