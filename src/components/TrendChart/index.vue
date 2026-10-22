@@ -30,7 +30,7 @@
     </div>
 
     <div
-      v-if="points.length >= 2"
+      v-if="plotPoints.length > 0"
       ref="plotEl"
       class="tc-plot"
       @pointermove="onPointerMove"
@@ -82,7 +82,7 @@
           </text>
         </g>
 
-        <!-- 时间中点参考线与三个时间刻度 -->
+        <!-- 时间刻度跟随真实采样点：数据未铺满时只出现在右侧，不悬在空白区域 -->
         <line
           v-if="midPoint"
           :x1="midPoint.x"
@@ -91,11 +91,17 @@
           :y2="LAT_BOTTOM"
           class="tc-grid tc-grid-v"
         />
-        <text :x="PLOT_LEFT" :y="X_LABEL_Y" class="tc-axis-text" text-anchor="start">
-          {{ clock(points[0].ts) }}
+        <text
+          v-if="firstPoint && showStartTime"
+          :x="firstPoint.x"
+          :y="X_LABEL_Y"
+          class="tc-axis-text"
+          text-anchor="start"
+        >
+          {{ clock(firstPoint.ts) }}
         </text>
         <text
-          v-if="midPoint"
+          v-if="midPoint && showMidTime"
           :x="midPoint.x"
           :y="X_LABEL_Y"
           class="tc-axis-text"
@@ -242,30 +248,32 @@
  * 布局：上传/下载共用「速率」窗格，延迟下沉为独立窄条，不再把三种量纲叠在
  * 同一坐标系里。宽度用 ResizeObserver 实测后按 1:1 画布绘制，文本与线宽不会
  * 随容器拉伸；曲线用单调三次插值（Fritsch–Carlson）避免尖峰前后过冲。
+ * 横轴采用固定点距并右对齐：采样不足时数据只占右侧，新点始终贴右边界；
+ * 可见容量回写给缓冲层，画不出的历史点不再保留。
  * 悬浮十字线 + 浮层给出单点精确值；触屏按下同样可取点。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { TREND_WINDOW_MS, type TrendPoint } from '@/hooks/useTrendBuffer'
+import { useTrendBuffer, type TrendPoint } from '@/hooks/useTrendBuffer'
 
 const props = defineProps<{ points: TrendPoint[] }>()
 
 const { t } = useI18n()
+const { setCapacity } = useTrendBuffer()
 
 // 画布几何：高度固定，宽度为容器实测值（CSS px == SVG 用户单位）
-const CHART_H = 188
+const CHART_H = 200
 const PLOT_LEFT = 58
 const PLOT_RIGHT = 12
-const RATE_TOP = 6
-const RATE_BOTTOM = 108
-const LAT_TOP = 130
-const LAT_BOTTOM = 158
-const X_LABEL_Y = 180
+const RATE_TOP = 10
+const RATE_BOTTOM = 110
+const LAT_TOP = 138
+const LAT_BOTTOM = 166
+const X_LABEL_Y = 190
 const MIN_BYTES_AXIS = 2 // 最小 2 B/s，避免 0/0.5 刻度取整后重复
 const MIN_LATENCY_AXIS = 100
 const TOOLTIP_WIDTH = 156
-
-const windowMinutes = Math.round(TREND_WINDOW_MS / 60000)
+const POINT_SPACING = 8 // 每个采样点的固定横轴间距（px）
 
 const rootEl = ref<HTMLElement | null>(null)
 const plotEl = ref<HTMLElement | null>(null)
@@ -279,6 +287,12 @@ const measureWidth = (): void => {
 
 onMounted(() => {
   measureWidth()
+  setCapacity(pointCapacity.value)
+  // 首帧后补测一次：挂载瞬间滚动条尚未落定，容器宽度可能还会变化
+  requestAnimationFrame(() => {
+    measureWidth()
+    setCapacity(pointCapacity.value)
+  })
   if (typeof ResizeObserver !== 'undefined' && rootEl.value) {
     widthObserver = new ResizeObserver(measureWidth)
     widthObserver.observe(rootEl.value)
@@ -293,7 +307,18 @@ onBeforeUnmount(() => {
 const plotWidth = computed(() => Math.max(120, chartWidth.value - PLOT_LEFT - PLOT_RIGHT))
 const plotRight = computed(() => PLOT_LEFT + plotWidth.value)
 
-const last = computed(() => props.points[props.points.length - 1])
+// 可见容量：固定点距下容器最多摆几个点；回写缓冲层用于丢弃画不出的旧采样
+const pointCapacity = computed(() => Math.max(2, Math.floor(plotWidth.value / POINT_SPACING) + 1))
+// 画布实测宽度后才回写容量：挂载前的默认宽度较窄，过早裁剪会误删宽屏可显示的点
+watch(pointCapacity, (next) => setCapacity(next))
+// 每次采样追加时同步一次实测宽度：覆盖滚动条出现/消失等不触发窗口 resize 的布局变化
+watch(() => props.points, measureWidth)
+
+const visiblePoints = computed(() => {
+  const cap = pointCapacity.value
+  return props.points.length > cap ? props.points.slice(-cap) : props.points
+})
+const last = computed(() => visiblePoints.value[visiblePoints.value.length - 1])
 
 // 轴上限取整（1/2/5 × 10ⁿ）：避免轮询追加采样点时纵轴随细微波动反复重排
 const niceCeil = (value: number): number => {
@@ -317,14 +342,14 @@ const niceAxisBytes = (value: number): number => {
 
 const rawMaxBytes = computed(() => {
   let max = MIN_BYTES_AXIS
-  for (const p of props.points) {
+  for (const p of visiblePoints.value) {
     max = Math.max(max, p.txRate, p.rxRate)
   }
   return max
 })
 const rawMaxLatency = computed(() => {
   let max = MIN_LATENCY_AXIS
-  for (const p of props.points) {
+  for (const p of visiblePoints.value) {
     max = Math.max(max, p.latency)
   }
   return max
@@ -350,38 +375,30 @@ watch(
   },
   { immediate: true }
 )
-const hasLatency = computed(() => props.points.some((p) => p.latency > 0))
+const hasLatency = computed(() => visiblePoints.value.some((p) => p.latency > 0))
 
 interface PlotPoint extends TrendPoint {
   x: number
 }
 
 const plotPoints = computed<PlotPoint[]>(() => {
-  const count = props.points.length
-  if (count < 2) return []
-  // 横轴按真实采样时间映射：页面隐藏/轮询失败重试造成的长间隔不会被等距压缩，
-  // 时间标签与数据点位置一致；时间戳异常（相同/倒序）时退回索引等距
-  const startTs = props.points[0].ts
-  const endTs = props.points[count - 1].ts
-  const span = endTs - startTs
-  if (!(span > 0)) {
-    const step = plotWidth.value / (count - 1)
-    return props.points.map((p, i) => ({ ...p, x: PLOT_LEFT + step * i }))
-  }
-  return props.points.map((p) => {
-    const ratio = Math.min(1, Math.max(0, (p.ts - startTs) / span))
-    return { ...p, x: PLOT_LEFT + ratio * plotWidth.value }
-  })
+  const pts = visiblePoints.value
+  const count = pts.length
+  if (count === 0) return []
+  // 固定点距 + 右对齐：采样不足时数据只占右侧，随采样增加向左铺开
+  return pts.map((p, i) => ({ ...p, x: plotRight.value - (count - 1 - i) * POINT_SPACING }))
 })
+const firstPoint = computed(() => plotPoints.value[0])
 const lastPoint = computed(() => plotPoints.value[plotPoints.value.length - 1])
-// 时间中点参考线（按首末采样时间取中点，而不是索引中点）
+const dataSpan = computed(() => Math.max(0, plotPoints.value.length - 1) * POINT_SPACING)
+// 点数很少时首/中刻度会挤在右侧甚至互相重叠，空间足够后再显示
+const showStartTime = computed(() => dataSpan.value >= 96)
+const showMidTime = computed(() => dataSpan.value >= 160)
+// 中点参考线取中间采样点本身，刻度与横轴位置严格对应
 const midPoint = computed(() => {
   const pts = plotPoints.value
-  if (pts.length < 3) return null
-  return {
-    x: PLOT_LEFT + plotWidth.value / 2,
-    ts: (pts[0].ts + pts[pts.length - 1].ts) / 2
-  }
+  if (pts.length < 3 || dataSpan.value < 160) return null
+  return pts[Math.floor((pts.length - 1) / 2)]
 })
 
 const rateY = (value: number): number => {
@@ -507,7 +524,7 @@ const rateUnit = (v?: number): string => {
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 // 时间窗口较短时补上次秒，避免首尾落在同一分钟导致两个刻度显示相同时间
 const clock = (ts: number): string => {
-  const pts = props.points
+  const pts = visiblePoints.value
   const shortSpan = pts.length >= 2 && pts[pts.length - 1].ts - pts[0].ts < 180_000
   const d = new Date(ts)
   const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
@@ -518,7 +535,7 @@ const clockSec = (ts: number): string => {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
-// 悬浮取点：时间轴非等距，按 x 距离找最近的真实采样点（而非按比例取索引）
+// 悬浮取点：按 x 距离找最近的采样点；空白左区不弹浮层，避免指向远端旧点
 const hoverPoint = ref<PlotPoint | null>(null)
 
 const onPointerMove = (event: PointerEvent): void => {
@@ -527,6 +544,11 @@ const onPointerMove = (event: PointerEvent): void => {
   const rect = el.getBoundingClientRect()
   if (rect.width <= 0) return
   const x = ((event.clientX - rect.left) / rect.width) * chartWidth.value
+  const firstX = plotPoints.value[0].x
+  if (x < firstX - POINT_SPACING / 2) {
+    hoverPoint.value = null
+    return
+  }
   let nearest: PlotPoint | null = null
   let nearestDistance = Infinity
   for (const p of plotPoints.value) {
@@ -553,10 +575,9 @@ const tooltipStyle = computed(() => {
   return { left: `${(left / chartWidth.value) * 100}%` }
 })
 
-// 读屏摘要：当前上传/下载/延迟 + 时间窗口（图为纯装饰，摘要承担无障碍信息）
+// 读屏摘要：当前上传/下载/延迟（图为纯装饰，摘要承担无障碍信息）
 const summary = computed(() =>
   t('newMonitor.trendAria', {
-    minutes: windowMinutes,
     tx: fmtRate(last.value?.txRate),
     rx: fmtRate(last.value?.rxRate),
     latency: last.value && last.value.latency > 0 ? last.value.latency.toFixed(1) + ' ms' : '—'
@@ -569,35 +590,50 @@ const summary = computed(() =>
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--theme-space-3);
 }
 
 /* ===== 顶部当前值：三列统计，同时充当图例 ===== */
 .tc-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: var(--theme-space-1) var(--theme-space-4);
 }
 
 .tc-metric {
   display: flex;
   min-width: 0;
-  padding: 0 var(--theme-space-3);
-  border-left: 1px solid var(--theme-border);
   flex-direction: column;
-  gap: 3px;
+  gap: var(--theme-space-1);
+  align-items: flex-start;
 }
 
+/* 分隔线两侧留出呼吸位，窄屏下文字也不会贴线 */
 .tc-metric:first-child {
-  padding-left: 0;
-  border-left: 0;
+  padding-right: var(--theme-space-3);
+}
+
+.tc-metric + .tc-metric {
+  padding-left: var(--theme-space-3);
+  border-left: 1px solid var(--theme-border);
+}
+
+/* 左/中/右三锚点：数值变宽时位置不漂移，整行铺满卡片宽度 */
+.tc-metric:nth-child(2) {
+  padding-right: var(--theme-space-3);
+  align-items: center;
+}
+
+.tc-metric:last-child {
+  align-items: flex-end;
 }
 
 .tc-metric-label {
   display: inline-flex;
   font-family: var(--theme-font-body);
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  color: var(--theme-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--theme-text-secondary);
   align-items: center;
   gap: 6px;
 }
@@ -605,7 +641,7 @@ const summary = computed(() =>
 .tc-metric-value {
   overflow: hidden;
   font-family: var(--theme-font-display);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.15;
   color: var(--theme-text-primary);
@@ -615,11 +651,11 @@ const summary = computed(() =>
 }
 
 .tc-metric-value small {
-  margin-left: 4px;
+  margin-left: 5px;
   font-family: var(--theme-font-body);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .tc-swatch {
@@ -641,10 +677,15 @@ const summary = computed(() =>
   background: var(--theme-color-warning, #e6a23c);
 }
 
-/* ===== 画布 ===== */
+/* ===== 画布：独立面板底色，与折叠卡片外层的标签色拉开层级 ===== */
 .tc-plot {
   position: relative;
   min-width: 0;
+  padding: var(--theme-space-2) 0;
+  overflow: hidden;
+  background: var(--theme-bg-card, #fff);
+  border-radius: var(--theme-radius-md, 12px);
+  box-shadow: inset 0 0 0 1px var(--theme-border, #ede4db);
   touch-action: pan-y;
   user-select: none;
 }
@@ -745,7 +786,7 @@ const summary = computed(() =>
 }
 
 .tc-endpoint {
-  stroke: var(--theme-bg-tag, #f5ede6);
+  stroke: var(--theme-bg-card, #fff);
   stroke-width: 1.5;
 }
 
@@ -759,6 +800,7 @@ const summary = computed(() =>
 
 .tc-endpoint-lat {
   fill: var(--theme-color-warning, #e6a23c);
+  stroke: var(--theme-bg-tag, #f5ede6);
 }
 
 .tc-crosshair {
@@ -771,12 +813,12 @@ const summary = computed(() =>
 /* ===== 悬浮浮层 ===== */
 .tc-tooltip {
   position: absolute;
-  top: 2px;
+  top: calc(var(--theme-space-2) + 2px);
   z-index: 2;
   width: 156px;
   padding: 6px 8px;
   pointer-events: none;
-  background: var(--theme-bg-card, #fff);
+  background: var(--theme-bg-tag, #f5ede6);
   border: 1px solid var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-sm, 10px);
   box-shadow: var(--theme-shadow-sm, 0 8px 28px rgb(74 55 40 / 6%));
@@ -819,12 +861,13 @@ const summary = computed(() =>
 /* ===== 空态 ===== */
 .tc-empty {
   display: flex;
-  min-height: 156px;
+  min-height: 216px;
   padding: var(--theme-space-4);
   font-family: var(--theme-font-body);
   font-size: 12px;
   color: var(--theme-text-muted, #c8bdb2);
   text-align: center;
+  background: var(--theme-bg-card, #fff);
   border: 1px dashed var(--theme-border, #ede4db);
   border-radius: var(--theme-radius-md, 12px);
   flex-direction: column;

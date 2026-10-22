@@ -256,14 +256,9 @@ export default {
     trendEmptyHint: '运行后自动记录采样',
     trendWindow: '近 {minutes} 分钟',
     trendNow: '现在',
-    trendAria: '近 {minutes} 分钟趋势：当前上传 {tx}，下载 {rx}，延迟 {latency}',
+    trendAria: '运行趋势：当前上传 {tx}，下载 {rx}，延迟 {latency}',
     trendAxisRate: '速率',
-    trendAxisLatency: '延迟',
-    exportSnapshot: '导出快照 ⤓',
-    exporting: '导出中…',
-    exportSuccess: '快照已导出',
-    exportFail: '导出失败',
-    exportDesktopOnly: '✦ 导出仅桌面端可用'
+    trendAxisLatency: '延迟'
   },
   newEdit: {
     addTitle: '新建配置',

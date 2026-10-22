@@ -264,14 +264,9 @@ export default {
     trendEmptyHint: 'Samples are recorded automatically while running',
     trendWindow: 'Last {minutes} min',
     trendNow: 'Now',
-    trendAria: '{minutes}-minute trend: upload {tx}, download {rx}, latency {latency}',
+    trendAria: 'Live trend: upload {tx}, download {rx}, latency {latency}',
     trendAxisRate: 'Rate',
-    trendAxisLatency: 'Latency',
-    exportSnapshot: 'Export Snapshot ⤓',
-    exporting: 'Exporting…',
-    exportSuccess: 'Snapshot exported',
-    exportFail: 'Export failed',
-    exportDesktopOnly: '✦ Export is only available on desktop'
+    trendAxisLatency: 'Latency'
   },
   newEdit: {
     addTitle: 'New Configuration',

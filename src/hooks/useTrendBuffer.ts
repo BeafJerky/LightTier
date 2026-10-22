@@ -8,16 +8,27 @@ export interface TrendPoint {
   latency: number
 }
 
-/** 趋势缓冲时间窗口：仅保留最近 15 分钟内的采样点 */
-export const TREND_WINDOW_MS = 15 * 60 * 1000
+/** 图表可容纳的采样点上限（由 TrendChart 按容器宽度回写，画不出的旧点直接丢弃） */
+const DEFAULT_CAPACITY = 256
+let capacity = DEFAULT_CAPACITY
 
 const buffers = new Map<string, TrendPoint[]>()
 
 export const useTrendBuffer = () => {
+  /** 同步图表可见容量：缩窗时立即裁掉已经无法展示的历史点 */
+  const setCapacity = (next: number): void => {
+    const normalized = Math.max(2, Math.floor(next))
+    if (normalized === capacity) return
+    capacity = normalized
+    for (const buf of buffers.values()) {
+      if (buf.length > capacity) buf.splice(0, buf.length - capacity)
+    }
+  }
+
   /** 取某配置的趋势点（副本） */
   const getTrend = (configName: string): TrendPoint[] => [...(buffers.get(configName) || [])]
 
-  /** 追加采样点（按时间窗口裁剪：丢弃早于最新点 15 分钟的采样） */
+  /** 追加采样点（只保留图表当前画得出来的最近 capacity 个点） */
   const pushTrend = (configName: string, point: TrendPoint): void => {
     let buf = buffers.get(configName)
     if (!buf) {
@@ -25,11 +36,7 @@ export const useTrendBuffer = () => {
       buffers.set(configName, buf)
     }
     buf.push(point)
-    // 采样点按 ts 升序追加，从队首丢弃超出时间窗口的旧点
-    const cutoff = point.ts - TREND_WINDOW_MS
-    let drop = 0
-    while (drop < buf.length && buf[drop].ts < cutoff) drop++
-    if (drop > 0) buf.splice(0, drop)
+    if (buf.length > capacity) buf.splice(0, buf.length - capacity)
   }
 
   /** 清空某配置缓冲（配置停止/删除时调用） */
@@ -37,5 +44,5 @@ export const useTrendBuffer = () => {
     buffers.delete(configName)
   }
 
-  return { getTrend, pushTrend, clearTrend }
+  return { setCapacity, getTrend, pushTrend, clearTrend }
 }

@@ -171,18 +171,10 @@
         </div>
       </div>
 
-      <!-- 5.16：趋势（近 15 分钟速率/延迟曲线，折叠） -->
+      <!-- 5.16：趋势（固定点距的速率/延迟曲线，折叠） -->
       <details class="nm-trend-collapse" open>
         <summary class="nm-trend-summary">
           <span class="nm-trend-label">{{ t('newMonitor.trend') }}</span>
-          <button
-            type="button"
-            class="nm-export-btn"
-            @click.stop="handleExportSnapshot"
-            :disabled="exporting"
-          >
-            {{ exporting ? t('newMonitor.exporting') : t('newMonitor.exportSnapshot') }}
-          </button>
         </summary>
         <div class="nm-trend-body">
           <TrendChart :points="trendPoints" />
@@ -307,7 +299,7 @@
  * - 同步总览摘要（monitorSummary）与趋势缓冲（useTrendBuffer，5.16）
  * - 全部远端 Peer 均 P2P 直连时一次性通知（5.4，p2pNotify 去重）
  * 可靠性：页面隐藏时暂停轮询、连续失败 3 次自动停止；诊断日志缓冲后批量落盘。
- * 平台差异：浏览器用 mockPeers / mockNodeInfo 演示；快照导出仅桌面（Tauri save 对话框）。
+ * 平台差异：浏览器用 mockPeers / mockNodeInfo 演示。
  */
 import { useEasyTierStore } from '@/store/modules/easytier'
 import {
@@ -329,8 +321,6 @@ import { useCreamToast } from '@/hooks/useCreamToast'
 import TrendChart from '@/components/TrendChart/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { useTrendBuffer, type TrendPoint } from '@/hooks/useTrendBuffer'
-import { save } from '@tauri-apps/plugin-dialog'
-import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 
 defineOptions({ name: 'NewMonitor' })
@@ -396,41 +386,6 @@ const recordTrend = (configName: string, snapshot: MonitorSnapshot) => {
     syncTrend(configName)
   }
   lastRateSample.value[configName] = { tx: snapshot.txTotal, rx: snapshot.rxTotal, ts: now }
-}
-
-// --- 5.16 导出快照（Tauri save 对话框 + JSON 落盘） ---
-const exporting = ref(false)
-const handleExportSnapshot = async () => {
-  if (!selectedConfig.value || !selectedData.value) return
-  if (!isTauriEnv() || isAndroid()) {
-    toast(t('newMonitor.exportDesktopOnly'), 'warning')
-    return
-  }
-  exporting.value = true
-  try {
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
-    const filePath = await save({
-      defaultPath: `${selectedConfig.value.configFileName}-${dateStr}.json`,
-      filters: [{ name: 'JSON', extensions: ['json'] }]
-    })
-    if (!filePath) return
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      app: 'lighttier',
-      config: selectedConfig.value.configFileName,
-      snapshot: selectedData.value,
-      trend: trendPoints.value
-    }
-    await writeTextFile(filePath, JSON.stringify(payload, null, 2))
-    toast(t('newMonitor.exportSuccess'), 'success')
-  } catch (e) {
-    console.error('导出快照失败:', e)
-    toast(t('newMonitor.exportFail'), 'error')
-  } finally {
-    exporting.value = false
-  }
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -1074,7 +1029,7 @@ onUnmounted(() => {
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border);
   border-radius: var(--theme-radius-xl);
-  transition: all 0.3s var(--theme-ease-spring);
+  transition: var(--theme-transition-surface);
   flex-shrink: 0;
 }
 
@@ -1155,7 +1110,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nmc-btn-run {
@@ -1206,7 +1161,7 @@ onUnmounted(() => {
   background: var(--theme-bg-hover);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
   align-items: center;
   gap: var(--theme-space-2);
 }
@@ -1343,7 +1298,7 @@ onUnmounted(() => {
   cursor: pointer;
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.25s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nm-btn-start {
@@ -1403,77 +1358,66 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
 }
 
-/* 5.16：趋势折叠区块 */
+/* 5.16：趋势折叠区块（标题沿用区块标题样式，折叠内容自成一卡） */
 .nm-trend-collapse {
   margin-bottom: var(--theme-space-4);
-  background: var(--theme-bg-tag);
-  border: 1.5px solid var(--theme-border-light);
-  border-radius: var(--theme-radius-md);
 }
 
 .nm-trend-summary {
   display: flex;
-  padding: var(--theme-space-3) var(--theme-space-4);
+  padding: 0 0 var(--theme-space-3);
   list-style: none;
   cursor: pointer;
   user-select: none;
   align-items: center;
-  justify-content: space-between;
 }
 
 .nm-trend-summary::-webkit-details-marker {
   display: none;
 }
 
+/* 折叠指示放右端：标题起点与「节点信息/对等节点」对齐 */
 .nm-trend-summary::before {
-  margin-right: var(--theme-space-2);
-  font-size: 12px;
-  color: var(--theme-text-muted);
-  content: '▸';
-  transition: transform 0.15s;
+  order: 2;
+  width: 7px;
+  height: 7px;
+  margin: 0 2px 4px var(--theme-space-2);
+  border-right: 1.5px solid var(--theme-text-secondary);
+  border-bottom: 1.5px solid var(--theme-text-secondary);
+  content: '';
+  transform: rotate(45deg);
+  transition: transform var(--theme-duration-fast) var(--theme-ease-out);
 }
 
 .nm-trend-collapse[open] .nm-trend-summary::before {
-  transform: rotate(90deg);
+  transform: rotate(225deg);
+}
+
+/* 与节点信息/对等节点同款尾线，宽屏下标题不孤悬 */
+.nm-trend-summary::after {
+  order: 1;
+  flex: 1;
+  height: 2px;
+  margin-left: var(--theme-space-2);
+  background: linear-gradient(90deg, var(--theme-border-light), transparent);
+  content: '';
 }
 
 .nm-trend-label {
   display: inline-flex;
-  margin-right: auto;
   font-family: var(--theme-font-display);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
   color: var(--theme-accent-primary);
   align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.nm-export-btn {
-  min-height: 32px;
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid var(--theme-border-light);
-  border-radius: var(--theme-radius-pill);
-  transition: all 0.15s;
-}
-
-.nm-export-btn:hover {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.nm-export-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .nm-trend-body {
-  padding: 0 var(--theme-space-4) var(--theme-space-3);
+  padding: var(--theme-space-2) var(--theme-space-4) var(--theme-space-4);
+  background: var(--theme-bg-tag);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-md);
 }
 
 /* Section */
@@ -1551,7 +1495,7 @@ onUnmounted(() => {
   background: var(--theme-bg-tag);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
-  transition: all 0.2s;
+  transition: var(--theme-transition-surface);
 }
 
 .nm-peer-card:hover {
@@ -1674,7 +1618,7 @@ onUnmounted(() => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nm-empty-cta:hover {
@@ -1761,7 +1705,7 @@ onUnmounted(() => {
   background: var(--theme-accent-primary);
   border: none;
   border-radius: var(--theme-radius-pill);
-  transition: all 0.2s;
+  transition: var(--theme-transition-interactive);
 }
 
 .nm-stale-retry:hover {
