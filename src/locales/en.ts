@@ -8,6 +8,7 @@ export default {
     configSub: 'Manage all network config files',
     webConfig: 'Web Config',
     webConfigSub: 'Manage web config server connections',
+    webConfigTab: 'Web',
     theme: 'Theme Settings',
     configDetail: 'Config Details',
     configDetailSub: 'View config parameters and connection info',
@@ -29,7 +30,16 @@ export default {
     applyTheme: 'Apply Theme',
     previewLabel: 'Theme Preview',
     cream: 'Cream',
-    dark: 'Dark'
+    dark: 'Dark',
+    importTheme: 'Import Theme',
+    downloadGuide: 'Download Guide',
+    importInvalidName: 'File name may only contain letters, numbers, hyphens, or underscores',
+    importReservedName: 'Built-in theme names cream / dark cannot be used',
+    importInvalidCss: 'Not a valid theme: at least 3 --theme- variables are required',
+    importFailed: 'Failed to import theme. Please check the file',
+    importSuccess: 'Theme "{name}" imported',
+    guideSaved: 'Guide saved',
+    guideFailed: 'Failed to save guide'
   },
   newCommon: {
     running: 'Running',
@@ -125,7 +135,6 @@ export default {
     openConfig: 'View {name} details'
   },
   newConfig: {
-    configList: 'Configurations',
     addConfig: 'New Configuration',
     mainParams: 'Main Parameters',
     hostname: 'Hostname',
@@ -200,6 +209,7 @@ export default {
     backupFailed: 'Could not back up the original configuration; save canceled',
     runningFirst: 'Running first',
     openLogFail: 'Failed to open log directory',
+    openDirFail: 'Failed to open configuration folder',
     svcInstallSuccess: 'Service installed successfully',
     svcInstallFail: 'Service installation failed',
     svcStartSuccess: 'Service started successfully',
@@ -231,7 +241,6 @@ export default {
       'Config "{name}" contains fields incompatible with the current kernel and may fail to start:\n{issues}\n\nContinue anyway?'
   },
   newMonitor: {
-    monitorLabel: 'Monitor',
     configNotFound: 'The instance does not exist or is no longer running',
     totalUpload: 'Total Upload',
     totalDownload: 'Total Download',
@@ -460,7 +469,6 @@ export default {
       'rpc_portal is no longer read from config files since {since}; LightTier passes it as the --rpc-portal CLI argument on desktop (not applicable on Android)'
   },
   newWebConfig: {
-    webConfigLabel: 'Web Config',
     addConfig: 'New Configuration',
     openConsole: 'Open console',
     mainParams: 'Main Parameters',
@@ -472,6 +480,9 @@ export default {
     serviceMgmt: 'Service Management',
     installService: 'Install Service',
     selectWebConfig: 'Select a Web configuration to view details',
+    androidDesktopOnly: 'Configuration management only; start Web configs from the desktop app',
+    consoleCopied: 'Console URL copied',
+    consoleCopyFail: 'Copy failed, please select the URL manually',
     stopFailNoPid: 'Cannot stop: PID not found',
     svcStopHint: 'Stop may take a few seconds, please refresh later',
     deleteTitle: 'Delete Configuration',

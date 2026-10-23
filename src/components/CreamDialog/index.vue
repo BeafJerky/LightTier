@@ -6,7 +6,6 @@
         ref="overlayRef"
         class="cd-overlay"
         :class="{ 'cd-overlay-inline': inline, 'cd-overlay-sheet': sheetMode }"
-        @click.self="handleOverlayClick"
         @keydown.escape="requestClose"
         @keydown="handleKeydown"
         tabindex="-1"
@@ -75,7 +74,7 @@
  * - 内联模式（inline）：不渲染 Teleport / 遮罩 / 标题栏，作为页面级卡片嵌入文档流
  *   （移动端二级页面用，标题与返回由所在页面承载）。
  *
- * 交互：遮罩点击（closeOnOverlay）与 Esc 键均可关闭（内联模式除外）；
+ * 交互：点击遮罩不关闭（防误触），Esc 键与标题栏关闭按钮可关闭（内联模式除外）；
  * 键盘无障碍：打开聚焦遮罩层（Esc 可用）、Tab 圈定在弹窗内、关闭还原到打开前焦点；
  * 顶部/底部留白叠加 --lt-safe-area-* 安全区变量（桌面端为 0）。
  * 滚动：应用外壳 html/body 为 overflow:hidden（内容区自行滚动），遮罩铺满视口即天然阻止背景滚动。
@@ -118,7 +117,6 @@ const props = withDefaults(
     height?: string | number
     // body 是否滚动：默认 true；内容区自行管理滚动时传 false，避免嵌套滚动
     bodyScroll?: boolean
-    closeOnOverlay?: boolean
     // 内联模式：不渲染 Teleport 遮罩与标题栏，作为页面级卡片嵌入文档流（移动端二级页面用）
     inline?: boolean
     // 关闭守卫：返回 false（或 resolve false）时取消本次关闭（未保存保护等）
@@ -133,7 +131,6 @@ const props = withDefaults(
     width: 600,
     height: undefined,
     bodyScroll: true,
-    closeOnOverlay: true,
     inline: false,
     beforeClose: undefined,
     historyClose: true
@@ -193,11 +190,6 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-const handleOverlayClick = () => {
-  // 内联模式无遮罩层，点击空白不触发关闭（避免页面留白区域误关）
-  if (props.closeOnOverlay && !props.inline) void requestClose()
-}
-
 // 关闭守卫执行器：异步守卫期间忽略重复关闭请求
 const closing = ref(false)
 const canClose = async (): Promise<boolean> => {
@@ -214,7 +206,7 @@ const canClose = async (): Promise<boolean> => {
   }
 }
 
-// 统一关闭入口：遮罩 / Esc / 标题栏 / 父组件按钮都走这里
+// 统一关闭入口：Esc / 标题栏 / 父组件按钮都走这里
 const requestClose = async () => {
   if (!(await canClose())) return
   visible.value = false
@@ -259,7 +251,7 @@ watch(visible, (v) => {
     sheetStack.push(sheetEntry)
     window.history.pushState({ ...(window.history.state || {}), ltSheet: true }, '')
   } else if (!v && sheetPushed) {
-    // 界面内关闭（按钮/遮罩）：回收注入的历史条目
+    // 界面内关闭（按钮/Esc）：回收注入的历史条目
     sheetPushed = false
     dropSheetEntry()
     sheetPopping = true

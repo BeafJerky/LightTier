@@ -6,11 +6,8 @@
       'nm-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedConfig
     }"
   >
-    <!-- 左侧配置列表 -->
+    <!-- 左侧配置列表：页面标题已由应用栏承担，列表直接从顶部开始 -->
     <div class="nm-left">
-      <div v-if="!isAndroidPlatform" class="nm-left-header">
-        <div class="nm-left-label">{{ t('newMonitor.monitorLabel') }}</div>
-      </div>
       <div class="nm-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.configListLoading" />
         <!-- Android：与总览一致的分组行列表 -->
@@ -816,13 +813,29 @@ const updateRunningList = async () => {
  * 单次失败不应立即清空界面：先短延迟重试一次，仍失败返回 null，
  * 由调用方保留上一份完整快照，避免节点信息/对等节点区块反复消失再出现。
  */
+// 查询超时兜底：Rust 侧若一直不返回，isFetching 会永久为 true 并让轮询停摆
+const withQueryTimeout = (promise: Promise<any>, ms = 10000): Promise<any> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('monitor query timeout')), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
+
 const queryWithRetry = async (
   query: () => Promise<any>,
   isValid: (value: any) => boolean
 ): Promise<any> => {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const result = await query()
+      const result = await withQueryTimeout(query())
       if (isValid(result)) return result
     } catch {
       // CLI 调用失败（RPC 超时/进程退出）按未命中处理，仍重试一次
@@ -1153,24 +1166,6 @@ onUnmounted(() => {
   flex-shrink: 0;
   flex-direction: column;
   gap: var(--theme-space-2);
-}
-
-.nm-left-label {
-  padding: 0 var(--theme-space-1);
-  font-family: var(--theme-font-display);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 2px;
-  color: var(--theme-text-muted);
-  text-transform: uppercase;
-}
-
-.nm-left-header {
-  display: flex;
-  min-height: 24px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--theme-space-1);
 }
 
 .nm-left-scroll {

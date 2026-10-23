@@ -25,8 +25,7 @@ import {
   DEFAULT_LOG_COUNT,
   DEFAULT_LOG_SIZE_MB,
   normalizeLogLevel,
-  parsePositiveInt,
-  resolveLogDir
+  parsePositiveInt
 } from './coreLogUtil'
 import { getPlatform, sleep } from './sysUtil'
 import * as toml from 'smol-toml'
@@ -51,11 +50,12 @@ async function getDefaultLogDir(configFileName?: string): Promise<string> {
 /**
  * 从配置文件中读取日志/端口相关配置（内核启动与服务安装共用）
  *
- * 日志目录统一归一化为绝对路径：配置为空或相对路径时按配置隔离到
- * <resource>/logs/kernel/<scope>，避免多实例共写 easytier.log 造成交错与轮转互踩。
- * v2.6.x 内核忽略 TOML `[file_logger]` 段，其日志由本层翻译为 CLI 参数
- * （--file-log-dir/level/size/count）传入；相对目录会随内核进程 CWD 漂移，
- * 导致日志查看/清理/路由提取全部读不到（修复 H-02）。
+ * 日志目录由管理器统一决定：始终按配置隔离到 <resource>/logs/kernel/<scope>，
+ * 避免多实例共写 easytier.log 造成交错与轮转互踩。
+ * TOML 的 `[file_logger] dir` 不参与路径决策：旧版管理器迁移来的配置常带绝对
+ * 路径（如 easytier-manager-pro/logs），内核按它写入后，查看/清理/打开目录/
+ * 公网 IP 提取（受 Tauri fs 作用域限制只覆盖应用目录）全部读不到（F-07）。
+ * 级别与轮转参数仍按 TOML 翻译为 CLI 参数（--file-log-level/size/count）。
  * @param configFileName 配置文件名
  */
 async function getConfigFromFile(configFileName: string): Promise<{
@@ -71,9 +71,9 @@ async function getConfigFromFile(configFileName: string): Promise<{
     const configContent = (await readFileContent(CONFIG_PATH + '/' + configFileName)) as string
     const config = toml.parse(configContent) as any
 
-    // 获取日志配置（归一化目录/级别与轮转参数，非法值回落默认，避免内核启动 panic）
+    // 获取日志配置（目录恒定走应用隔离目录，级/轮转参数按 TOML 归一化，非法值回落默认）
     const logger = config.file_logger || {}
-    const logDir = await resolveLogDir(logger.dir, () => getDefaultLogDir(configFileName))
+    const logDir = await getDefaultLogDir(configFileName)
     const logLevel = normalizeLogLevel(logger.level)
     const sizeMb = parsePositiveInt(logger.size_mb ?? logger.size, DEFAULT_LOG_SIZE_MB)
     const count = parsePositiveInt(logger.count, DEFAULT_LOG_COUNT)
@@ -138,6 +138,22 @@ export async function buildCoreArgsList(
   return args
 }
 
+// 失败日志脱敏：nssm set <svc> ObjectName <user> <password> 的密码与 --password 类参数
+// 不得写入应用日志（命令行本身由系统进程表承载，日志是可控面）
+const maskSecretArgs = (program: string, args: string[]): string[] => {
+  const masked = [...args]
+  const isNssm = /(^|[\\/])nssm(\.exe)?$/i.test(program)
+  const objectNameIdx = isNssm ? masked.findIndex((a) => a.toLowerCase() === 'objectname') : -1
+  // ObjectName 后依次是用户名与密码：保留用户名，密码及其后参数全部遮蔽
+  if (objectNameIdx >= 0) {
+    for (let i = objectNameIdx + 2; i < masked.length; i++) masked[i] = '***'
+  }
+  for (let i = 1; i < masked.length; i++) {
+    if (/^--?(password|passwd|pwd)$/i.test(masked[i - 1])) masked[i] = '***'
+  }
+  return masked
+}
+
 /**
  * 执行外部程序并等待其完成
  * @param program 程序路径
@@ -176,7 +192,7 @@ export async function executeCmd(
     const stdout = output.stdout || ''
     const stderr = output.stderr || ''
     if (code !== 0) {
-      warn(`执行参数:${JSON.stringify(args)}`)
+      warn(`执行参数:${JSON.stringify(maskSecretArgs(program, args))}`)
       warn(`执行程序失败(code=${code}):${stderr || stdout || '未知错误'}`)
       return {
         code,
@@ -557,11 +573,18 @@ export async function killProcess(pid: number, force: boolean = true): Promise<b
 export async function stopAllNodes() {
   try {
     const processList = await getRunningProcesses('easytier-core')
-    await Promise.all(
-      processList.map(async (process) => {
-        await killProcess(process.pid)
-      })
+    const results = await Promise.all(
+      processList.map(async (process) => ({
+        pid: process.pid,
+        ok: await killProcess(process.pid)
+      }))
     )
+    // 仍有节点存活时不得清理出口路由：这些路由正被运行中的实例使用
+    const failed = results.filter((r) => !r.ok).map((r) => r.pid)
+    if (failed.length > 0) {
+      error(`停止所有节点未完全成功（PID:${failed.join(',')}），跳过出口路由清理`)
+      return
+    }
     // 5.10：全部停止后自动清除出口节点路由（升级内核等强停场景不残留）
     await clearExitRoute()
   } catch (e) {
@@ -822,28 +845,30 @@ export const installServiceOnWindows = async (
 
       const args8 = ['set', serviceName, 'Start', 'SERVICE_AUTO_START']
       const args9 = ['set', serviceName, 'Type', 'SERVICE_WIN32_OWN_PROCESS']
-      await executeCmd(NSSM_NAME, args1, { encoding: 'gbk' }).then(async (res) => {
-        info(`安装服务结果:${JSON.stringify(res)}`)
-        if (
-          res &&
-          (res.code! === 0 ||
-            res.code! === 1 ||
-            res.includes('success') ||
-            res.includes('installed'))
-        ) {
-          await executeCmd(NSSM_NAME, args2, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args3, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args4, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args5, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args6, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args7, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args8, { encoding: 'gbk' })
-          await executeCmd(NSSM_NAME, args9, { encoding: 'gbk' })
-          resolve(true)
+      const installRes: any = await executeCmd(NSSM_NAME, args1, { encoding: 'gbk' })
+      info(`安装服务结果:${JSON.stringify(installRes)}`)
+      if (
+        !installRes ||
+        !(
+          installRes.code! === 0 ||
+          installRes.code! === 1 ||
+          installRes.includes('success') ||
+          installRes.includes('installed')
+        )
+      ) {
+        resolve(false)
+        return
+      }
+      // 后续 nssm set 决定实际运行参数：任一步失败都算安装失败，避免留下半配置服务
+      for (const step of [args2, args3, args4, args5, args6, args7, args8, args9]) {
+        const stepRes = await executeCmd(NSSM_NAME, step, { encoding: 'gbk' })
+        if (!isCommandSuccess(stepRes)) {
+          error(`配置服务失败:${JSON.stringify(maskSecretArgs(NSSM_NAME, step))}`)
+          resolve(false)
           return
         }
-        resolve(false)
-      })
+      }
+      resolve(true)
     } catch (e: any) {
       error(`安装服务失败:${e}`)
       resolve(false)
@@ -861,11 +886,7 @@ export const uninstallServiceOnWindows = (serviceName: string) => {
       const args = ['remove', serviceName, 'confirm']
       const res: any = await executeCmd(NSSM_NAME, args, { encoding: 'gbk' })
       info(`删除服务:${JSON.stringify(res)}`)
-      if (res && (res.code! === 0 || res.includes('success'))) {
-        resolve(true)
-      } else {
-        resolve(false)
-      }
+      resolve(isCommandSuccess(res))
     } catch (e: any) {
       error(`删除服务出错:${e}`)
       resolve(false)
@@ -873,23 +894,39 @@ export const uninstallServiceOnWindows = (serviceName: string) => {
   })
 }
 /**
+ * 轮询等待服务达到目标状态：nssm/CLI 的 start/stop 异步生效，固定 sleep 在慢盘上易误判
+ * @returns 是否在超时前达到目标状态（中途 STOPPED 等中间态继续等待，超时才算失败）
+ */
+const waitServiceStatus = async (
+  probe: () => Promise<unknown>,
+  target: 'SERVICE_RUNNING' | 'SERVICE_STOPPED',
+  attempts = 10,
+  intervalMs = 500
+): Promise<boolean> => {
+  for (let i = 0; i < attempts; i++) {
+    await sleep(intervalMs)
+    const status = await probe()
+    if (typeof status === 'string' && status.trim().toUpperCase() === target) return true
+  }
+  return false
+}
+
+/**
  * Windows 启动服务
  * @param serviceName 服务名
- * @returns Promise<boolean> 是否成功
+ * @returns Promise<boolean> 是否成功（以服务状态轮询结果为准，而非命令退出码）
  */
 export const startServiceOnWindows = (serviceName: string) => {
   return new Promise(async (resolve) => {
     try {
-      const args = ['start', serviceName]
-      await executeCmd(NSSM_NAME, args, { encoding: 'gbk' })
-      await sleep(2000)
-      const res = await checkServiceOnWindows(serviceName)
-      info('启动服务:' + JSON.stringify(res))
-      if (JSON.stringify(res).includes('SERVICE_STOPPED')) {
-        resolve(false)
-        return
-      }
-      resolve(true)
+      // 服务已运行时 nssm start 可能返回非 0，状态轮询才是唯一成功依据
+      const res = await executeCmd(NSSM_NAME, ['start', serviceName], { encoding: 'gbk' })
+      const running = await waitServiceStatus(
+        () => checkServiceOnWindows(serviceName),
+        'SERVICE_RUNNING'
+      )
+      info(`启动服务:${JSON.stringify(res)} 状态:${running ? 'SERVICE_RUNNING' : '未就绪'}`)
+      resolve(running)
     } catch (e: any) {
       error('启动服务出错:', e)
       resolve(false)
@@ -905,16 +942,13 @@ export const startServiceOnWindows = (serviceName: string) => {
 export const stopServiceOnWindows = (serviceName: string) => {
   return new Promise(async (resolve) => {
     try {
-      const args = ['stop', serviceName]
-      await executeCmd(NSSM_NAME, args, { encoding: 'gbk' })
-      await sleep(2000)
-      const res = await checkServiceOnWindows(serviceName)
-      info('停止服务:' + JSON.stringify(res))
-      if (JSON.stringify(res).includes('SERVICE_STOPPED')) {
-        resolve(true)
-        return
-      }
-      resolve(false)
+      const res = await executeCmd(NSSM_NAME, ['stop', serviceName], { encoding: 'gbk' })
+      const stopped = await waitServiceStatus(
+        () => checkServiceOnWindows(serviceName),
+        'SERVICE_STOPPED'
+      )
+      info(`停止服务:${JSON.stringify(res)} 状态:${stopped ? 'SERVICE_STOPPED' : '未就绪'}`)
+      resolve(stopped)
     } catch (e: any) {
       error('停止服务出错:', e)
       resolve(false)
@@ -1141,10 +1175,9 @@ export const startServiceWithOfficialCli = async (serviceName: string) => {
     if (target === null) return false
 
     await runOfficialServiceCmd(target, 'start')
-    await sleep(2000)
 
-    // 按实际操作的服务名复查，避免回退探测把另一服务状态误算进来
-    return (await checkOfficialServiceStatus(target)) === 'SERVICE_RUNNING'
+    // 按实际操作的服务名轮询复查，避免回退探测把另一服务状态误算进来
+    return await waitServiceStatus(() => checkOfficialServiceStatus(target), 'SERVICE_RUNNING')
   } catch (e: any) {
     error(`官方CLI启动服务失败: ${e}`)
     return false
@@ -1160,10 +1193,9 @@ export const stopServiceWithOfficialCli = async (serviceName: string) => {
     if (target === null) return false
 
     await runOfficialServiceCmd(target, 'stop')
-    await sleep(2000)
 
-    // 按实际操作的服务名复查，避免回退探测把另一服务状态误算进来
-    return (await checkOfficialServiceStatus(target)) === 'SERVICE_STOPPED'
+    // 按实际操作的服务名轮询复查，避免回退探测把另一服务状态误算进来
+    return await waitServiceStatus(() => checkOfficialServiceStatus(target), 'SERVICE_STOPPED')
   } catch (e: any) {
     error(`官方CLI停止服务失败: ${e}`)
     return false

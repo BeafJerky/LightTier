@@ -279,6 +279,38 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
   gap: 6px;
 }
 
+/* 开关型字段：标签左、开关右的行式布局，连续开关用细分隔线分组 */
+.nce-page :deep(.ed-adv-collapse .ed-form-grid) {
+  gap: 0;
+}
+
+.nce-page :deep(.ed-form-field--switch) {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  padding: 4px 0;
+}
+
+.nce-page :deep(.ed-form-field--switch + .ed-form-field--switch) {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nce-page :deep(.ed-form-field--switch + .ed-form-field:not(.ed-form-field--switch)) {
+  margin-top: 12px;
+}
+
+.nce-page :deep(.ed-form-field--switch .ed-form-label) {
+  flex: 1;
+  min-width: 0;
+}
+
+.nce-page :deep(.ed-form-field--switch .ed-form-switch-wrap) {
+  padding: 0;
+  flex-shrink: 0;
+}
+
 .nce-page :deep(.ed-form-label) {
   font-size: 11.5px;
   font-weight: 500;

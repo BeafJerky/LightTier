@@ -548,6 +548,46 @@ const isExitRouteInUse = async (record: ExitRouteRecord): Promise<boolean> => {
 }
 
 /**
+ * 按条目精确比对系统路由表（纯函数，便于单测）：
+ * - 目标/掩码之外必须网关与 metric 都一致才算“仍在使用”；
+ * - 默认路由（kind=default）是原路由改 metric，恢复后同网关但 metric 回到 originalMetric，
+ *   应归为已清理，不能因为系统里还有同目标路由就报“可疑”；
+ * - 新增路由同目标同网关但 metric 不同，说明被外部改过，归为可疑。
+ */
+export const classifyRouteResidue = (
+  records: ExitRouteRecord[],
+  sys: RouteEntry[]
+): ExitRouteCheckResult => {
+  const result: ExitRouteCheckResult = { active: [], missing: [], suspicious: [] }
+  for (const record of records) {
+    for (const r of record.entries) {
+      const exact = sys.find(
+        (s) =>
+          s.target === r.target &&
+          s.mask === r.mask &&
+          s.gateway === r.gateway &&
+          s.metric === r.metric
+      )
+      if (exact) {
+        result.active.push(r)
+        continue
+      }
+      const sameGateway = sys.find(
+        (s) => s.target === r.target && s.mask === r.mask && s.gateway === r.gateway
+      )
+      if (!sameGateway) {
+        result.missing.push(r)
+      } else if (r.kind === 'default' && sameGateway.metric === r.originalMetric) {
+        result.missing.push(r)
+      } else {
+        result.suspicious.push(r)
+      }
+    }
+  }
+  return result
+}
+
+/**
  * 残留检查：对比持久化记录与系统路由表。
  * 只报告本应用添加/改写过的条目；系统表中记录外的路由不归属本应用，一律不动。
  */
@@ -556,23 +596,7 @@ export const checkExitRouteResidue = async (): Promise<ExitRouteCheckResult> => 
   if (!isTauriEnv()) return empty
   const records = await loadExitRouteRecords()
   if (records.length === 0) return empty
-  const sys = await listSystemRoutes()
-  const active: RouteEntry[] = []
-  const missing: RouteEntry[] = []
-  const suspicious: RouteEntry[] = []
-  for (const record of records) {
-    for (const r of record.entries) {
-      const match = sys.find((s) => s.target === r.target && s.mask === r.mask)
-      if (!match) {
-        missing.push(r)
-      } else if (match.gateway === r.gateway && match.metric === r.metric) {
-        active.push(r)
-      } else {
-        suspicious.push(r)
-      }
-    }
-  }
-  return { active, missing, suspicious }
+  return classifyRouteResidue(records, await listSystemRoutes())
 }
 
 /**

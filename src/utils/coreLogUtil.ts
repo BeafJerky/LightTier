@@ -2,37 +2,20 @@
  * 内核日志配置与路径工具（纯函数，无 Tauri 依赖，便于单测）
  *
  * 背景（修复 H-02，2026-10 校准）：
- * - v2.6.4 的 Config 虽然定义了 `[file_logger]` 段，但内核日志初始化只读取 CLI 参数
+ * - v2.6.4 / v2.7.0 的 Config 虽然定义了 `[file_logger]` 段，但内核日志初始化只读取 CLI 参数
  *   `--file-log-dir/--file-log-level/--file-log-size/--file-log-count`，
  *   文件名固定为 `easytier.log`（CLI 无文件名字段），因此管理器必须把 TOML 配置翻译成 CLI 参数；
  * - 轮转为 Debian 风格：当前文件无后缀，历史文件为 `easytier.log.1/.2/...`（并非日期后缀），
  *   `.1` 是最新的历史分段，`count` 约等于“活跃文件 + 历史文件”的总数；
  * - 旧版内核可能按 TOML `file` 字段写 `{configName}.log` 或带日期后缀的文件，读取端需兼容；
- * - 默认目录按配置隔离到 `logs/kernel/<scope>`，旧版共享 `logs/` 作为只读回退；
- *   用户显式配置绝对目录时原样使用（读取端受 Tauri fs 作用域限制，见设计文档）。
+ * - 目录恒定按配置隔离到 `logs/kernel/<scope>`，旧版共享 `logs/` 作为只读回退。
+ *   TOML `file_logger.dir` 不再参与路径决策：读取/清理/打开目录受 Tauri fs 作用域限制
+ *   只覆盖应用目录，写入端一旦落到任意绝对目录，整条链路就会读不到（F-07）。
  */
 
 // 内核日志默认轮转参数（与旧版 runEasyTierCore 的硬编码 10/10 保持一致）
 export const DEFAULT_LOG_SIZE_MB = 10
 export const DEFAULT_LOG_COUNT = 10
-
-// 判断绝对路径：Windows 盘符（C:\ 或 C:/）、UNC（\\server）与 Unix 根路径（/），
-// 不依赖 Tauri path API，保证可在单测与浏览器 mock 环境下使用
-export const isAbsolutePath = (p: string): boolean => /^([a-zA-Z]:[\\/]|\\\\|\/)/.test(p)
-
-/**
- * 归一化内核日志目录：
- * - 配置为绝对路径时原样使用（用户显式指定，尊重即可）；
- * - 为空或相对路径（如 './log'、'./logs'、'.'）时，回落到 fallback 提供的绝对目录。
- * fallback 以惰性函数传入，避免不需要时触发 Tauri 调用（也便于单测注入）。
- */
-export const resolveLogDir = async (
-  configured: unknown,
-  fallback: () => Promise<string>
-): Promise<string> => {
-  const dir = typeof configured === 'string' ? configured.trim() : ''
-  return dir && isAbsolutePath(dir) ? dir : await fallback()
-}
 
 // 解析正整数配置（内核 --file-log-size/--file-log-count 只接受正整数），非法值回落默认
 export const parsePositiveInt = (value: unknown, fallback: number): number => {
@@ -154,14 +137,27 @@ export const isActiveKernelLogFile = (fileName: string, configName: string): boo
   )
 }
 
+// FNV-1a：仅为“清理后重名”的场景生成稳定短后缀，不用于安全用途
+const scopeHash = (value: string): string => {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 /**
  * 按配置隔离内核日志目录：配置名去掉 .toml 并清理路径非法字符。
+ * 清理改变了名称时追加 `~hash`（`~` 不在合法配置名字符集内，不会与被清理名撞车）：
+ * 否则 “a b” 与 “a_b” 两个合法配置会共用同一日志目录。
  * 空配置名（如 Web 配置）由调用方显式传入作用域名。
  */
 export const getKernelLogScope = (configFileName: string): string => {
   const base = getConfigLogBaseName(configFileName)
   const sanitized = base.replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^\.+$/, '_')
-  return sanitized || 'default'
+  if (!sanitized) return 'default'
+  return sanitized === base ? sanitized : `${sanitized}~${scopeHash(base)}`
 }
 
 /**

@@ -135,10 +135,6 @@ export const useEasyTierStore = defineStore(
     const setFileListNoSuffix = (list: string[]) => {
       fileListNoSuffix.value = list
     }
-    const loadRunningList = () => {
-      const stored = readStoredJson<RunningItem[]>('runningList', [])
-      runningList.value = Array.isArray(stored) ? stored : []
-    }
     // 按配置文件名（不含 .toml 后缀）查运行记录
     const getRunningItem = (configFileName: string) => {
       return runningList.value.find((i) => i.configFileName === configFileName)
@@ -510,7 +506,6 @@ export const useEasyTierStore = defineStore(
       setConfigWebList,
       setFileList,
       setFileListNoSuffix,
-      loadRunningList,
       getRunningItem,
       setRunningList,
       addRunningList,
@@ -556,8 +551,15 @@ export const useEasyTierStore = defineStore(
     persist: {
       key: 'easytier',
       storage: localStorage,
-      // 启动队列属于运行时瞬时状态，持久化会导致刷新后出现幽灵队列
-      omit: ['startQueue']
+      // 启动队列属于运行时瞬时状态，持久化会导致刷新后出现幽灵队列；
+      // isFirstLoad 必须每个进程重新为 true，否则持久化的 false 会让冷启动自动运行永不触发
+      omit: ['startQueue', 'isFirstLoad'],
+      // 运行列表只作首帧提示：PID 属于上个进程，系统复用后可能误杀无关进程。
+      // 清空 PID 后，停止操作会按配置名重新扫描定位真实进程。
+      afterHydrate: (ctx) => {
+        const store = ctx.store as unknown as { runningList: RunningItem[] }
+        store.runningList = (store.runningList || []).map((item) => ({ ...item, pid: undefined }))
+      }
     }
   }
 )

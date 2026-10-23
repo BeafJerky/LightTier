@@ -3,7 +3,12 @@
  */
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs'
-import { extractThemeLabel, useExternalThemes } from '@/hooks/useExternalThemes'
+import {
+  extractThemeLabel,
+  importThemeFile,
+  loadThemeCss,
+  useExternalThemes
+} from '@/hooks/useExternalThemes'
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   readDir: vi.fn(),
@@ -73,5 +78,63 @@ describe('discoverThemes', () => {
     const themes = await discoverThemes()
 
     expect(themes.find((theme) => theme.name === 'qing-ci')?.label).toBe('青瓷')
+  })
+})
+
+describe('importThemeFile（浏览器 Mock）', () => {
+  const storage = new Map<string, string>()
+  const VALID_CSS =
+    '/* @theme-label: 海盐 */\n:root { --theme-bg: #eef6fb; --theme-text-primary: #243b53; --theme-accent-primary: #4a90c2; }'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    storage.clear()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+      clear: () => storage.clear()
+    })
+    mockedReadDir.mockRejectedValue(new Error('asset URI not enumerable'))
+  })
+
+  it('保存合法主题并可被发现、读取', async () => {
+    const result = await importThemeFile('sea-salt.css', VALID_CSS)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.theme.name).toBe('sea-salt')
+      expect(result.theme.label).toBe('海盐')
+      expect(result.theme.color).toBe('#4a90c2')
+    }
+
+    const { discoverThemes } = useExternalThemes()
+    const themes = await discoverThemes()
+    expect(themes.some((theme) => theme.name === 'sea-salt')).toBe(true)
+    await expect(loadThemeCss('sea-salt')).resolves.toBe(VALID_CSS)
+  })
+
+  it('拒绝非法文件名、内置主题名与无效 CSS', async () => {
+    await expect(importThemeFile('我的主题.css', VALID_CSS)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid-name'
+    })
+    await expect(importThemeFile('dark.css', VALID_CSS)).resolves.toEqual({
+      ok: false,
+      reason: 'reserved-name'
+    })
+    await expect(importThemeFile('plain.css', 'body { color: red; }')).resolves.toEqual({
+      ok: false,
+      reason: 'invalid-css'
+    })
+    expect(storage.size).toBe(0)
+  })
+
+  it('同名导入覆盖已保存的版本', async () => {
+    await importThemeFile('sea-salt.css', VALID_CSS)
+    const updated = '/* @theme-label: 深海 */\n:root { --theme-a: 1; --theme-b: 2; --theme-c: 3; }'
+    const result = await importThemeFile('sea-salt.css', updated)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.theme.label).toBe('深海')
+    await expect(loadThemeCss('sea-salt')).resolves.toBe(updated)
   })
 })

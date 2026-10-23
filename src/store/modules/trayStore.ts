@@ -49,8 +49,11 @@ export const useTrayStore = defineStore(
       }
     }
 
-    // 处理窗口关闭事件
+    // 处理窗口关闭事件（每次页面重载需重新注册；同一会话内避免重复监听）
+    let closeHandlerRegistered = false
     const handleWindowClose = async () => {
+      if (closeHandlerRegistered) return
+      closeHandlerRegistered = true
       const window = getCurrentWindow()
 
       // 监听窗口关闭事件
@@ -155,8 +158,10 @@ export const useTrayStore = defineStore(
       try {
         tray = await getTray()
         if (tray) {
-          // 托盘已存在（如语言切换后的页面重载）：仅刷新菜单文案，避免残留旧语言
+          // 托盘已存在（如语言切换后的页面重载）：刷新菜单文案并重新注册关闭拦截，
+          // 页面重载后上一个 JS 上下文的监听已失效，否则点关闭会直接退出而非最小化到托盘
           await tray.setMenu(await buildMenu())
+          await handleWindowClose()
           return
         }
       } catch (_error) {

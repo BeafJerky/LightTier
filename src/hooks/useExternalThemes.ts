@@ -1,15 +1,19 @@
 /**
- * 外部主题发现与恢复
+ * 外部主题发现、导入与恢复
  *
  * - 预置外部主题在构建期由前端打包（Android APK 的 resource 目录不可枚举，见下方 glob 说明）
  * - 桌面端另行扫描 resource/themes/*.css（Tauri Resource 目录），同名文件覆盖内置版本，支持用户自定义
+ * - 导入的主题写入 AppData/themes（两端可写），优先级高于 Resource 与内置版本；浏览器预览存 localStorage
  * - 至少含 3 个 --theme- 变量才视为合法主题
  * - 显示名优先取 CSS 内的 `@theme-label: <中文名>` 元数据，缺省回退文件名
  * - 主题色徽标从 --theme-accent-primary 或 --theme-color-success 提取
  */
 import { ref } from 'vue'
-import { readTextFile, readDir } from '@tauri-apps/plugin-fs'
+import { readTextFile, readDir, writeTextFile, mkdir } from '@tauri-apps/plugin-fs'
 import { BaseDirectory } from '@tauri-apps/plugin-fs'
+import { isTauri } from '@tauri-apps/api/core'
+import { save } from '@tauri-apps/plugin-dialog'
+import { isAndroid } from '@/utils/platformUtil'
 import { useThemeLoader } from './useThemeLoader'
 
 /** 外部主题元信息（cssText 为完整样式文本，供应用时注入） */
@@ -51,6 +55,92 @@ const toThemeInfo = (name: string, cssText: string): ExternalThemeInfo | null =>
     label: extractThemeLabel(cssText, name),
     color: match ? match[1].trim() : '#888',
     cssText
+  }
+}
+
+// 导入主题的落地目录：AppData 在桌面与 Android 均可写，避免修改安装目录/只读资源
+const IMPORTED_THEME_DIR = 'themes'
+// 浏览器预览无文件系统，导入主题存 localStorage 以便本地验收
+const IMPORTED_THEME_STORAGE_KEY = 'lt.importedThemes'
+// 内置主题由界面固定渲染，同名外部主题不会出现在列表中，直接拒绝
+const RESERVED_THEME_NAMES = new Set(['cream', 'dark'])
+
+const isTauriRuntime = (): boolean => {
+  try {
+    return isTauri()
+  } catch {
+    return false
+  }
+}
+
+/** 已导入主题（仅浏览器 Mock）：忽略手工篡改的非法条目 */
+const readMockImportedThemes = (): Map<string, string> => {
+  const themes = new Map<string, string>()
+  try {
+    const parsed = JSON.parse(localStorage.getItem(IMPORTED_THEME_STORAGE_KEY) || '[]') as unknown
+    if (!Array.isArray(parsed)) return themes
+    for (const item of parsed) {
+      if (
+        item &&
+        typeof item.name === 'string' &&
+        typeof item.cssText === 'string' &&
+        isValidThemeName(item.name) &&
+        !RESERVED_THEME_NAMES.has(item.name)
+      ) {
+        themes.set(item.name, item.cssText)
+      }
+    }
+  } catch {
+    /* 未导入或数据损坏：按无导入主题处理 */
+  }
+  return themes
+}
+
+const writeMockImportedThemes = (themes: Map<string, string>) => {
+  try {
+    const payload = [...themes].map(([name, cssText]) => ({ name, cssText }))
+    localStorage.setItem(IMPORTED_THEME_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    /* 存储空间不足等场景：写入失败由调用方统一提示 */
+  }
+}
+
+/** 读取全部已导入主题（AppData 目录 / 浏览器 localStorage） */
+const readImportedThemes = async (): Promise<Map<string, string>> => {
+  if (!isTauriRuntime()) return readMockImportedThemes()
+  const themes = new Map<string, string>()
+  try {
+    const entries = await readDir(IMPORTED_THEME_DIR, { baseDir: BaseDirectory.AppData })
+    for (const entry of entries) {
+      const fileName = entry.name
+      if (!fileName || !fileName.toLowerCase().endsWith('.css')) continue
+      const name = fileName.replace(/\.css$/i, '')
+      if (!isValidThemeName(name)) continue
+      try {
+        const cssText = (await readTextFile(`${IMPORTED_THEME_DIR}/${fileName}`, {
+          baseDir: BaseDirectory.AppData
+        })) as string
+        themes.set(name, cssText)
+      } catch {
+        /* 单个文件读取失败：跳过 */
+      }
+    }
+  } catch {
+    /* 尚未导入过主题（目录不存在）或 AppData 不可读 */
+  }
+  return themes
+}
+
+/** 读取单个已导入主题，供应用/恢复时优先命中 */
+const readImportedTheme = async (name: string): Promise<string | null> => {
+  if (!isTauriRuntime()) return readMockImportedThemes().get(name) ?? null
+  try {
+    const cssText = (await readTextFile(`${IMPORTED_THEME_DIR}/${name}.css`, {
+      baseDir: BaseDirectory.AppData
+    })) as string
+    return cssText
+  } catch {
+    return null
   }
 }
 
@@ -101,6 +191,11 @@ export const useExternalThemes = () => {
     } catch {
       /* Tauri API 不可用（浏览器 dev / Android asset 目录）：仅使用内置主题 */
     }
+    // 导入主题优先级最高：同名时覆盖 Resource 扫描结果与构建期内置版本
+    for (const [name, cssText] of await readImportedThemes()) {
+      const theme = toThemeInfo(name, cssText)
+      if (theme) merged.set(name, theme)
+    }
     extThemes.value = [...merged.values()].sort((a, b) => a.name.localeCompare(b.name))
     return extThemes.value
   }
@@ -108,8 +203,10 @@ export const useExternalThemes = () => {
   return { externalThemes: extThemes, discoverThemes }
 }
 
-/** 读取主题 CSS：桌面端优先资源目录，缺失或不可读时回退构建期内置版本 */
+/** 读取主题 CSS：导入主题 > 资源目录 > 构建期内置版本 */
 export const loadThemeCss = async (name: string): Promise<string | null> => {
+  const imported = await readImportedTheme(name)
+  if (imported && isValidThemeCss(imported)) return imported
   try {
     const css = (await readTextFile(`resource/themes/${name}.css`, {
       baseDir: BaseDirectory.Resource
@@ -136,5 +233,86 @@ export const restoreTheme = async () => {
     applyTheme(saved, css) // 统一处理：注入CSS + 更新currentTheme + 设置data-theme
   } catch {
     /* 文件不存在或无法读取，忽略 */
+  }
+}
+
+/** 导入结果：失败原因由界面映射为 i18n 文案 */
+export type ImportThemeResult =
+  | { ok: true; theme: ExternalThemeInfo }
+  | { ok: false; reason: 'invalid-name' | 'reserved-name' | 'invalid-css' | 'write-failed' }
+
+/** 校验并保存导入的主题文件（文件名即主题 ID，同名覆盖） */
+export const importThemeFile = async (
+  fileName: string,
+  cssText: string
+): Promise<ImportThemeResult> => {
+  const name = fileName.replace(/\.css$/i, '').trim()
+  if (!name || !isValidThemeName(name)) return { ok: false, reason: 'invalid-name' }
+  if (RESERVED_THEME_NAMES.has(name)) return { ok: false, reason: 'reserved-name' }
+  if (!isValidThemeCss(cssText)) return { ok: false, reason: 'invalid-css' }
+
+  try {
+    if (isTauriRuntime()) {
+      await mkdir(IMPORTED_THEME_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
+      await writeTextFile(`${IMPORTED_THEME_DIR}/${name}.css`, cssText, {
+        baseDir: BaseDirectory.AppData
+      })
+    } else {
+      const themes = readMockImportedThemes()
+      themes.set(name, cssText)
+      writeMockImportedThemes(themes)
+    }
+  } catch (error) {
+    console.error('导入主题失败:', error)
+    return { ok: false, reason: 'write-failed' }
+  }
+
+  const theme = toThemeInfo(name, cssText)
+  return theme ? { ok: true, theme } : { ok: false, reason: 'invalid-css' }
+}
+
+// 编写指南随构建内联：Android 与浏览器无需 Tauri 文件系统也能导出
+const themeGuideFiles = import.meta.glob('/src-tauri/resource/themes/*.md', {
+  query: '?raw',
+  import: 'default',
+  eager: true
+}) as Record<string, string>
+
+const themeGuideText =
+  Object.entries(themeGuideFiles).find(([path]) => /THEME_GUIDE\.md$/i.test(path))?.[1] ?? ''
+
+export const THEME_GUIDE_FILE_NAME = 'LightTier-THEME_GUIDE.md'
+
+export type SaveThemeGuideResult = 'saved' | 'cancelled' | 'failed'
+
+/** 下载主题编写指南：桌面走保存对话框，Android/浏览器走 Blob 下载 */
+export const downloadThemeGuide = async (): Promise<SaveThemeGuideResult> => {
+  if (!themeGuideText) return 'failed'
+  try {
+    if (isTauriRuntime() && !isAndroid()) {
+      const path = await save({
+        defaultPath: THEME_GUIDE_FILE_NAME,
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      })
+      if (!path) return 'cancelled'
+      await writeTextFile(path, themeGuideText)
+      return 'saved'
+    }
+    if (typeof document === 'undefined') return 'failed'
+    const blob = new Blob([themeGuideText], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = THEME_GUIDE_FILE_NAME
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    // 立即 revoke 会让浏览器在写入完成前失去 blob，下载被取消；留足时间后再释放
+    setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    return 'saved'
+  } catch (error) {
+    console.error('下载主题编写指南失败:', error)
+    return 'failed'
   }
 }

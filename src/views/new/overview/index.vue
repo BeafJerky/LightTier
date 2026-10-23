@@ -281,24 +281,48 @@
     </template>
 
     <template v-else>
-      <div class="nd-section">
+      <div class="nd-block">
         <div class="nd-stats">
           <div class="nd-stat-card">
-            <div class="nd-stat-icon running">▶</div>
+            <div class="nd-stat-icon running" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z"
+                />
+              </svg>
+            </div>
             <div class="nd-stat-body">
               <span class="nd-stat-num">{{ runningCount }}</span>
               <span class="nd-stat-lbl">{{ t('newCommon.running') }}</span>
             </div>
           </div>
           <div class="nd-stat-card">
-            <div class="nd-stat-icon stopped">■</div>
+            <div class="nd-stat-icon stopped" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="2" />
+              </svg>
+            </div>
             <div class="nd-stat-body">
               <span class="nd-stat-num">{{ stoppedCount }}</span>
               <span class="nd-stat-lbl">{{ t('newCommon.stopped') }}</span>
             </div>
           </div>
           <div class="nd-stat-card">
-            <div class="nd-stat-icon total">◈</div>
+            <div class="nd-stat-icon total" aria-hidden="true">
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
+                <circle cx="6" cy="12" r="2.4" />
+                <circle cx="18" cy="6" r="2.4" />
+                <circle cx="18" cy="18" r="2.4" />
+                <path d="M8.2 11.1l7.6-4.1M8.2 12.9l7.6 4.1" />
+              </svg>
+            </div>
             <div class="nd-stat-body">
               <span class="nd-stat-num">{{ totalCount }}</span>
               <span class="nd-stat-lbl">{{ t('newOverview.totalConfig') }}</span>
@@ -307,38 +331,72 @@
         </div>
       </div>
 
-      <div class="nd-section">
+      <div class="nd-block">
+        <div v-if="displayList.length > 0" class="nd-grid-head">
+          <span class="nd-grid-count">{{ t('newOverview.configsTotal', { n: totalCount }) }}</span>
+          <LtButton variant="secondary" size="sm" class="nd-add-btn" @click="goCreateConfig">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {{ t('newCommon.createConfig') }}
+          </LtButton>
+        </div>
         <div class="nd-grid lt-loading-host">
           <LoadingOverlay :show="easyTierStore.configListLoading" />
           <div
             v-for="cfg in displayList"
             :key="cfg.configFileName"
             class="nd-config-card"
-            :class="{ 'ndc-conflict': cfg.conflictPorts.length > 0 }"
+            :class="{ 'ndc-on': cfg.running, 'ndc-conflict': cfg.conflictPorts.length > 0 }"
           >
-            <div class="ndc-top">
-              <div class="ndc-status">
-                <span class="ndc-dot" :class="cfg.running ? 'on' : 'off'"></span>
-                <span class="ndc-status-text">{{
-                  cfg.running ? t('newCommon.running') : t('newCommon.stopped')
+            <LtButton
+              variant="bare"
+              class="ndc-main"
+              :aria-label="t('newOverview.openConfig', { name: cfg.configFileName })"
+              @click="goConfigDetail(cfg)"
+            >
+              <span class="ndc-main-inner">
+                <span class="ndc-top">
+                  <span class="ndc-status" :class="{ on: cfg.running }">
+                    <span class="ndc-dot" :class="cfg.running ? 'on' : 'off'"></span>
+                    <span class="ndc-status-text">{{
+                      cfg.running ? t('newCommon.running') : t('newCommon.stopped')
+                    }}</span>
+                  </span>
+                  <span class="ndc-top-right">
+                    <span v-if="cfg.conflictPorts.length > 0" class="ndc-conflict-badge"
+                      >⚠ {{ cfg.conflictPorts.join(', ') }}</span
+                    >
+                    <span v-if="cfg.pid" class="ndc-pid">PID {{ cfg.pid }}</span>
+                    <svg
+                      class="ndc-chev"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      aria-hidden="true"
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </span>
+                </span>
+                <span class="ndc-name" :title="cfg.configFileName">{{ cfg.configFileName }}</span>
+                <span class="ndc-summary" :class="{ on: cfg.running }">{{
+                  desktopCardSummary(cfg)
                 }}</span>
-              </div>
-              <div class="ndc-top-right">
-                <span v-if="cfg.conflictPorts.length > 0" class="ndc-conflict-badge"
-                  >⚠ {{ cfg.conflictPorts.join(', ') }}</span
-                >
-                <span v-if="cfg.pid" class="ndc-pid">PID {{ cfg.pid }}</span>
-                <span v-if="cfg.virtualIp" class="ndc-vip">{{ cfg.virtualIp }}</span>
-              </div>
-            </div>
-            <div class="ndc-name">{{ cfg.configFileName }}</div>
-            <div v-if="cfg.running" class="ndc-summary">
-              <template v-if="summaryMap[cfg.configFileName]">
-                ● {{ summaryMap[cfg.configFileName].nodeCount }} {{ t('newOverview.nodes') }} ·
-                {{ summaryMap[cfg.configFileName].avgLatency }}
-              </template>
-              <template v-else>…</template>
-            </div>
+              </span>
+            </LtButton>
             <div class="ndc-actions">
               <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
               <LtButton
@@ -346,6 +404,14 @@
                 size="compact"
                 @click="cfg.running ? stopAction(cfg) : startAction(cfg)"
                 >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
+              >
+              <!-- 运行中直达该配置的监控详情 -->
+              <LtButton
+                v-if="cfg.running"
+                variant="secondary"
+                size="compact"
+                @click="goMonitorDetail(cfg)"
+                >{{ t('newOverview.viewMonitor') }}</LtButton
               >
             </div>
           </div>
@@ -547,6 +613,12 @@ const rowSummary = (cfg: { configFileName: string }) => {
     ? `${summary.nodeCount} ${t('newOverview.nodes')} · ${summary.avgLatency}`
     : t('newOverview.summaryPending')
 }
+// 桌面卡片固定保留一行摘要，运行中无数据时也不塌陷，避免卡片高度跳动
+const desktopCardSummary = (cfg: { configFileName: string; running: boolean }) => {
+  if (!cfg.running) return t('newOverview.disconnected')
+  const summary = summaryMap.value[cfg.configFileName]
+  return summary ? `${summary.nodeCount} ${t('newOverview.nodes')} · ${summary.avgLatency}` : '…'
+}
 
 // 队列提示：正在启动的配置名与剩余排队数
 const queueRunningName = computed(() => runningFileName.value.replace('.toml', ''))
@@ -574,8 +646,9 @@ const updateRunningList = async () => {
     const names = easyTierStore.configList.map((c) => c.configFileName)
     const newList = await coreApi.getRunningList(names)
     easyTierStore.setRunningList(newList)
-  } catch {
-    /* non-Tauri */
+  } catch (e) {
+    // 浏览器预览无 Tauri：静默；真实环境扫描失败时保留上一份状态并留下诊断日志
+    if (isTauri()) console.warn('[RunningList] 运行态扫描失败，保留上一份状态:', e)
   }
 }
 
@@ -827,12 +900,8 @@ onUnmounted(() => {
   }
 }
 
-.nd-section {
-  padding: var(--theme-space-5);
-  margin-bottom: var(--theme-space-4);
-  background: var(--theme-bg-card);
-  border: 1.5px solid var(--theme-border);
-  border-radius: var(--theme-radius-xl);
+.nd-block {
+  margin-bottom: var(--theme-space-5);
 }
 
 .nd-stats {
@@ -843,7 +912,7 @@ onUnmounted(() => {
 .nd-stat-card {
   display: flex;
   padding: var(--theme-space-4);
-  background: var(--theme-bg);
+  background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
   transition: var(--theme-transition-surface);
@@ -859,10 +928,9 @@ onUnmounted(() => {
 
 .nd-stat-icon {
   display: flex;
-  width: 38px;
-  height: 38px;
-  font-size: 15px;
-  border-radius: var(--theme-radius-lg);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--theme-radius-md);
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -890,15 +958,32 @@ onUnmounted(() => {
 
 .nd-stat-num {
   font-family: var(--theme-font-display);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   color: var(--theme-text-primary);
 }
 
 .nd-stat-lbl {
   font-size: 12px;
   color: var(--theme-text-muted);
+}
+
+.nd-grid-head {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nd-grid-count {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nd-add-btn {
+  flex-shrink: 0;
 }
 
 .nd-grid {
@@ -909,16 +994,43 @@ onUnmounted(() => {
 }
 
 .nd-config-card {
+  display: flex;
   padding: var(--theme-space-4);
-  background: var(--theme-bg);
+  background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
   transition: var(--theme-transition-surface);
+  flex-direction: column;
 }
 
 .nd-config-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--theme-shadow-md);
+  transform: translateY(-2px);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+.ndc-on {
+  background: color-mix(in srgb, var(--theme-color-success) 4%, var(--theme-bg-card));
+  border-color: color-mix(in srgb, var(--theme-color-success) 22%, var(--theme-border-light));
+}
+
+/* 卡片主体即进入配置详情的入口：整块可点，操作按钮留在主体之外 */
+.ndc-main {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.ndc-main :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ndc-main-inner {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
 }
 
 .ndc-top {
@@ -935,9 +1047,13 @@ onUnmounted(() => {
 }
 
 .ndc-conflict-badge {
+  max-width: 55%;
   padding: 2px var(--theme-space-2);
+  overflow: hidden;
   font-size: 11px;
   color: var(--theme-color-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
   border-radius: var(--theme-radius-pill);
 }
@@ -959,14 +1075,23 @@ onUnmounted(() => {
 }
 
 .ndc-status {
-  display: flex;
+  display: inline-flex;
+  padding: 2px 8px 2px 7px;
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
+  border-radius: var(--theme-radius-pill);
   align-items: center;
-  gap: var(--theme-space-2);
+  gap: 6px;
+}
+
+.ndc-status.on {
+  color: var(--theme-color-success-dark);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
 }
 
 .ndc-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--theme-radius-round);
 }
 
@@ -980,49 +1105,57 @@ onUnmounted(() => {
 }
 
 .ndc-status-text {
-  font-size: 12px;
-  color: var(--theme-text-muted);
+  font-size: 11px;
+  color: inherit;
 }
 
 .ndc-pid {
   font-size: 11px;
   color: var(--theme-text-muted);
+  white-space: nowrap;
 }
 
-.ndc-vip {
-  padding: 1px var(--theme-space-2);
-  font-family: var(--theme-font-display);
-  font-size: 11px;
-  color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
-  border-radius: var(--theme-radius-pill);
+.ndc-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.4;
+  flex-shrink: 0;
+  transition: opacity var(--theme-duration) var(--theme-ease-out);
+}
+
+.nd-config-card:hover .ndc-chev {
+  opacity: 0.8;
 }
 
 .ndc-name {
-  margin-bottom: var(--theme-space-2);
+  display: block;
+  margin-bottom: 4px;
+  overflow: hidden;
   font-family: var(--theme-font-display);
   font-size: 15px;
   font-weight: 600;
   color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ndc-summary {
   display: flex;
-  min-height: 14px;
+  min-height: 16px;
   margin-bottom: var(--theme-space-3);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--theme-text-muted);
   align-items: center;
-  gap: var(--theme-space-1);
 }
 
-.ndc-summary::first-letter {
-  color: var(--theme-color-success);
+.ndc-summary.on {
+  color: var(--theme-text-secondary);
 }
 
 .ndc-actions {
   display: flex;
+  margin-top: auto;
   gap: var(--theme-space-2);
+  flex-wrap: wrap;
 }
 
 .nd-empty {

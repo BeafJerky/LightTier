@@ -33,7 +33,6 @@ const { getPrefixCls } = useDesign()
 const prefixCls = getPrefixCls('app')
 
 const appStore = useAppStore()
-const currentSize = computed(() => appStore.getCurrentSize)
 
 const greyMode = computed(() => appStore.getGreyMode)
 const trayStore = useTrayStore()
@@ -202,7 +201,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ConfigGlobal :size="currentSize">
+  <ConfigGlobal>
     <RouterView v-if="!isLocked" v-bind="greyMode ? { class: `${prefixCls}-grey-mode` } : {}" />
     <div v-else class="lock-screen">
       <div class="lock-card">

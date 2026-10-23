@@ -181,8 +181,10 @@
     </div>
 
     <div class="ed-body" :class="{ 'ed-body-full': inline }">
-      <!-- 语法/保存错误条：代码模式实时校验，保存前同步复核 -->
-      <div v-if="codeIssue" class="ed-code-error" role="alert">{{ codeIssue }}</div>
+      <!-- 语法/保存错误条：代码模式实时校验，保存前同步复核；写盘/导入失败在此可见 -->
+      <div v-if="codeIssue || saveError" class="ed-code-error" role="alert">{{
+        codeIssue || saveError
+      }}</div>
       <!-- 代码模式 -->
       <div
         v-show="editMode === 'code'"
@@ -255,7 +257,7 @@
                 placeholder="network_secret"
               />
             </div>
-            <div class="ed-form-field">
+            <div class="ed-form-field ed-form-field--switch">
               <label class="ed-form-label" :for="fieldId('dhcp')">DHCP</label>
               <div class="ed-form-switch-wrap">
                 <LtSwitch v-model="formData.dhcp" aria-label="DHCP" />
@@ -445,7 +447,11 @@
             >✦ {{ t('newEdit.advancedSection') }}</summary
           >
           <div class="ed-form-grid">
-            <div class="ed-form-field" v-for="f in visibleAdvancedFlagDefs" :key="f.key">
+            <div
+              class="ed-form-field ed-form-field--switch"
+              v-for="f in visibleAdvancedFlagDefs"
+              :key="f.key"
+            >
               <label
                 class="ed-form-label"
                 :for="fieldId(f.key)"
@@ -460,7 +466,11 @@
                 />
               </div>
             </div>
-            <div class="ed-form-field" v-for="f in visibleTopSwitchDefs" :key="f.key">
+            <div
+              class="ed-form-field ed-form-field--switch"
+              v-for="f in visibleTopSwitchDefs"
+              :key="f.key"
+            >
               <label
                 class="ed-form-label"
                 :for="fieldId(f.key)"
@@ -618,7 +628,6 @@
     v-model="discardVisible"
     :title="t('newCommon.discardTitle')"
     width="380px"
-    :close-on-overlay="false"
     :history-close="!discardFromRoute"
   >
     <p class="ed-discard-msg">{{ t('newCommon.discardMsg') }}</p>
@@ -1438,10 +1447,10 @@ const handleImportToml = async () => {
       nameError.value = ''
     }
   } catch (e: any) {
-    // 如果是解析错误，提示用户
-    if (e?.message) {
-      nameError.value = t('newEdit.importFail')
-    }
+    // 导入/解析失败必须可见：编辑模式没有名称输入栏，nameError 不会渲染
+    if (!e?.message) return
+    if (dialogMode.value === 'add') nameError.value = t('newEdit.importFail')
+    else saveError.value = t('newEdit.importFail')
   }
 }
 </script>

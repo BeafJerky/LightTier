@@ -25,17 +25,26 @@ vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => true
 }))
 
-vi.mock('@tauri-apps/plugin-log', () => ({
-  attachConsole: vi.fn(),
+const logMocks = vi.hoisted(() => ({
   debug: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
   warn: vi.fn()
 }))
 
+vi.mock('@tauri-apps/plugin-log', () => ({
+  attachConsole: vi.fn(),
+  ...logMocks
+}))
+
 vi.mock('@/utils/sysUtil', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/utils/sysUtil')>()
-  return { ...mod, getPlatform: vi.fn(async () => mocks.platform.current) }
+  return {
+    ...mod,
+    getPlatform: vi.fn(async () => mocks.platform.current),
+    // 服务状态轮询在测试中不等待真实时间
+    sleep: vi.fn(async () => {})
+  }
 })
 
 const fileMocks = vi.hoisted(() => ({
@@ -65,11 +74,13 @@ vi.mock('@tauri-apps/api/path', () => ({
 }))
 
 import {
+  buildCoreArgsList,
   checkServiceWithOfficialCli,
   executeCmd,
   getRunningProcesses,
   installServiceWithOfficialCli,
   runEasyTierCoreWeb,
+  startServiceOnWindows,
   uninstallServiceWithOfficialCli
 } from '@/utils/shellUtil'
 
@@ -77,6 +88,7 @@ beforeEach(() => {
   mocks.execute.mockReset()
   mocks.create.mockClear()
   tauriMocks.invoke.mockReset()
+  Object.values(logMocks).forEach((fn) => fn.mockClear())
   // run_command 成功时 Rust 侧返回子进程 PID
   tauriMocks.invoke.mockResolvedValue('4321')
   mocks.platform.current = 'windows'
@@ -238,6 +250,18 @@ describe('官方 CLI 服务安装参数按内核版本适配', () => {
   })
 })
 
+describe('内核日志目录（F-07 回归）', () => {
+  it('忽略旧版遗留的绝对 file_logger.dir，日志始终写入按配置隔离目录', async () => {
+    fileMocks.readFileContent.mockResolvedValueOnce(
+      '[file_logger]\nlevel = "error"\ndir = "D:\\\\Program Files\\\\easytier-manager-pro\\\\logs"\n'
+    )
+    const args = await buildCoreArgsList('a.toml', 'C:/res/config/a.toml')
+    expect(args[args.indexOf('--file-log-dir') + 1]).toBe('C:/res/logs/kernel/a')
+    // TOML 的级别仍按原值翻译，只有目录由管理器决定
+    expect(args[args.indexOf('--file-log-level') + 1]).toBe('error')
+  })
+})
+
 describe('Web 配置启动参数（F-12）', () => {
   it('补齐文件日志参数并使用 Web 专用隔离目录', async () => {
     await expect(runEasyTierCoreWeb('tcp://example.com:11010')).resolves.toBe(4321)
@@ -275,6 +299,51 @@ describe('Web 配置启动参数（F-12）', () => {
     await expect(runEasyTierCoreWeb('tcp://example.com:11010')).rejects.toBe(
       '启动进程失败: 文件不存在'
     )
+  })
+})
+
+describe('Windows 服务启动状态判定（服务启停可靠性回归）', () => {
+  it('START_PENDING 后转为 RUNNING → 启动成功（不再把待启动当成成功）', async () => {
+    let call = 0
+    mocks.execute.mockImplementation(async () => {
+      call++
+      // 第 1 次是 nssm start，其余为状态轮询
+      if (call === 1) return { code: 0, stdout: '', stderr: '' }
+      const statuses = ['SERVICE_START_PENDING', 'SERVICE_START_PENDING', 'SERVICE_RUNNING']
+      return { code: 0, stdout: statuses[Math.min(call - 2, statuses.length - 1)], stderr: '' }
+    })
+    await expect(startServiceOnWindows('easytier-a')).resolves.toBe(true)
+  })
+
+  it('服务不存在（status 退出码 3）→ 启动失败，不能把布尔 false 当成功', async () => {
+    let call = 0
+    mocks.execute.mockImplementation(async () => {
+      call++
+      if (call === 1) return { code: 0, stdout: '', stderr: '' }
+      return { code: 3, stdout: '', stderr: 'Can not open service! does not exist' }
+    })
+    await expect(startServiceOnWindows('easytier-a')).resolves.toBe(false)
+  })
+
+  it('超时仍为 STOPPED → 启动失败', async () => {
+    let call = 0
+    mocks.execute.mockImplementation(async () => {
+      call++
+      if (call === 1) return { code: 0, stdout: '', stderr: '' }
+      return { code: 0, stdout: 'SERVICE_STOPPED', stderr: '' }
+    })
+    await expect(startServiceOnWindows('easytier-a')).resolves.toBe(false)
+  })
+})
+
+describe('命令失败日志脱敏（服务账户密码不落盘）', () => {
+  it('nssm set ObjectName 的密码在失败日志中被遮蔽', async () => {
+    mocks.execute.mockResolvedValue({ code: 1, stdout: '', stderr: 'denied' })
+    await executeCmd('nssm', ['set', 'easytier-a', 'ObjectName', '.\\user', 'p@ssw0rd'])
+    const output = logMocks.warn.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(output).not.toContain('p@ssw0rd')
+    expect(output).toContain('ObjectName')
+    expect(output).toContain('***')
   })
 })
 

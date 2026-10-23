@@ -130,6 +130,40 @@ watch(visible, (v) => {
   margin-left: 0;
 }
 
+/* 导入 / 指南：列表上方的两张并列操作卡 */
+.ntv-page :deep(.td-tools) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ntv-page :deep(.td-tool-btn) {
+  display: flex;
+  width: 100%;
+  height: 52px;
+  padding: 0 12px;
+  font-family: var(--theme-font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  justify-content: center;
+  gap: 8px;
+}
+
+.ntv-page :deep(.td-tool-btn:active) {
+  background: var(--theme-bg-hover);
+}
+
+.ntv-page :deep(.td-tool-btn svg) {
+  width: 17px;
+  height: 17px;
+  color: var(--theme-accent-primary);
+  flex-shrink: 0;
+}
+
 .ntv-page :deep(.td-inline-reset) {
   display: flex;
   width: 100%;

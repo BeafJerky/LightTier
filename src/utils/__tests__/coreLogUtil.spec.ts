@@ -1,59 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_LOG_COUNT,
   DEFAULT_LOG_SIZE_MB,
   getKernelLogScope,
   getLogLineLevel,
-  isAbsolutePath,
   isActiveKernelLogFile,
   isKernelLogFile,
   normalizeLogLevel,
   parsePositiveInt,
-  pickLogTarget,
-  resolveLogDir
+  pickLogTarget
 } from '@/utils/coreLogUtil'
-
-describe('isAbsolutePath（绝对路径判定）', () => {
-  it('识别 Windows 盘符（正反斜杠）与 UNC 路径', () => {
-    expect(isAbsolutePath('C:\\logs')).toBe(true)
-    expect(isAbsolutePath('d:/data/logs')).toBe(true)
-    expect(isAbsolutePath('\\\\server\\share\\logs')).toBe(true)
-  })
-
-  it('识别 Unix 根路径', () => {
-    expect(isAbsolutePath('/var/log')).toBe(true)
-  })
-
-  it('相对路径与空值返回 false', () => {
-    expect(isAbsolutePath('./log')).toBe(false)
-    expect(isAbsolutePath('logs')).toBe(false)
-    expect(isAbsolutePath('.')).toBe(false)
-    expect(isAbsolutePath('')).toBe(false)
-    expect(isAbsolutePath('~/logs')).toBe(false)
-  })
-})
-
-describe('resolveLogDir（日志目录归一化）', () => {
-  it('绝对路径原样保留，且不触发 fallback', async () => {
-    const fallback = vi.fn(async () => '/app/logs')
-    await expect(resolveLogDir('C:/custom/logs', fallback)).resolves.toBe('C:/custom/logs')
-    expect(fallback).not.toHaveBeenCalled()
-  })
-
-  it('空/相对/非字符串值回落到应用 logs 目录', async () => {
-    const fallback = vi.fn(async () => '/app/logs')
-    await expect(resolveLogDir('', fallback)).resolves.toBe('/app/logs')
-    await expect(resolveLogDir('./log', fallback)).resolves.toBe('/app/logs')
-    await expect(resolveLogDir('.', fallback)).resolves.toBe('/app/logs')
-    await expect(resolveLogDir(undefined, fallback)).resolves.toBe('/app/logs')
-    await expect(resolveLogDir(123 as unknown, fallback)).resolves.toBe('/app/logs')
-    expect(fallback).toHaveBeenCalledTimes(5)
-  })
-
-  it('空白字符视为未配置', async () => {
-    await expect(resolveLogDir('   ', async () => '/app/logs')).resolves.toBe('/app/logs')
-  })
-})
 
 describe('parsePositiveInt（正整数解析）', () => {
   it('合法数值/数字字符串直接使用', () => {
@@ -163,10 +119,22 @@ describe('isActiveKernelLogFile（清理时保留写入中的文件）', () => {
 })
 
 describe('getKernelLogScope（按配置隔离目录名）', () => {
-  it('去掉 .toml 并清理路径非法字符', () => {
+  it('未改动名称原样使用，去掉 .toml', () => {
     expect(getKernelLogScope('server.toml')).toBe('server')
-    expect(getKernelLogScope('Alice Home.toml')).toBe('Alice_Home')
-    expect(getKernelLogScope('a/b:c*.toml')).toBe('a_b_c_')
+    expect(getKernelLogScope('盐城立体库.toml')).toBe('盐城立体库')
+    expect(getKernelLogScope('a_b')).toBe('a_b')
+  })
+
+  it('清理路径非法字符，改变名称时追加稳定后缀', () => {
+    expect(getKernelLogScope('a/b:c*.toml')).toMatch(/^a_b_c_~[a-z0-9]+$/)
+    expect(getKernelLogScope('Alice Home.toml')).toMatch(/^Alice_Home~[a-z0-9]+$/)
+    // 同一次输入必须稳定（启动写日志与读取日志共用）
+    expect(getKernelLogScope('Alice Home.toml')).toBe(getKernelLogScope('Alice Home'))
+  })
+
+  it('仅靠空格/下划线区分的配置不共用日志目录（F-07 衍生回归）', () => {
+    expect(getKernelLogScope('a b.toml')).not.toBe(getKernelLogScope('a_b.toml'))
+    expect(getKernelLogScope('办公室 组网_2')).not.toBe(getKernelLogScope('办公室_组网_2'))
   })
 
   it('空名回退 default', () => {

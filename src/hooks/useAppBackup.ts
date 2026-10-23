@@ -87,6 +87,19 @@ const readStorage = (key: string): string | null => {
   }
 }
 
+// 语言由 useStorage 以 JSON 字符串写入（"zh-CN"），同时兼容旧备份恢复出的裸值
+const readLangStorage = (): string => {
+  const raw = readStorage(LANG_KEY)
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed === 'string') return parsed
+  } catch {
+    /* 裸值 */
+  }
+  return raw
+}
+
 const readJsonStorage = (key: string): unknown => {
   const raw = readStorage(key)
   if (!raw) return undefined
@@ -183,7 +196,7 @@ const collectPreferencesPayload = (): PreferencesPayload => {
 const collectAppearancePayload = (): AppearancePayload => {
   const appStore = useAppStore()
   const rawTheme = readStorage(THEME_KEY) || ''
-  const rawLang = readStorage(LANG_KEY) || ''
+  const rawLang = readLangStorage()
   const rawColorScheme = readStorage(COLOR_SCHEME_KEY) || ''
   return {
     version: 1,
@@ -438,7 +451,8 @@ const applyAppearance = async (item: BackupItem): Promise<void> => {
     else localStorage.removeItem(THEME_KEY)
   }
   if (payload.lang !== undefined) {
-    if (payload.lang) localStorage.setItem(LANG_KEY, payload.lang)
+    // 与 useStorage 保持一致写入 JSON 字符串，避免下次采集/刷新读不到
+    if (payload.lang) localStorage.setItem(LANG_KEY, JSON.stringify(payload.lang))
     else localStorage.removeItem(LANG_KEY)
   }
   if (payload.colorScheme !== undefined) {

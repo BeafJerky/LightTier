@@ -115,25 +115,35 @@ const scrollToBottom = async () => {
 
 // 加载日志：定位当前配置的日志文件，按时间正序尾读末尾 500 行
 // 无文件与读取失败分别给出明确空态，不再静默显示为“日志为空”
+// 请求序号：快速切换配置/轮询重叠时，旧请求返回后不得覆盖新配置的内容
+let loadSeq = 0
 const loadLog = async () => {
+  // 先自增：配置名清空时也要让在飞请求作废
+  const seq = ++loadSeq
   if (!props.configName || !isTauri.value) return
+  const configName = props.configName
   loading.value = true
   try {
-    const location = await resolveKernelLogFile(props.configName)
+    const location = await resolveKernelLogFile(configName)
+    if (seq !== loadSeq) return
     if (!location) {
       content.value = ''
       loadError.value = t('newConfig.logNotReady')
       return
     }
     const text = (await readFileContent(`${location.dir}/${location.file}`)) as string
+    if (seq !== loadSeq) return
     content.value = text ? readTextTail(text, 500) : ''
     loadError.value = ''
   } catch {
+    if (seq !== loadSeq) return
     content.value = ''
     loadError.value = t('newConfig.logReadFailed')
   } finally {
-    loading.value = false
-    await scrollToBottom()
+    if (seq === loadSeq) {
+      loading.value = false
+      await scrollToBottom()
+    }
   }
 }
 
@@ -146,13 +156,14 @@ const refresh = () => {
 // 调用系统文件管理器打开当前配置的日志目录（失败回退 logs 根目录）
 const openLogsDir = async () => {
   try {
-    await openPath(await getKernelLogsDir(props.configName))
+    if (await openPath(await getKernelLogsDir(props.configName))) return
   } catch {
-    try {
-      await openPath(await getLogsDir())
-    } catch {
-      /* ignore */
-    }
+    /* 目录创建失败，回退根目录 */
+  }
+  try {
+    await openPath(await getLogsDir())
+  } catch {
+    /* ignore */
   }
 }
 
@@ -192,6 +203,12 @@ watch(
     loadLog()
     startPolling()
   }
+)
+
+// 设置页调整刷新频率后立即生效（startPolling 打开时只读取一次）
+watch(
+  () => easyTierStore.refreshInterval,
+  () => startPolling()
 )
 
 // 行内容变化后尝试跟随滚动到底部

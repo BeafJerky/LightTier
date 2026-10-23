@@ -350,6 +350,18 @@
               <path d="M3 12h4l2-6 4 12 2-6h6" />
             </svg>
             <svg
+              v-else-if="tab.icon === 'web'"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+            </svg>
+            <svg
               v-else
               width="20"
               height="20"
@@ -513,10 +525,11 @@ const handleVisibilityChange = () => {
   hiddenAt = 0
 }
 
-// 底部导航：对应桌面侧边栏一级入口（按 Android 习惯固定四项）
+// 底部导航：对应桌面侧边栏一级入口
 const androidTabs = [
   { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
   { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
+  { path: '/new/web-config', labelKey: 'newLayout.webConfigTab', icon: 'web' },
   { path: '/new/monitor', labelKey: 'newLayout.monitor', icon: 'monitor' },
   { path: '/new/settings', labelKey: 'newSettings.settings', icon: 'settings' }
 ]
@@ -525,7 +538,9 @@ const isTabActive = (path: string) =>
 // 再次点击当前标签：回到页面顶部（Android 列表页惯用交互）
 const scrollActivePageToTop = () => {
   document
-    .querySelectorAll<HTMLElement>('.nl-content, .nw-left-scroll, .nm-left-scroll')
+    .querySelectorAll<HTMLElement>(
+      '.nl-content, .nw-left-scroll, .nwc-left-scroll, .nm-left-scroll'
+    )
     .forEach((el) => {
       if (el.scrollTop > 0) el.scrollTo({ top: 0, behavior: 'smooth' })
     })
@@ -650,8 +665,8 @@ onMounted(() => {
   }
   // 应用启动时全局加载配置列表（只加载一次）
   easyTierStore.loadConfigFiles()
-  // Web 配置服务仅桌面端提供（Android 上路由与菜单均已隐藏）
-  if (!isAndroidPlatform) easyTierStore.loadWebConfigFiles()
+  // Web 配置列表双端通用（Android 仅管理配置，不探测桌面进程/服务）
+  easyTierStore.loadWebConfigFiles()
   // 窗口最大化状态：初始化并在尺寸变化（含系统快捷键）时同步图标
   if (isTauriRuntime()) {
     syncMaximized()

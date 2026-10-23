@@ -7,20 +7,10 @@
  * 关闭 Naive 的 preflight：它会把 body 改成 14px / 1.6 行高，覆盖应用自身的
  * 全局排版，导致迁移后整站文字观感变化；重置样式继续由 index.less 负责。
  */
-import { computed, provide } from 'vue'
+import { computed } from 'vue'
 import { NConfigProvider, NNotificationProvider, dateEnUS, dateZhCN, enUS, zhCN } from 'naive-ui'
 import { useLocaleStore } from '@/store/modules/locale'
 import { useNaiveTheme } from './naiveTheme'
-
-const props = withDefaults(
-  defineProps<{
-    size?: 'default' | 'small' | 'large'
-  }>(),
-  { size: 'default' }
-)
-
-// 保留 configGlobal 注入：Naive 无全局尺寸配置，尺寸由各组件显式声明
-provide('configGlobal', props)
 
 const { naiveTheme, themeOverrides } = useNaiveTheme()
 

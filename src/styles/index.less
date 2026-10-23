@@ -40,7 +40,9 @@ button {
 }
 
 // 键盘焦点环：统一沿用主题强调色，明暗主题均可辨认
-:where(button, a, [role='tab'], [role='option'], [role='button'], [tabindex='0']):focus-visible {
+// 仅在键盘导航时显示，避免触摸端 WebView 点按后残留方形焦点框
+html[data-input='keyboard']
+  :where(button, a, [role='tab'], [role='option'], [role='button'], [tabindex='0']):focus-visible {
   outline: 2px solid var(--theme-accent-primary, #e8a0a0);
   outline-offset: 2px;
 }

@@ -254,7 +254,7 @@ const classes = computed(() => [
   border-radius: 0;
 }
 
-.lt-btn:focus-visible {
+html[data-input='keyboard'] .lt-btn:focus-visible {
   outline: 2px solid var(--theme-accent-primary, #e8a0a0);
   outline-offset: 2px;
 }

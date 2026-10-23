@@ -601,11 +601,13 @@ export async function downloadFile(
  * 2.在浏览器中打开指定网址
  * @param path 要打开的目录路径或网址
  */
-export async function openPath(path: string) {
+export async function openPath(path: string): Promise<boolean> {
   try {
     await open(path)
+    return true
   } catch (e: any) {
     error(`打开资源管理器失败:${JSON.stringify(e)}`)
+    return false
   }
 }
 

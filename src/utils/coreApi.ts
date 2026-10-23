@@ -65,10 +65,16 @@ export const stopConfig = async (item: RunningItem): Promise<boolean> => {
   if (isAndroid() && isTauri()) {
     return await stopMobileVpn(true)
   }
-  if (item.pid) {
-    return base().killProcess(item.pid)
+  // 持久化恢复的记录会清空 PID（PID 可能已被系统复用）：按配置名重新扫描定位真实进程
+  if (!item.pid || !Number.isInteger(item.pid) || item.pid <= 0) {
+    const fresh = (await base().fetchRunningList([item.configFileName])).find(
+      (i) => i.configFileName === item.configFileName
+    )
+    if (fresh?.pid) return base().killProcess(fresh.pid)
+    // 没有对应进程：视为已停止，由调用方清理 UI 状态
+    return true
   }
-  return true
+  return base().killProcess(item.pid)
 }
 
 /** 运行中列表（Android 来自进程内实例管理器，含虚拟 IP；桌面来自进程扫描） */

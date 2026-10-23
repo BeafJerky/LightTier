@@ -92,6 +92,8 @@ const emits = defineEmits<{
 
 const monacoEditorRef = ref<HTMLElement>()
 let monacoEditor: monaco.editor.IStandaloneCodeEditor | null = null
+// 显式持有的 model：editor.dispose() 不会释放外部传入的 model
+let monacoModel: monaco.editor.ITextModel | null = null
 
 const monacoEditorStyle = computed(() => {
   return {
@@ -103,15 +105,18 @@ const monacoEditorStyle = computed(() => {
 onMounted(() => {
   ensureTomlLanguage()
   if (!monacoEditorRef.value) return
+  monacoModel = monaco.editor.createModel('', props.language)
   monacoEditor = monaco.editor.create(monacoEditorRef.value, {
     // 初始模型
-    model: monaco.editor.createModel('', props.language),
+    model: monacoModel,
     // 是否启用预览图
     minimap: { enabled: true },
     // 圆角
     roundedSelection: true,
     // 主题
     theme: props.theme,
+    readOnly: props.readOnly,
+    wordWrap: props.wordWrap as monaco.editor.IEditorOptions['wordWrap'],
     // 主键
     multiCursorModifier: 'ctrlCmd',
     // 滚动条
@@ -147,16 +152,22 @@ watch(
   }
 )
 
-// 外部值 → 编辑器：相同值跳过（防 v-model 回环）；只读模式下先解锁再写入
+// 外部值 → 编辑器：相同值跳过（防 v-model 回环）。
+// setValue 需要只读解锁（格式化命令同样依赖可写状态），写入后必须恢复原只读状态
 function updateMonacoVal(val: string) {
   if (val === monacoEditor?.getValue()) return
   nextTick(() => {
-    if (monacoEditor?.getOption(monaco.editor.EditorOption.readOnly)) {
-      monacoEditor.updateOptions({ readOnly: false })
-    }
-    monacoEditor?.setValue(val)
+    if (!monacoEditor) return
+    const wasReadOnly = monacoEditor.getOption(monaco.editor.EditorOption.readOnly)
+    if (wasReadOnly) monacoEditor.updateOptions({ readOnly: false })
+    monacoEditor.setValue(val)
     setTimeout(async () => {
-      await monacoEditor?.getAction('editor.action.formatDocument')?.run()
+      if (!monacoEditor) return
+      try {
+        await monacoEditor.getAction('editor.action.formatDocument')?.run()
+      } finally {
+        if (wasReadOnly) monacoEditor?.updateOptions({ readOnly: true })
+      }
     }, 10)
   })
 }
@@ -166,10 +177,12 @@ const updateOptions = (opt: monaco.editor.IStandaloneEditorConstructionOptions) 
   monacoEditor?.updateOptions(opt)
 }
 
-// 页面离开 销毁
+// 页面离开 销毁（model 为外部创建，需单独释放，否则每次打开弹窗都会泄漏一份）
 onBeforeUnmount(() => {
   monacoEditor?.dispose()
   monacoEditor = null
+  monacoModel?.dispose()
+  monacoModel = null
 })
 
 defineExpose({ updateOptions })

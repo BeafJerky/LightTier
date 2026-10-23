@@ -38,6 +38,18 @@ import App from './App.vue'
 
 import { t } from './utils/i18nUtil'
 
+// 触摸 WebView 会把点按也判定为 focus-visible，导致按钮松手后残留焦点框；
+// 记录最近一次输入模态，仅键盘导航时绘制焦点环。
+const rootEl = document.documentElement
+window.addEventListener('pointerdown', () => (rootEl.dataset.input = 'pointer'), true)
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key === 'Tab' || e.key.startsWith('Arrow')) rootEl.dataset.input = 'keyboard'
+  },
+  true
+)
+
 // 创建应用实例并完成全部装配
 const setupAll = async () => {
   const app = createApp(App)

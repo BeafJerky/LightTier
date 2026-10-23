@@ -8,6 +8,7 @@ export default {
     configSub: '管理所有组网配置文件',
     webConfig: 'Web 配置',
     webConfigSub: '管理 Web 配置服务器连接',
+    webConfigTab: 'Web',
     theme: '主题设置',
     configDetail: '配置详情',
     configDetailSub: '查看配置参数与连接信息',
@@ -29,7 +30,16 @@ export default {
     applyTheme: '应用主题',
     previewLabel: '主题预览',
     cream: '奶油',
-    dark: '暗色'
+    dark: '暗色',
+    importTheme: '导入主题',
+    downloadGuide: '下载编写指南',
+    importInvalidName: '文件名只能包含字母、数字、中划线或下划线',
+    importReservedName: '不能使用内置主题名 cream / dark',
+    importInvalidCss: '文件不是有效主题，至少需要 3 个 --theme- 变量',
+    importFailed: '导入主题失败，请检查文件是否可读',
+    importSuccess: '已导入主题「{name}」',
+    guideSaved: '编写指南已保存',
+    guideFailed: '编写指南保存失败'
   },
   newCommon: {
     running: '运行中',
@@ -121,7 +131,6 @@ export default {
     openConfig: '查看「{name}」配置详情'
   },
   newConfig: {
-    configList: '配置列表',
     addConfig: '新建配置',
     mainParams: '主要参数',
     hostname: '主机名',
@@ -192,6 +201,7 @@ export default {
     backupFailed: '原配置备份失败，已取消保存',
     runningFirst: '运行中优先',
     openLogFail: '打开日志目录失败',
+    openDirFail: '打开配置目录失败',
     svcInstallSuccess: '服务安装成功',
     svcInstallFail: '服务安装失败',
     svcStartSuccess: '服务启动成功',
@@ -223,7 +233,6 @@ export default {
       '配置「{name}」存在与当前内核不兼容的字段，内核可能拒绝启动：\n{issues}\n\n仍要继续吗？'
   },
   newMonitor: {
-    monitorLabel: '运行监控',
     configNotFound: '实例不存在或已停止运行',
     totalUpload: '总上传',
     totalDownload: '总下载',
@@ -441,7 +450,6 @@ export default {
       'rpc_portal 自 {since} 起不再从配置文件读取；桌面端由 LightTier 转为 --rpc-portal 命令行参数传入，Android 端不生效'
   },
   newWebConfig: {
-    webConfigLabel: 'Web 配置',
     addConfig: '新建配置',
     openConsole: '打开控制台',
     mainParams: '主要参数',
@@ -453,6 +461,9 @@ export default {
     serviceMgmt: '服务管理',
     installService: '安装服务',
     selectWebConfig: '选择一个 Web 配置以查看详情',
+    androidDesktopOnly: '当前仅支持管理配置；启动 Web 配置需在桌面端进行',
+    consoleCopied: '控制台地址已复制',
+    consoleCopyFail: '复制失败，请手动选择地址',
     stopFailNoPid: '无法停止：未找到 PID',
     svcStopHint: '停止可能需要几秒，请稍后刷新',
     deleteTitle: '删除配置',

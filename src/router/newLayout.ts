@@ -1,5 +1,3 @@
-import { isAndroid } from '@/utils/platformUtil'
-
 const routeChildren: AppRouteRecordRaw[] = [
   {
     path: '',
@@ -71,7 +69,8 @@ const routeChildren: AppRouteRecordRaw[] = [
       subtitle: '管理Web配置服务器连接',
       titleKey: 'newLayout.webConfig',
       subtitleKey: 'newLayout.webConfigSub',
-      icon: 'mdi:web'
+      icon: 'mdi:web',
+      tabRoot: true
     }
   },
   {
@@ -180,8 +179,8 @@ const newLayoutRouterMap: AppRouteRecordRaw[] = [
     component: () => import('@/layout/NewLayout.vue'),
     name: 'NewLayout',
     meta: {},
-    // Web 配置服务仅桌面端提供（Android 隐藏路由与菜单入口）
-    children: isAndroid() ? routeChildren.filter((r) => r.path !== 'web-config') : routeChildren
+    // Android 仅提供 Web 配置管理；本机启动与服务管理依赖桌面端能力
+    children: routeChildren
   }
 ]
 

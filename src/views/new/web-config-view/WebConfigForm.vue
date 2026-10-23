@@ -112,12 +112,7 @@
   </CreamDialog>
 
   <!-- 放弃未保存修改的二次确认 -->
-  <CreamDialog
-    v-model="discardVisible"
-    :title="t('newCommon.discardTitle')"
-    width="380px"
-    :close-on-overlay="false"
-  >
+  <CreamDialog v-model="discardVisible" :title="t('newCommon.discardTitle')" width="380px">
     <p class="wcf-discard-msg">{{ t('newCommon.discardMsg') }}</p>
     <template #footer>
       <LtButton variant="ghost" @click="resolveDiscard(false)">{{

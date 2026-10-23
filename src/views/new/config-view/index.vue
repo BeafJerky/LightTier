@@ -9,39 +9,8 @@
     <!-- 左侧配置列表 -->
     <div class="nw-left">
       <div class="nw-left-header">
-        <div v-if="!isAndroidPlatform" class="nw-left-top">
-          <div class="nw-left-label">{{ t('newConfig.configList') }}</div>
-          <div class="nw-left-btns">
-            <LtButton
-              variant="secondary"
-              size="xs"
-              circle
-              class="nw-add-btn"
-              @click="openAdd"
-              :title="t('newConfig.addConfig')"
-              :aria-label="t('newConfig.addConfig')"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </LtButton>
-          </div>
-        </div>
-        <!-- 搜索固定在标题栏，不随列表滚动；Android 与新增入口并排 -->
-        <div
-          v-if="easyTierStore.configList.length > 0"
-          class="nw-left-tools"
-          :class="{ 'nw-left-tools-android': isAndroidPlatform }"
-        >
+        <!-- 搜索与新增同排；页面标题已由应用栏承担，列表不再重复 -->
+        <div v-if="easyTierStore.configList.length > 0" class="nw-left-tools">
           <div class="nw-search">
             <LtInput
               v-model="configSearch"
@@ -56,18 +25,17 @@
             />
           </div>
           <LtButton
-            v-if="isAndroidPlatform"
             variant="secondary"
-            size="lg"
+            :size="isAndroidPlatform ? 'lg' : 'sm'"
             circle
-            class="nw-m-add"
+            class="nw-add-btn"
             @click="openAdd"
             :title="t('newConfig.addConfig')"
             :aria-label="t('newConfig.addConfig')"
           >
             <svg
-              width="19"
-              height="19"
+              :width="isAndroidPlatform ? 19 : 16"
+              :height="isAndroidPlatform ? 19 : 16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -490,7 +458,8 @@
                 t('newConfig.installService')
               }}</LtButton>
             </template>
-            <template v-else>
+            <!-- 检测中不渲染操作，避免把“未知”当作“未安装/已停止”误触 -->
+            <template v-else-if="currentServiceStatus">
               <LtButton
                 variant="success"
                 size="sm"
@@ -733,7 +702,8 @@ const svcConfigName = ref('')
 const serviceStatusMap = ref<Map<string, string>>(new Map())
 const currentServiceStatus = computed(() => {
   if (!selectedConfig.value) return ''
-  return serviceStatusMap.value.get(selectedConfig.value.configFileName) || 'notInstalled'
+  // 未返回结果前保持空串（UI 显示“检测中”），不能默认成“未安装”误导用户去重复安装
+  return serviceStatusMap.value.get(selectedConfig.value.configFileName) || ''
 })
 
 // 自定义确认弹窗（替代原生 confirm）
@@ -828,6 +798,8 @@ const selectConfig = async (item: RunningItem) => {
 
 // 移动端 master-detail：从详情返回清单
 const closeDetail = () => {
+  // 作废在飞的详情请求，避免关闭后又把内容写回
+  detailSeq++
   selectedConfig.value = null
   selectedDetail.value = null
   detailState.value = 'idle'
@@ -850,7 +822,11 @@ const detailErrorTitle = computed(() => {
 
 // 读取并解析配置 TOML：Mock 环境无 fileName 时展示演示数据并明确标注；
 // Tauri 环境读取/解析失败进入错误态，不再静默回退演示数据
+// 请求序号：快速切换配置时，旧请求返回后不得把上一个配置的内容/错误写到新选中项上
+let detailSeq = 0
 const loadConfigDetail = async (item: RunningItem) => {
+  const seq = ++detailSeq
+  const stale = () => seq !== detailSeq
   detailState.value = 'loading'
   detailError.value = null
   selectedDetail.value = null
@@ -869,10 +845,12 @@ const loadConfigDetail = async (item: RunningItem) => {
   try {
     content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
   } catch {
+    if (stale()) return
     detailState.value = 'error'
     detailError.value = { kind: 'read', message: '' }
     return
   }
+  if (stale()) return
   if (!content || !content.trim()) {
     detailState.value = 'error'
     detailError.value = { kind: 'empty', message: '' }
@@ -889,9 +867,11 @@ const loadConfigDetail = async (item: RunningItem) => {
         /* 回写失败不阻断详情展示 */
       }
     }
+    if (stale()) return
     selectedDetail.value = cfg as unknown as EasyTierConfig
     detailState.value = 'ready'
   } catch (e) {
+    if (stale()) return
     detailState.value = 'error'
     detailError.value = {
       kind: 'parse',
@@ -958,9 +938,10 @@ const openConfigDir = async () => {
   if (!isTauri) return
   try {
     const resDir = await resourceDir()
-    await openPath(await join(resDir, CONFIG_PATH))
+    const opened = await openPath(await join(resDir, CONFIG_PATH))
+    if (!opened) toast(t('newConfig.openDirFail'), 'error')
   } catch {
-    toast(t('newConfig.openLogFail'), 'error')
+    toast(t('newConfig.openDirFail'), 'error')
   }
 }
 
@@ -978,8 +959,9 @@ const updateRunningList = async () => {
     const names = easyTierStore.configList.map((c) => c.configFileName)
     const newList = await coreApi.getRunningList(names)
     easyTierStore.setRunningList(newList)
-  } catch {
-    /* non-Tauri */
+  } catch (e) {
+    // 浏览器预览无 Tauri：静默；真实环境扫描失败时保留上一份状态并留下诊断日志
+    if (isTauri) console.warn('[RunningList] 运行态扫描失败，保留上一份状态:', e)
   }
 }
 
@@ -1265,11 +1247,14 @@ const deleteSelectedConfig = async () => {
     toast(t('newCommon.deleteBlockedRunning'), 'warning', 4000)
     return
   }
-  // 已安装 Windows 服务时先卸载，避免服务指向被删除的 TOML
-  const svcStatus = serviceStatusMap.value.get(target.configFileName)
-  if (svcStatus && svcStatus !== 'notInstalled') {
-    toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
-    return
+  // 已安装 Windows 服务时先卸载，避免服务指向被删除的 TOML。
+  // 以实时检测为准：首屏状态尚未返回时，缓存里没有记录，不能据此放行删除。
+  if (!isAndroidPlatform) {
+    const svcStatus = await checkService(target.configFileName).catch(() => 'unknown')
+    if (svcStatus !== 'notInstalled') {
+      toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
+      return
+    }
   }
   const ok = await showConfirm(
     t('newConfig.deleteTitle'),
@@ -1319,17 +1304,19 @@ const exitRouteStatusText = computed(() => {
 })
 
 // 持久化开关标记到配置 TOML 的 [lighttier] 表（同时清除旧版 flags/顶层标记）
-const persistExitRouteFlag = async (enabled: boolean): Promise<boolean> => {
-  const item = selectedConfig.value
-  if (!item?.fileName) return false
+// item 由调用方在操作开始时固定，避免等待期间切换选中项后把标记写进别的配置文件
+const persistExitRouteFlag = async (item: RunningItem, enabled: boolean): Promise<boolean> => {
+  if (!item.fileName) return false
   try {
     const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
     const cfg = toml.parse(raw) as any
     setExitRouteEnabled(cfg, enabled)
     await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
-    // 同步内存视图，避免开关状态与文件不一致
+    // 同步内存视图，避免开关状态与文件不一致；选中项已切换时不改其他配置的详情
     const detail = selectedDetail.value as any
-    if (detail) setExitRouteEnabled(detail, enabled)
+    if (detail && selectedConfig.value?.configFileName === item.configFileName) {
+      setExitRouteEnabled(detail, enabled)
+    }
     return true
   } catch {
     return false
@@ -1337,26 +1324,26 @@ const persistExitRouteFlag = async (enabled: boolean): Promise<boolean> => {
 }
 
 const toggleExitRoute = async () => {
-  if (!selectedConfig.value || !selectedDetail.value || isExitRouteBusy.value) return
+  // 操作期间固定目标配置与详情快照：等待路由命令期间用户可能已切换到其他配置
+  const item = selectedConfig.value
+  const detail = selectedDetail.value
+  if (!item || !detail || isExitRouteBusy.value) return
   isExitRouteBusy.value = true
   try {
     if (exitRouteFlag.value) {
       // 停用：只清理当前配置的路由，失败时保留标记以便重试
-      const result = await clearExitRoute(selectedConfig.value.configFileName)
+      const result = await clearExitRoute(item.configFileName)
       if (result.ok) {
-        await persistExitRouteFlag(false)
+        await persistExitRouteFlag(item, false)
         toast(t('newConfig.exitRouteCleared'), 'success')
       } else {
         toast(t('newConfig.exitRouteFail'), 'error')
       }
     } else {
       // 启用：添加路由 + 写入标记
-      const res = await setExitRoute(
-        selectedDetail.value as any,
-        selectedConfig.value.configFileName
-      )
+      const res = await setExitRoute(detail as any, item.configFileName)
       if (res.ok) {
-        await persistExitRouteFlag(true)
+        await persistExitRouteFlag(item, true)
         toast(t('newConfig.exitRouteSuccess'), 'success')
       } else if (res.reason === 'no-exit') {
         toast(t('newConfig.exitRouteNoExit'), 'warning')
@@ -1453,7 +1440,8 @@ const loadServiceStatus = async (configFileName: string) => {
     const status = await checkService(configFileName)
     serviceStatusMap.value.set(configFileName, status)
   } catch {
-    serviceStatusMap.value.set(configFileName, 'notInstalled')
+    // 检测失败不能伪装成“未安装”：unknown 会同时阻止删除，避免遗留孤儿服务
+    serviceStatusMap.value.set(configFileName, 'unknown')
   }
 }
 
@@ -1568,16 +1556,6 @@ const handleUninstallService = async () => {
   gap: var(--theme-space-2);
 }
 
-.nw-left-label {
-  padding: 0 var(--theme-space-1);
-  font-family: var(--theme-font-display);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 2px;
-  color: var(--theme-text-muted);
-  text-transform: uppercase;
-}
-
 .nw-left-header {
   display: flex;
   padding: 0 var(--theme-space-1);
@@ -1585,22 +1563,17 @@ const handleUninstallService = async () => {
   gap: var(--theme-space-2);
 }
 
-.nw-left-top {
+/* 搜索框固定于列表顶部，列表滚动时保持可见 */
+.nw-left-tools {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--theme-space-2);
 }
 
-.nw-left-btns {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-1);
-}
-
-/* 搜索框：固定于标题栏，列表滚动时保持可见 */
 .nw-search {
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
 .nw-search-input {
@@ -1608,7 +1581,12 @@ const handleUninstallService = async () => {
 }
 
 .nw-add-btn {
-  color: var(--theme-text-muted);
+  color: var(--theme-accent-primary);
+}
+
+.nw-add-btn:active {
+  background: var(--theme-bg-active);
+  transform: scale(0.94);
 }
 
 .nw-left-scroll {
@@ -1818,26 +1796,6 @@ const handleUninstallService = async () => {
   flex: none;
 }
 
-/* --- 搜索与新增入口 --- */
-.nw-left-tools-android {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.nw-left-tools-android .nw-search {
-  flex: 1;
-}
-
-.nw-m-add {
-  color: var(--theme-accent-primary);
-}
-
-.nw-m-add:active {
-  background: var(--theme-bg-active);
-  transform: scale(0.94);
-}
-
 /* --- 配置分组列表 --- */
 .nw-root.nw-android .nw-card-list {
   overflow: hidden;
@@ -1947,7 +1905,7 @@ const handleUninstallService = async () => {
     background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
   }
 
-  .nw-m-add:hover {
+  .nw-add-btn:hover {
     background: var(--theme-bg-hover);
   }
 }

@@ -2,31 +2,30 @@
   <div class="nwc-root" :class="{ 'nwc-detail-open': !!selectedConfig }">
     <!-- 左侧配置列表 -->
     <div class="nwc-left">
+      <!-- 页面标题已由应用栏承担，列表顶部仅保留新增入口 -->
       <div class="nwc-left-header">
-        <div class="nwc-left-label">{{ t('newWebConfig.webConfigLabel') }}</div>
-        <div class="nwc-left-btns">
-          <LtButton
-            variant="secondary"
-            size="xs"
-            circle
-            @click="openAdd"
-            :title="t('newWebConfig.addConfig')"
-            :aria-label="t('newWebConfig.addConfig')"
+        <LtButton
+          variant="secondary"
+          :size="isAndroidPlatform ? 'lg' : 'sm'"
+          circle
+          class="nwc-add-btn"
+          @click="openAdd"
+          :title="t('newWebConfig.addConfig')"
+          :aria-label="t('newWebConfig.addConfig')"
+        >
+          <svg
+            :width="isAndroidPlatform ? 19 : 16"
+            :height="isAndroidPlatform ? 19 : 16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </LtButton>
-        </div>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </LtButton>
       </div>
       <div class="nwc-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.webConfigListLoading" />
@@ -37,7 +36,7 @@
           :class="{ active: selectedConfig?.configFileName === item.configFileName }"
           @click="selectConfig(item)"
         >
-          <div class="nwc-card-top">
+          <div v-if="!isAndroidPlatform" class="nwc-card-top">
             <div class="nwc-card-status">
               <span class="nwc-dot" :class="getStatusClass(item)"></span>
               <span class="nwc-status-text">{{ mapCardStatus(item) }}</span>
@@ -48,7 +47,8 @@
           </div>
           <div class="nwc-card-name">{{ item.configFileName }}</div>
           <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
-          <div class="nwc-card-actions" @click.stop>
+          <!-- Android 仅管理配置，不提供本机启动 -->
+          <div v-if="!isAndroidPlatform" class="nwc-card-actions" @click.stop>
             <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
             <LtButton
               size="compact"
@@ -88,6 +88,7 @@
           </LtButton>
           <h3 class="nwc-detail-title">{{ selectedConfig.configFileName }}</h3>
           <span
+            v-if="!isAndroidPlatform"
             class="nwc-badge"
             :class="
               isChecking(selectedConfig) ? 'checking' : isRunning(selectedConfig) ? 'on' : 'off'
@@ -106,6 +107,7 @@
           <LtButton variant="secondary" @click="openEdit">{{ t('newCommon.edit') }}</LtButton>
           <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
           <LtButton
+            v-if="!isAndroidPlatform"
             class="nwc-detail-lifecycle"
             :variant="isRunning(selectedConfig) ? 'soft' : 'success'"
             :disabled="isChecking(selectedConfig)"
@@ -117,6 +119,10 @@
           }}</LtButton>
         </div>
       </div>
+
+      <p v-if="isAndroidPlatform" class="nwc-platform-hint">
+        {{ t('newWebConfig.androidDesktopOnly') }}
+      </p>
 
       <!-- 主要参数 -->
       <div class="nwc-section"
@@ -153,8 +159,8 @@
         </div>
       </div>
 
-      <!-- 服务管理 -->
-      <div class="nwc-section"
+      <!-- 服务管理：Windows 服务能力，仅桌面端提供 -->
+      <div v-if="!isAndroidPlatform" class="nwc-section"
         ><div class="nwc-section-title">{{ t('newWebConfig.serviceMgmt') }}</div>
         <div class="nwc-svc-bar">
           <div class="nwc-svc-status">
@@ -328,7 +334,8 @@
  * - 配置列表持久化在独立 Web 配置文件（readWebConfigList / writeWebConfigList）
  * - 启动方式：以 `--config-server <url>` 拉起内核进程（runEasyTierCoreWeb）或注册为 Windows 服务
  * - 状态判定：进程扫描（命令行匹配 config-server URL）+ 服务状态，合并为卡片状态
- * 平台差异：窄屏 master-detail 互斥展示；控制台地址可点击直接打开外部浏览器。
+ * 平台差异：窄屏 master-detail 互斥展示；控制台地址桌面端直接打开浏览器，
+ * Android 仅管理配置，复制地址由用户自行打开，且不显示运行态与 Windows 服务管理。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -336,6 +343,7 @@ import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { openPath } from '@/utils/fileUtil'
+import { isAndroid } from '@/utils/platformUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { LtButton, LtInput } from '@/components/ui'
@@ -347,6 +355,7 @@ defineOptions({ name: 'NewWebConfigView' })
 const { t } = useI18n()
 const easyTierStore = useEasyTierStore()
 const { show: toast } = useCreamToast()
+const isAndroidPlatform = isAndroid()
 // Web 配置与服务操作统一从 useMockData 获取（Tauri 真实实现 / 浏览器 Mock 降级）
 const {
   readWebConfigList,
@@ -450,8 +459,10 @@ watch(cfmVisible, (v) => {
 // 运行判定：独立进程（running）或 Windows 服务（runningService）均视为运行中
 const isRunning = (item: FormWebData) =>
   item.status === 'running' || item.status === 'runningService'
-// 运行态未知（持久化旧值已丢弃 / 正在进行进程与服务扫描）时不得猜测运行或停止
-const isChecking = (item: FormWebData) => !item.status || item.status === 'checking'
+// 运行态未知（持久化旧值已丢弃 / 正在进行进程与服务扫描）时不得猜测运行或停止；
+// Android 不探测运行态，也不应因此阻塞删除等配置管理操作
+const isChecking = (item: FormWebData) =>
+  !isAndroidPlatform && (!item.status || item.status === 'checking')
 const getStatusClass = (item: FormWebData) =>
   isChecking(item) ? 'checking' : isRunning(item) ? 'on' : 'off'
 const mapCardStatus = (item: FormWebData): string => {
@@ -488,6 +499,8 @@ const extractConfigServerUrl = (cmdLine: string): string | null => {
 // 刷新运行时状态：进程扫描 + 服务状态合并到列表项，并恢复/初始化选中项（FAB 已负责文件加载）
 const refreshWebRuntimeState = async () => {
   const list = webConfigList.value
+  // 记录上一轮状态：进程扫描失败时恢复，避免把“检测失败”显示成“未运行”
+  const previous = list.map((item) => ({ item, status: item.status, pid: item.pid }))
   // 扫描完成前统一显示“检测中”，避免把上一轮/持久化状态当作当前状态
   for (const item of list) item.status = 'checking'
   // 列表已被重新加载替换为全新对象：选中项立即指向新对象，避免详情继续渲染旧状态
@@ -495,8 +508,26 @@ const refreshWebRuntimeState = async () => {
     const selectedName = selectedConfig.value.configFileName
     selectedConfig.value = list.find((c) => c.configFileName === selectedName) || null
   }
+  // Android 无外部进程与 Windows 服务，跳过运行态探测
+  if (isAndroidPlatform) {
+    for (const item of list) {
+      item.status = undefined
+      item.pid = undefined
+    }
+    return
+  }
   // 检测运行中的进程
-  const runList = await getRunningWebProcesses()
+  let runList: Awaited<ReturnType<typeof getRunningWebProcesses>>
+  try {
+    runList = await getRunningWebProcesses()
+  } catch (e) {
+    console.warn('[RunningList] Web 进程扫描失败，保留上一份状态:', e)
+    for (const p of previous) {
+      p.item.status = p.status
+      p.item.pid = p.pid
+    }
+    return
+  }
   for (const item of list) {
     let matched = false
     if (runList?.length) {
@@ -689,9 +720,20 @@ const stopWeb = async (item: FormWebData) => {
   }
 }
 
-// 打开 Web 控制台（系统默认浏览器/文件管理器）
-const openConsoleUrl = () => {
-  if (selectedConfig.value?.webUrl) openPath(selectedConfig.value.webUrl)
+// 打开 Web 控制台：桌面端交给系统浏览器；Android 无 shell open 能力，改为复制地址
+const openConsoleUrl = async () => {
+  const url = selectedConfig.value?.webUrl
+  if (!url) return
+  if (isAndroidPlatform) {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast(t('newWebConfig.consoleCopied'), 'success')
+    } catch {
+      toast(t('newWebConfig.consoleCopyFail'), 'error')
+    }
+    return
+  }
+  openPath(url)
 }
 
 // ========== 服务管理 ==========
@@ -819,27 +861,27 @@ onUnmounted(() => {
   gap: var(--theme-space-2);
 }
 
-.nwc-left-label {
-  padding: 0 var(--theme-space-1);
-  font-family: var(--theme-font-display);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 2px;
-  color: var(--theme-text-muted);
-  text-transform: uppercase;
-}
-
 .nwc-left-header {
   display: flex;
+  min-height: 28px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 var(--theme-space-1);
 }
 
-.nwc-left-btns {
-  display: flex;
-  align-items: center;
-  gap: var(--theme-space-1);
+.nwc-add-btn {
+  color: var(--theme-accent-primary);
+}
+
+.nwc-add-btn:active {
+  background: var(--theme-bg-active);
+  transform: scale(0.94);
+}
+
+@media (hover: hover) {
+  .nwc-add-btn:hover {
+    background: var(--theme-bg-hover);
+  }
 }
 
 .nwc-left-scroll {
@@ -1061,6 +1103,17 @@ onUnmounted(() => {
   }
 }
 
+/* Android：说明本机能力边界，避免误以为配置不可用 */
+.nwc-platform-hint {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin: 0 0 var(--theme-space-4);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-accent-primary) 6%, transparent);
+  border-radius: var(--theme-radius-md);
+}
+
 .nwc-section {
   margin-bottom: var(--theme-space-4);
 }
@@ -1116,11 +1169,18 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
+/* 裸按钮默认 stretch + 内容居中，会在值单元格里把链接顶到中间；
+   改为按内容收缩并左对齐，长地址在窄屏下仍可换行 */
 .nwc-link {
+  max-width: 100%;
   color: var(--theme-accent-primary);
   text-align: left;
   text-decoration: underline;
+  word-break: break-all;
+  white-space: normal;
   cursor: pointer;
+  align-self: flex-start;
+  justify-content: flex-start;
 }
 
 .nwc-link:hover {

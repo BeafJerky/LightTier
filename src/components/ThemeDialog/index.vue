@@ -9,6 +9,57 @@
             t('newTheme.refreshList')
           }}</LtButton>
         </div>
+        <div class="td-tools">
+          <LtButton
+            variant="ghost"
+            size="sm"
+            class="td-tool-btn"
+            :loading="importing"
+            @click="handleImportClick"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 16V4M7 9l5-5 5 5" />
+              <path d="M4 20h16" />
+            </svg>
+            {{ t('newTheme.importTheme') }}
+          </LtButton>
+          <LtButton variant="ghost" size="sm" class="td-tool-btn" @click="handleDownloadGuide">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 4v12M7 11l5 5 5-5" />
+              <path d="M4 20h16" />
+            </svg>
+            {{ t('newTheme.downloadGuide') }}
+          </LtButton>
+        </div>
+        <input
+          ref="fileInputRef"
+          class="lt-sr-only"
+          type="file"
+          accept=".css,text/css,text/plain"
+          tabindex="-1"
+          aria-hidden="true"
+          @change="onThemeFilePicked"
+        />
         <div class="td-list" role="radiogroup" :aria-label="t('newLayout.theme')">
           <label
             v-for="th in themes"
@@ -119,8 +170,13 @@
  */
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isTauri } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
+import { readTextFile } from '@tauri-apps/plugin-fs'
 import { systemDefaultTheme, useThemeLoader } from '@/hooks/useThemeLoader'
-import { useExternalThemes } from '@/hooks/useExternalThemes'
+import { downloadThemeGuide, importThemeFile, useExternalThemes } from '@/hooks/useExternalThemes'
+import { useCreamToast } from '@/hooks/useCreamToast'
+import { isAndroid } from '@/utils/platformUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import { LtButton } from '@/components/ui'
 
@@ -152,6 +208,8 @@ const defaultThemeName = systemDefaultTheme()
 const previewRef = ref<HTMLElement>()
 // 当前预览（选中）的主题名，应用时以它为准；初值为当前生效主题
 const previewName = ref(currentTheme.value)
+// 已点“恢复默认”：应用时清空显式选择并回到系统默认，而不是写入某个具体主题名
+const pendingReset = ref(false)
 let shadowRoot: ShadowRoot | null = null
 
 interface ThemeInfo {
@@ -177,8 +235,88 @@ const refreshList = async () => {
   ]
 }
 
+const toast = useCreamToast()
+const fileInputRef = ref<HTMLInputElement>()
+const importing = ref(false)
+
+// 桌面端走原生文件对话框；Android 与浏览器预览走 file input
+const isDesktopRuntime = (): boolean => {
+  try {
+    return isTauri() && !isAndroid()
+  } catch {
+    return false
+  }
+}
+
+// 校验并保存主题，成功后刷新列表并直接预览新主题
+const importTheme = async (fileName: string, cssText: string) => {
+  importing.value = true
+  try {
+    const result = await importThemeFile(fileName, cssText)
+    if (!result.ok) {
+      const reasonText = {
+        'invalid-name': t('newTheme.importInvalidName'),
+        'reserved-name': t('newTheme.importReservedName'),
+        'invalid-css': t('newTheme.importInvalidCss'),
+        'write-failed': t('newTheme.importFailed')
+      }[result.reason]
+      toast.error(reasonText)
+      return
+    }
+    await refreshList()
+    previewName.value = result.theme.name
+    nextTick(() => renderPreview(result.theme.name))
+    toast.success(t('newTheme.importSuccess', { name: result.theme.label }))
+  } finally {
+    importing.value = false
+  }
+}
+
+const handleImportClick = async () => {
+  if (importing.value) return
+  if (!isDesktopRuntime()) {
+    fileInputRef.value?.click()
+    return
+  }
+  try {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'Theme CSS', extensions: ['css'] }]
+    })
+    if (!selected) return
+    const path = Array.isArray(selected) ? selected[0] : selected
+    if (!path) return
+    const fileName = path.split(/[\\/]/).pop() || path
+    await importTheme(fileName, await readTextFile(path))
+  } catch (error) {
+    console.error('读取主题文件失败:', error)
+    toast.error(t('newTheme.importFailed'))
+  }
+}
+
+const onThemeFilePicked = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    await importTheme(file.name, await file.text())
+  } catch (error) {
+    console.error('读取主题文件失败:', error)
+    toast.error(t('newTheme.importFailed'))
+  }
+}
+
+const handleDownloadGuide = async () => {
+  const result = await downloadThemeGuide()
+  if (result === 'saved') toast.success(t('newTheme.guideSaved'))
+  else if (result === 'failed') toast.error(t('newTheme.guideFailed'))
+}
+
 // 选中主题并在右侧预览
 const selectTheme = (name: string) => {
+  pendingReset.value = false
   previewName.value = name
   nextTick(() => renderPreview(name))
 }
@@ -483,14 +621,21 @@ const renderPreview = (name: string) => {
 
 // 应用当前预览主题（外部主题需同步传入其 CSS 文本）并关闭弹窗
 const handleApply = () => {
+  // “恢复默认”只在点“应用”时真正落盘，取消/关闭弹窗不改变当前主题
+  if (pendingReset.value) {
+    resetTheme()
+    visible.value = false
+    return
+  }
   const ext = externalThemes.value.find((t) => t.name === previewName.value)
   applyTheme(previewName.value, ext?.cssText)
   visible.value = false
 }
 
-// 重置回默认主题（跟随系统深色偏好）并同步预览
+// 恢复默认仅切换预览（跟随系统深色偏好），持久化推迟到“应用主题”
 const handleReset = () => {
-  const fallback = resetTheme()
+  pendingReset.value = true
+  const fallback = systemDefaultTheme()
   previewName.value = fallback
   nextTick(() => renderPreview(fallback))
 }
@@ -498,6 +643,7 @@ const handleReset = () => {
 // 弹窗打开时加载预览
 watch(visible, (v) => {
   if (v) {
+    pendingReset.value = false
     previewName.value = currentTheme.value
     nextTick(() => renderPreview(previewName.value))
   }
@@ -545,6 +691,26 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   gap: var(--theme-space-1);
+}
+
+/* 导入 / 指南入口：桌面侧栏为竖向工具组，Android 页由 theme-view 覆盖为分组卡片 */
+.td-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.td-tool-btn {
+  width: 100%;
+  font-size: 12px;
+  justify-content: flex-start;
+}
+
+.td-tool-btn svg {
+  width: 14px;
+  height: 14px;
+  color: var(--theme-accent-primary, #e8a0a0);
+  flex-shrink: 0;
 }
 
 .td-item {
