@@ -33,6 +33,7 @@
             :placeholder="t('newCommon.searchConfig')"
             :aria-label="t('newCommon.searchConfig')"
             @keydown.esc="configSearch = ''"
+            @keydown.enter.prevent="blurSearchInput"
           />
           <button
             v-if="configSearch"
@@ -628,6 +629,8 @@ const selectedRunning = computed(() =>
 
 // 列表搜索：按配置名/文件名不区分大小写过滤；运行中优先且保持原加载顺序（稳定排序）
 const configSearch = ref('')
+// Android 软键盘的“搜索”键：收起键盘，避免遮挡筛选结果
+const blurSearchInput = (e: KeyboardEvent) => (e.target as HTMLInputElement).blur()
 const filteredConfigList = computed(() => {
   const keyword = configSearch.value.trim().toLowerCase()
   return easyTierStore.configList
@@ -1738,6 +1741,11 @@ const handleUninstallService = async () => {
 /* Android：详情为独立路由，任何宽度下列表与详情都互斥展示 */
 .nw-root.nw-android {
   flex-direction: column;
+}
+
+/* 列表底部为新增 FAB 预留空间，避免最后一张卡片被悬浮按钮压住 */
+.nw-root.nw-android .nw-left-scroll {
+  padding-bottom: calc(var(--theme-space-3) + 64px);
 }
 
 .nw-root.nw-android .nw-left {

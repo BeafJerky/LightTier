@@ -344,7 +344,7 @@
   <Teleport to="body">
     <div
       class="cream-toast-container"
-      :class="{ 'nl-toast-android': showTabBar }"
+      :class="{ 'nl-toast-android': isAndroidPlatform }"
       role="alert"
       aria-live="polite"
     >
@@ -469,6 +469,19 @@ const refreshCurrentPage = async () => {
   }
 }
 
+// Android 从后台回到前台：离开超过 5 秒才静默刷新运行态，
+// 避免切到通知栏、权限弹窗后立刻回来也触发一轮请求。
+let hiddenAt = 0
+const handleVisibilityChange = () => {
+  if (!isAndroidPlatform) return
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now()
+    return
+  }
+  if (hiddenAt && Date.now() - hiddenAt > 5000) easyTierStore.triggerPageRefresh()
+  hiddenAt = 0
+}
+
 // 底部导航：对应桌面侧边栏一级入口（按 Android 习惯固定四项）
 const androidTabs = [
   { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
@@ -478,9 +491,20 @@ const androidTabs = [
 ]
 const isTabActive = (path: string) =>
   path === '/new' ? route.path === '/new' : route.path === path || route.path.startsWith(path + '/')
+// 再次点击当前标签：回到页面顶部（Android 列表页惯用交互）
+const scrollActivePageToTop = () => {
+  document
+    .querySelectorAll<HTMLElement>('.nl-content, .nw-left-scroll, .nm-left-scroll')
+    .forEach((el) => {
+      if (el.scrollTop > 0) el.scrollTo({ top: 0, behavior: 'smooth' })
+    })
+}
 // 底栏切换用 replace：一级入口之间不留历史栈，系统返回键直接退出应用
 const switchTab = (path: string) => {
-  if (route.path === path) return
+  if (route.path === path) {
+    scrollActivePageToTop()
+    return
+  }
   router.replace(path)
 }
 
@@ -500,15 +524,16 @@ const openTheme = () => {
 }
 
 // 返回上一页；无历史记录时按模块回到对应一级页（Android 返回键/返回按钮共用）
+// 直达/刷新后恢复的子页没有历史栈，用 replace 回一级页，避免把子页重新压回栈里
 const goBack = () => {
   if (window.history.state?.back) {
     router.back()
     return
   }
-  if (route.path.startsWith('/new/settings')) router.push('/new/settings')
-  else if (route.path.startsWith('/new/config')) router.push('/new/config')
-  else if (route.path.startsWith('/new/monitor')) router.push('/new/monitor')
-  else router.push('/new')
+  if (route.path.startsWith('/new/settings')) router.replace('/new/settings')
+  else if (route.path.startsWith('/new/config')) router.replace('/new/config')
+  else if (route.path.startsWith('/new/monitor')) router.replace('/new/monitor')
+  else router.replace('/new')
 }
 
 // 主菜单项从路由表派生：仅带 title 的项进菜单（subPage 二级页面自动排除）
@@ -579,6 +604,7 @@ const closeWindow = async () => {
 
 onMounted(() => {
   document.addEventListener('click', handleOutsideClick)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   const saved = localStorage.getItem('theme')
   // 主题初始水合：仅在页面尚未设置 data-theme 时兜底恢复
   //（index.html 已按「存储 > 系统深色偏好」预设，此处避免遗漏导致无主题）
@@ -609,6 +635,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopSystemThemeWatch?.()
   unlistenResize?.()
 })
@@ -955,6 +982,10 @@ onBeforeUnmount(() => {
   background: var(--theme-bg-hover);
 }
 
+.nl-back-btn:active {
+  background: var(--theme-bg-active);
+}
+
 /* 窄屏抽屉遮罩 */
 .nl-mask {
   position: fixed;
@@ -1190,6 +1221,10 @@ onBeforeUnmount(() => {
   background: var(--theme-bg-hover);
 }
 
+.nl-appbar-action:active {
+  background: var(--theme-bg-active);
+}
+
 .nl-appbar-action:disabled {
   cursor: default;
 }
@@ -1258,6 +1293,12 @@ onBeforeUnmount(() => {
   color: var(--theme-text-secondary);
 }
 
+/* 触摸端按下反馈：WebView 没有鼠标悬停，按压反馈靠 :active */
+.nl-tab:active {
+  color: var(--theme-accent-primary);
+  opacity: 0.75;
+}
+
 .nl-tab.active {
   color: var(--theme-accent-primary);
 }
@@ -1291,7 +1332,7 @@ onBeforeUnmount(() => {
 }
 
 /* Toast 抬高到底栏之上，避免被导航条遮挡 */
-.nl-toast-android {
+.cream-toast-container.nl-toast-android {
   bottom: calc(78px + var(--lt-safe-area-bottom, 0px));
 }
 

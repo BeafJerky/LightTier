@@ -51,7 +51,7 @@ const configNameList = computed(() => easyTierStore.configList.map((c) => c.conf
 // 返回列表页；无历史记录（直达）时回退到配置列表路由
 const goBack = () => {
   if (window.history.state?.back) router.back()
-  else router.push('/new/config')
+  else router.replace('/new/config')
 }
 
 onMounted(async () => {

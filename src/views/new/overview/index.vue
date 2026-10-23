@@ -7,85 +7,354 @@
       </span>
     </div>
 
-    <div class="nd-section">
-      <div class="nd-stats">
-        <div class="nd-stat-card">
-          <div class="nd-stat-icon running">▶</div>
-          <div class="nd-stat-body">
-            <span class="nd-stat-num">{{ runningCount }}</span>
-            <span class="nd-stat-lbl">{{ t('newCommon.running') }}</span>
-          </div>
+    <template v-if="isAndroidPlatform">
+      <!-- 安卓：连接状态优先，配置列表作为切换入口 -->
+      <section
+        v-if="displayList.length > 0"
+        class="nda-hero"
+        :class="{ 'nda-hero-on': activeConfig }"
+      >
+        <div class="nda-hero-head">
+          <span class="nda-state">
+            <span class="nda-state-dot" :class="{ on: activeConfig }"></span>
+            {{ activeConfig ? t('newOverview.connected') : t('newOverview.disconnected') }}
+          </span>
+          <span v-if="activeConfig?.virtualIp" class="nda-chip nda-chip-vip">
+            {{ activeConfig.virtualIp }}
+          </span>
+          <span v-else-if="!activeConfig && quickConnectConfig" class="nda-chip">{{
+            quickConnectCaption
+          }}</span>
         </div>
-        <div class="nd-stat-card">
-          <div class="nd-stat-icon stopped">■</div>
-          <div class="nd-stat-body">
-            <span class="nd-stat-num">{{ stoppedCount }}</span>
-            <span class="nd-stat-lbl">{{ t('newCommon.stopped') }}</span>
-          </div>
-        </div>
-        <div class="nd-stat-card">
-          <div class="nd-stat-icon total">◈</div>
-          <div class="nd-stat-body">
-            <span class="nd-stat-num">{{ totalCount }}</span>
-            <span class="nd-stat-lbl">{{ t('newOverview.totalConfig') }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <div class="nd-section">
-      <div class="nd-grid lt-loading-host">
-        <LoadingOverlay :show="easyTierStore.configListLoading" />
-        <div
-          v-for="cfg in displayList"
-          :key="cfg.configFileName"
-          class="nd-config-card"
-          :class="{ 'ndc-conflict': cfg.conflictPorts.length > 0 }"
-        >
-          <div class="ndc-top">
-            <div class="ndc-status">
-              <span class="ndc-dot" :class="cfg.running ? 'on' : 'off'"></span>
-              <span class="ndc-status-text">{{
-                cfg.running ? t('newCommon.running') : t('newCommon.stopped')
-              }}</span>
-            </div>
-            <div class="ndc-top-right">
-              <span v-if="cfg.conflictPorts.length > 0" class="ndc-conflict-badge"
-                >⚠ {{ cfg.conflictPorts.join(', ') }}</span
-              >
-              <span v-if="cfg.pid" class="ndc-pid">PID {{ cfg.pid }}</span>
-              <span v-if="cfg.virtualIp" class="ndc-vip">{{ cfg.virtualIp }}</span>
-            </div>
+        <div class="nda-hero-name">{{ heroConfig?.configFileName }}</div>
+        <p class="nda-hero-desc">{{ heroDescription }}</p>
+
+        <div v-if="activeConfig" class="nda-metrics">
+          <div class="nda-metric">
+            <span class="nda-metric-label">{{ t('newOverview.nodes') }}</span>
+            <strong class="nda-metric-value">{{ activeSummary?.nodeCount ?? '—' }}</strong>
           </div>
-          <div class="ndc-name">{{ cfg.configFileName }}</div>
-          <div v-if="cfg.running" class="ndc-summary">
-            <template v-if="summaryMap[cfg.configFileName]">
-              ● {{ summaryMap[cfg.configFileName].nodeCount }} {{ t('newOverview.nodes') }} ·
-              {{ summaryMap[cfg.configFileName].avgLatency }}
-            </template>
-            <template v-else>…</template>
-          </div>
-          <div class="ndc-actions">
-            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-            <button
-              type="button"
-              class="ndc-btn"
-              :class="cfg.running ? 'ndc-btn-stop' : 'ndc-btn-run'"
-              @click="cfg.running ? stopAction(cfg) : startAction(cfg)"
-              >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</button
-            >
+          <span class="nda-metric-sep"></span>
+          <div class="nda-metric">
+            <span class="nda-metric-label">{{ t('newMonitor.avgLatency') }}</span>
+            <strong class="nda-metric-value">{{ activeSummary?.avgLatency ?? '—' }}</strong>
           </div>
         </div>
-        <div v-if="displayList.length === 0 && !easyTierStore.configListLoading" class="nd-empty">
-          <span class="nd-empty-icon">✦</span>
-          <p class="nd-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
-          <span class="nd-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
-          <button type="button" class="nd-empty-cta" @click="goCreateConfig">
-            {{ t('newCommon.createConfig') }}
+
+        <div v-if="heroConfig" class="nda-hero-actions">
+          <button
+            v-if="activeConfig"
+            type="button"
+            class="nda-btn nda-btn-stop"
+            :disabled="isQueued"
+            @click="stopHero"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            <span>{{ t('newOverview.disconnect') }}</span>
+          </button>
+          <button
+            v-else
+            type="button"
+            class="nda-btn nda-btn-connect"
+            :disabled="isQueued"
+            @click="connectHero"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z"
+              />
+            </svg>
+            <span>{{ t('newOverview.connectNow') }}</span>
+          </button>
+
+          <button
+            v-if="activeConfig"
+            type="button"
+            class="nda-btn nda-btn-ghost"
+            @click="openHeroMonitor"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              aria-hidden="true"
+            >
+              <path d="M3 12h4l2-6 4 12 2-6h6" />
+            </svg>
+            <span>{{ t('newOverview.viewMonitor') }}</span>
+          </button>
+          <button v-else type="button" class="nda-btn nda-btn-ghost" @click="openHeroConfig">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              aria-hidden="true"
+            >
+              <path d="M6 3h9l4 4v14H6z" />
+              <path d="M14 3v5h5M9 13h6M9 17h5" />
+            </svg>
+            <span>{{ t('newOverview.configDetail') }}</span>
           </button>
         </div>
+
+        <div class="nda-hero-foot">
+          <span>{{ t('newOverview.runningSummary', { n: runningCount }) }}</span>
+          <span class="nda-sep"></span>
+          <span>{{ t('newOverview.stoppedSummary', { n: stoppedCount }) }}</span>
+          <span class="nda-sep"></span>
+          <span>{{ t('newOverview.configsTotal', { n: totalCount }) }}</span>
+        </div>
+      </section>
+
+      <section class="nda-config-section">
+        <div class="nda-section-head">
+          <h2 class="nda-section-title">{{ t('newOverview.myConfigs') }}</h2>
+          <button
+            v-if="displayList.length > 0"
+            type="button"
+            class="nda-new-btn"
+            :aria-label="t('newConfig.addConfig')"
+            :title="t('newConfig.addConfig')"
+            @click="goCreateConfig"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="nda-list lt-loading-host">
+          <LoadingOverlay :show="easyTierStore.configListLoading" />
+          <div
+            v-for="cfg in displayList"
+            :key="cfg.configFileName"
+            class="nda-row"
+            :class="{
+              'nda-row-on': cfg.running,
+              'nda-row-conflict': cfg.conflictPorts.length > 0
+            }"
+          >
+            <button
+              type="button"
+              class="nda-row-main"
+              :aria-label="t('newOverview.openConfig', { name: cfg.configFileName })"
+              @click="goConfigDetail(cfg)"
+            >
+              <span class="nda-row-icon" :class="{ on: cfg.running }">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <circle cx="6" cy="12" r="2.4" />
+                  <circle cx="18" cy="6" r="2.4" />
+                  <circle cx="18" cy="18" r="2.4" />
+                  <path d="M8.2 11.1l7.6-4.1M8.2 12.9l7.6 4.1" />
+                </svg>
+              </span>
+              <span class="nda-row-text">
+                <span class="nda-row-name">
+                  {{ cfg.configFileName }}
+                  <span
+                    v-if="cfg.conflictPorts.length > 0"
+                    class="nda-row-warn"
+                    :title="cfg.conflictPorts.join(', ')"
+                    >!</span
+                  >
+                </span>
+                <span class="nda-row-sub">
+                  {{ cfg.running ? rowSummary(cfg) : t('newOverview.disconnected') }}
+                </span>
+              </span>
+              <svg
+                class="nda-row-chev"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="nda-row-action"
+              :class="cfg.running ? 'stop' : 'run'"
+              :disabled="isQueued"
+              :aria-label="cfg.running ? t('newCommon.stop') : t('newCommon.run')"
+              @click="toggleConfig(cfg)"
+            >
+              <svg
+                v-if="cfg.running"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <svg
+                v-else
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div
+            v-if="displayList.length === 0 && !easyTierStore.configListLoading"
+            class="nda-empty"
+          >
+            <span class="nda-empty-icon">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="12" r="2.4" />
+                <circle cx="18" cy="6" r="2.4" />
+                <circle cx="18" cy="18" r="2.4" />
+                <path d="M8.2 11.1l7.6-4.1M8.2 12.9l7.6 4.1" />
+              </svg>
+            </span>
+            <p class="nda-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
+            <span class="nda-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
+            <button type="button" class="nda-empty-cta" @click="goCreateConfig">
+              {{ t('newCommon.createConfig') }}
+            </button>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template v-else>
+      <div class="nd-section">
+        <div class="nd-stats">
+          <div class="nd-stat-card">
+            <div class="nd-stat-icon running">▶</div>
+            <div class="nd-stat-body">
+              <span class="nd-stat-num">{{ runningCount }}</span>
+              <span class="nd-stat-lbl">{{ t('newCommon.running') }}</span>
+            </div>
+          </div>
+          <div class="nd-stat-card">
+            <div class="nd-stat-icon stopped">■</div>
+            <div class="nd-stat-body">
+              <span class="nd-stat-num">{{ stoppedCount }}</span>
+              <span class="nd-stat-lbl">{{ t('newCommon.stopped') }}</span>
+            </div>
+          </div>
+          <div class="nd-stat-card">
+            <div class="nd-stat-icon total">◈</div>
+            <div class="nd-stat-body">
+              <span class="nd-stat-num">{{ totalCount }}</span>
+              <span class="nd-stat-lbl">{{ t('newOverview.totalConfig') }}</span>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="nd-section">
+        <div class="nd-grid lt-loading-host">
+          <LoadingOverlay :show="easyTierStore.configListLoading" />
+          <div
+            v-for="cfg in displayList"
+            :key="cfg.configFileName"
+            class="nd-config-card"
+            :class="{ 'ndc-conflict': cfg.conflictPorts.length > 0 }"
+          >
+            <div class="ndc-top">
+              <div class="ndc-status">
+                <span class="ndc-dot" :class="cfg.running ? 'on' : 'off'"></span>
+                <span class="ndc-status-text">{{
+                  cfg.running ? t('newCommon.running') : t('newCommon.stopped')
+                }}</span>
+              </div>
+              <div class="ndc-top-right">
+                <span v-if="cfg.conflictPorts.length > 0" class="ndc-conflict-badge"
+                  >⚠ {{ cfg.conflictPorts.join(', ') }}</span
+                >
+                <span v-if="cfg.pid" class="ndc-pid">PID {{ cfg.pid }}</span>
+                <span v-if="cfg.virtualIp" class="ndc-vip">{{ cfg.virtualIp }}</span>
+              </div>
+            </div>
+            <div class="ndc-name">{{ cfg.configFileName }}</div>
+            <div v-if="cfg.running" class="ndc-summary">
+              <template v-if="summaryMap[cfg.configFileName]">
+                ● {{ summaryMap[cfg.configFileName].nodeCount }} {{ t('newOverview.nodes') }} ·
+                {{ summaryMap[cfg.configFileName].avgLatency }}
+              </template>
+              <template v-else>…</template>
+            </div>
+            <div class="ndc-actions">
+              <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
+              <button
+                type="button"
+                class="ndc-btn"
+                :class="cfg.running ? 'ndc-btn-stop' : 'ndc-btn-run'"
+                @click="cfg.running ? stopAction(cfg) : startAction(cfg)"
+                >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</button
+              >
+            </div>
+          </div>
+          <div v-if="displayList.length === 0 && !easyTierStore.configListLoading" class="nd-empty">
+            <span class="nd-empty-icon">✦</span>
+            <p class="nd-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
+            <span class="nd-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
+            <button type="button" class="nd-empty-cta" @click="goCreateConfig">
+              {{ t('newCommon.createConfig') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- 自定义确认弹窗（替代原生 confirm） -->
     <CreamDialog v-model="cfmVisible" :title="cfmTitle" width="400px">
@@ -148,6 +417,7 @@ const { readFileContent, writeFileContent } = useMockData()
 const { beforeStart: autoMetricBeforeStart, afterStop: autoMetricAfterStop } = useAutoMetric()
 const { clearTrend } = useTrendBuffer()
 const isDesktopRuntime = isTauri() && !isAndroid()
+const isAndroidPlatform = isAndroid()
 // 出口路由结果提示：仅主动启动/停止时提示，自动运行保持安静
 const notifyExitRouteResult = (
   result: { ok: boolean; reason?: string; message?: string },
@@ -239,6 +509,38 @@ const displayList = computed(() => {
     conflictPorts: conflictMap.value[c.configFileName] || []
   }))
 })
+
+// Android 单实例：同一时刻至多一个运行中配置，作为顶部连接卡片的主对象
+const activeConfig = computed(() => displayList.value.find((c) => c.running) || null)
+const lastUsedName = computed(() => easyTierStore.lastRunConfig?.configFileName || '')
+// 未连接时的推荐配置：优先上次使用，其次列表首项
+const quickConnectConfig = computed(() => {
+  if (activeConfig.value) return activeConfig.value
+  return (
+    displayList.value.find((c) => c.configFileName === lastUsedName.value) ||
+    displayList.value[0] ||
+    null
+  )
+})
+const heroConfig = computed(() => activeConfig.value || quickConnectConfig.value)
+const quickConnectCaption = computed(() =>
+  quickConnectConfig.value?.configFileName === lastUsedName.value
+    ? t('newOverview.lastUsed')
+    : t('newOverview.recommended')
+)
+const activeSummary = computed(() =>
+  activeConfig.value ? summaryMap.value[activeConfig.value.configFileName] : undefined
+)
+const heroDescription = computed(() => {
+  if (!activeConfig.value) return t('newOverview.connectHint')
+  return activeSummary.value ? t('newOverview.connectedHint') : t('newOverview.summaryPending')
+})
+const rowSummary = (cfg: { configFileName: string }) => {
+  const summary = summaryMap.value[cfg.configFileName]
+  return summary
+    ? `${summary.nodeCount} ${t('newOverview.nodes')} · ${summary.avgLatency}`
+    : t('newOverview.summaryPending')
+}
 
 // 队列提示：正在启动的配置名与剩余排队数
 const queueRunningName = computed(() => runningFileName.value.replace('.toml', ''))
@@ -396,9 +698,32 @@ const stopAction = async (item: RunningItem) => {
   }
 }
 
+const goConfigDetail = (item: RunningItem) => {
+  router.push({ name: 'NewConfigDetailView', query: { name: item.configFileName } })
+}
+const goMonitorDetail = (item: RunningItem) => {
+  router.push({ name: 'NewMonitorDetailView', query: { name: item.configFileName } })
+}
+const toggleConfig = (item: RunningItem & { running: boolean }) => {
+  if (item.running) void stopAction(item)
+  else void startAction(item)
+}
+const connectHero = () => {
+  if (quickConnectConfig.value) void startAction(quickConnectConfig.value)
+}
+const stopHero = () => {
+  if (activeConfig.value) void stopAction(activeConfig.value)
+}
+const openHeroMonitor = () => {
+  if (activeConfig.value) goMonitorDetail(activeConfig.value)
+}
+const openHeroConfig = () => {
+  if (quickConnectConfig.value) goConfigDetail(quickConnectConfig.value)
+}
+
 // 空态 CTA：Android 直接进入新增页，桌面打开配置页并自动弹出新增弹窗
 const goCreateConfig = () => {
-  router.push(isAndroid() ? '/new/config-add' : '/new/config?create=1')
+  router.push(isAndroidPlatform ? '/new/config-add' : '/new/config?create=1')
 }
 
 // ===== 生命周期 =====
@@ -779,6 +1104,463 @@ onUnmounted(() => {
 
 .nd-empty-cta:hover {
   transform: translateY(-1px);
+}
+
+/* ===== Android：连接状态优先 ===== */
+.nd-android {
+  padding-bottom: var(--theme-space-2);
+}
+
+.nd-android .nd-queue-bar {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin-bottom: var(--theme-space-3);
+  border-width: 1px;
+  border-radius: var(--theme-radius-md);
+}
+
+.nda-hero {
+  position: relative;
+  padding: var(--theme-space-5);
+  margin-bottom: var(--theme-space-4);
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 14%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+}
+
+.nda-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 17%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nda-hero-head {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-2);
+}
+
+.nda-state {
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  align-items: center;
+  gap: 6px;
+}
+
+.nda-state-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--theme-text-muted);
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+}
+
+.nda-state-dot.on {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color-success) 14%, transparent);
+}
+
+.nda-chip {
+  max-width: 55%;
+  padding: 3px 9px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--theme-bg-hover);
+  border-radius: var(--theme-radius-pill);
+}
+
+.nda-chip-vip {
+  font-family: var(--theme-font-display);
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+}
+
+.nda-hero-name {
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nda-hero-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.nda-metrics {
+  display: flex;
+  padding: var(--theme-space-3) 0;
+  margin-top: var(--theme-space-4);
+  border-top: 1px solid var(--theme-border-light);
+  border-bottom: 1px solid var(--theme-border-light);
+  align-items: center;
+  gap: var(--theme-space-4);
+}
+
+.nda-metric {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nda-metric-label {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.nda-metric-value {
+  font-family: var(--theme-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nda-metric-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--theme-border-light);
+}
+
+.nda-hero-actions {
+  display: flex;
+  margin-top: var(--theme-space-4);
+  gap: 10px;
+}
+
+.nda-btn {
+  display: flex;
+  height: 44px;
+  min-width: 0;
+  padding: 0 var(--theme-space-4);
+  font-family: var(--theme-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--theme-radius-pill);
+  transition:
+    filter var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out);
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.nda-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nda-btn > svg {
+  flex-shrink: 0;
+}
+
+.nda-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.nda-btn-connect {
+  color: var(--theme-text-on-accent);
+  background: var(--theme-color-success);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-color-success) 24%, transparent);
+}
+
+.nda-btn-stop {
+  color: var(--theme-color-danger);
+  background: color-mix(in srgb, var(--theme-color-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--theme-color-danger) 24%, transparent);
+}
+
+.nda-btn-ghost {
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-hover);
+}
+
+.nda-hero-foot {
+  display: flex;
+  margin-top: var(--theme-space-3);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nda-sep {
+  width: 3px;
+  height: 3px;
+  background: currentcolor;
+  border-radius: var(--theme-radius-round);
+  opacity: 0.5;
+}
+
+.nda-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.nda-section-head {
+  display: flex;
+  padding: 0 2px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nda-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--theme-text-primary);
+}
+
+.nda-new-btn {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: -8px -8px -8px 0;
+  color: var(--theme-accent-primary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-list {
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nda-row {
+  display: flex;
+  padding-right: 6px;
+  align-items: stretch;
+}
+
+.nda-row + .nda-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nda-row-on {
+  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+}
+
+.nda-row-conflict {
+  box-shadow: inset 3px 0 0 var(--theme-color-danger);
+}
+
+.nda-row-main {
+  display: flex;
+  min-width: 0;
+  padding: 12px 4px 12px 14px;
+  font-family: var(--theme-font-body);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  flex: 1;
+  align-items: center;
+  gap: var(--theme-space-3);
+}
+
+.nda-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-hover);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-row-icon.on {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nda-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nda-row-name {
+  display: flex;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.nda-row-warn {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-color-danger);
+  background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-row-sub {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nda-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.nda-row-action {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: auto 0;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-row-action.run {
+  color: var(--theme-color-success-dark);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nda-row-action.stop {
+  color: var(--theme-color-danger);
+  background: color-mix(in srgb, var(--theme-color-danger) 10%, transparent);
+}
+
+.nda-row-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.nda-empty {
+  display: flex;
+  padding: 36px var(--theme-space-5);
+  flex-direction: column;
+  text-align: center;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nda-empty-icon {
+  display: flex;
+  width: 58px;
+  height: 58px;
+  margin-bottom: var(--theme-space-1);
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nda-empty-desc {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--theme-text-muted);
+}
+
+.nda-empty-cta {
+  height: 40px;
+  padding: 0 22px;
+  margin-top: 6px;
+  font-family: var(--theme-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-on-accent);
+  cursor: pointer;
+  background: var(--theme-accent-primary);
+  border: none;
+  border-radius: var(--theme-radius-pill);
+}
+
+@media (hover: hover) {
+  .nda-btn:hover:not(:disabled) {
+    filter: brightness(1.04);
+  }
+
+  .nda-row-main:hover {
+    background: var(--theme-bg-hover);
+  }
+
+  .nda-row-action:hover:not(:disabled),
+  .nda-new-btn:hover {
+    filter: brightness(0.96);
+  }
+
+  .nda-new-btn:hover {
+    background: var(--theme-bg-hover);
+  }
 }
 
 /* 移动端适配：统计卡片换行、配置卡片单列排布 */

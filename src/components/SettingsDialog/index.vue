@@ -112,12 +112,12 @@
           :aria-labelledby="section ? undefined : 'sd-tab-general'"
           :tabindex="section ? undefined : 0"
         >
-          <div class="sd-row">
+          <label class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.autoRun') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.autoRunDesc') }}</span>
             </div>
-            <label class="sd-switch">
+            <span class="sd-switch">
               <input
                 type="checkbox"
                 v-model="store.autoRunNetworkSetting"
@@ -125,8 +125,8 @@
                 @change="handleAutoRunToggle"
               />
               <span class="sd-switch-slider"></span>
-            </label>
-          </div>
+            </span>
+          </label>
 
           <div v-if="store.autoRunNetworkSetting" class="sd-row">
             <div class="sd-row-info">
@@ -194,51 +194,51 @@
             </select>
           </div>
 
-          <div v-if="isDesktopRuntime" class="sd-row">
+          <label v-if="isDesktopRuntime" class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.defaultAutostart') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultAutostartDesc') }}</span>
             </div>
-            <label class="sd-switch">
+            <span class="sd-switch">
               <input
                 type="checkbox"
                 v-model="store.defaultEnableAutostart"
                 :aria-label="t('newSettings.defaultAutostart')"
               />
               <span class="sd-switch-slider"></span>
-            </label>
-          </div>
+            </span>
+          </label>
 
-          <div class="sd-row">
+          <label class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.errorNotify') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.errorNotifyDesc') }}</span>
             </div>
-            <label class="sd-switch">
+            <span class="sd-switch">
               <input
                 type="checkbox"
                 v-model="store.errRunNotify"
                 :aria-label="t('newSettings.errorNotify')"
               />
               <span class="sd-switch-slider"></span>
-            </label>
-          </div>
+            </span>
+          </label>
 
           <!-- P2P 直连通知（5.4） -->
-          <div class="sd-row">
+          <label class="sd-row">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.p2pNotify') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.p2pNotifyDesc') }}</span>
             </div>
-            <label class="sd-switch">
+            <span class="sd-switch">
               <input
                 type="checkbox"
                 v-model="store.p2pNotifySetting"
                 :aria-label="t('newSettings.p2pNotify')"
               />
               <span class="sd-switch-slider"></span>
-            </label>
-          </div>
+            </span>
+          </label>
         </div>
 
         <!-- 核心管理 -->
@@ -1912,6 +1912,16 @@ const handleInstallCore = async () => {
 
 .sd-row:last-child {
   border-bottom: none;
+}
+
+/* 开关型设置整行可点，扩大触摸热区并给出按压反馈 */
+label.sd-row {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+label.sd-row:active {
+  opacity: 0.78;
 }
 
 .sd-row-info {

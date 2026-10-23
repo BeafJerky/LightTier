@@ -30,6 +30,20 @@
             <span v-if="item.pid" class="nmc-pid">PID {{ item.pid }}</span>
           </div>
           <div class="nmc-name">{{ item.configFileName }}</div>
+          <!-- Android 列表卡片即详情入口，补右侧箭头提示可点击 -->
+          <svg
+            v-if="isAndroidPlatform"
+            class="nmc-chev"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
         </div>
         <!-- 空态分流：无配置 / 有配置但无运行实例，避免同一句“暂无配置”误导 -->
         <div
@@ -1094,6 +1108,7 @@ onUnmounted(() => {
 }
 
 .nm-card {
+  position: relative;
   padding: var(--theme-space-4);
   overflow: hidden;
   cursor: pointer;
@@ -1102,6 +1117,22 @@ onUnmounted(() => {
   border-radius: var(--theme-radius-xl);
   transition: var(--theme-transition-surface);
   flex-shrink: 0;
+}
+
+.nm-card:active {
+  border-color: var(--theme-accent-primary);
+}
+
+.nm-android .nm-card {
+  padding-right: 42px;
+}
+
+.nmc-chev {
+  position: absolute;
+  top: 50%;
+  right: var(--theme-space-4);
+  color: var(--theme-text-muted);
+  transform: translateY(-50%);
 }
 
 .nm-card:hover {
