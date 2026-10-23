@@ -30,18 +30,20 @@
       <template v-if="form.installMethod === 'nssm'">
         <div class="svc-field">
           <label class="svc-label">{{ t('newConfig.runUser') }}</label>
-          <input
-            class="svc-input"
+          <LtInput
             v-model="form.username"
+            variant="outline"
+            :aria-label="t('newConfig.runUser')"
             :placeholder="t('newConfig.runUserPlaceholder')"
           />
         </div>
         <div class="svc-field" v-if="form.username">
           <label class="svc-label">{{ t('newConfig.userPassword') }}</label>
-          <input
-            class="svc-input"
+          <LtInput
             v-model="form.password"
             type="password"
+            variant="outline"
+            :aria-label="t('newConfig.userPassword')"
             :placeholder="t('newConfig.passwordPlaceholder')"
           />
         </div>
@@ -50,30 +52,29 @@
       <template v-if="form.installMethod === 'official'">
         <div class="svc-field">
           <label class="svc-label">{{ t('newConfig.displayName') }}</label>
-          <input
-            class="svc-input"
+          <LtInput
             v-model="form.displayName"
+            variant="outline"
+            :aria-label="t('newConfig.displayName')"
             :placeholder="t('newConfig.displayNamePlaceholder')"
           />
         </div>
         <div class="svc-field">
           <label class="svc-label">{{ t('newConfig.svcDesc') }}</label>
-          <textarea
-            class="svc-textarea"
+          <LtInput
             v-model="form.description"
-            rows="2"
+            type="textarea"
+            variant="outline"
+            :aria-label="t('newConfig.svcDesc')"
             :placeholder="t('newConfig.svcDescPlaceholder')"
-          ></textarea>
+          />
         </div>
         <div class="svc-field svc-field-row">
           <label class="svc-label">{{ t('newSettings.defaultAutostart') }}</label>
-          <span
-            class="svc-switch"
-            :class="{ on: form.enableAutostart }"
-            @click="form.enableAutostart = !form.enableAutostart"
-          >
-            {{ form.enableAutostart ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled') }}
-          </span>
+          <LtSwitch
+            v-model="form.enableAutostart"
+            :aria-label="t('newSettings.defaultAutostart')"
+          />
         </div>
         <p class="svc-hint">{{ t('newConfig.installHint') }}</p>
       </template>
@@ -82,13 +83,13 @@
     <template #footer>
       <div class="svc-footer">
         <span class="svc-footer-hint">{{ t('newConfig.installHint') }}</span>
-        <div>
-          <button class="svc-btn svc-btn-cancel" @click="visible = false">{{
+        <div class="svc-footer-actions">
+          <LtButton variant="ghost" size="md" @click="visible = false">{{
             t('newCommon.cancel')
-          }}</button>
-          <button class="svc-btn svc-btn-primary" :disabled="installing" @click="handleInstall">{{
+          }}</LtButton>
+          <LtButton variant="primary" size="md" :disabled="installing" @click="handleInstall">{{
             installing ? t('newCommon.installing') : t('newConfig.install')
-          }}</button>
+          }}</LtButton>
         </div>
       </div>
     </template>
@@ -107,6 +108,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton, LtInput, LtSwitch } from '@/components/ui'
 
 const { t } = useI18n()
 
@@ -195,39 +197,6 @@ const handleInstall = async () => {
   text-transform: uppercase;
 }
 
-.svc-input {
-  padding: 8px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.svc-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.svc-textarea {
-  padding: 8px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-md, 10px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-  resize: vertical;
-}
-
-.svc-textarea:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
 .svc-radio-group {
   display: flex;
   gap: 12px;
@@ -266,23 +235,6 @@ const handleInstall = async () => {
   box-shadow: inset 0 0 0 2px var(--theme-bg-card, #fff);
 }
 
-.svc-switch {
-  display: inline-block;
-  padding: 4px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: color-mix(in srgb, var(--theme-text-muted, #c8bdb2) 10%, transparent);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
-}
-
-.svc-switch.on {
-  color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
-}
-
 .svc-hint {
   padding: 8px 12px;
   margin: 0;
@@ -305,37 +257,9 @@ const handleInstall = async () => {
   color: var(--theme-text-muted, #c8bdb2);
 }
 
-.svc-btn {
-  padding: 6px 16px;
-  margin-left: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: var(--theme-transition-interactive);
-}
-
-.svc-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.svc-btn-cancel {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.svc-btn-cancel:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.svc-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.svc-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
+.svc-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

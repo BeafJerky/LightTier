@@ -80,14 +80,14 @@
                 {{ t('newOnboarding.coreBrowserHint') }}
               </p>
               <template v-else>
-                <button
-                  type="button"
-                  class="og-btn og-btn-primary og-install-btn"
+                <LtButton
+                  variant="primary"
+                  class="og-install-btn"
                   :disabled="quickBusy"
                   @click="quickInstallCore"
                 >
                   {{ quickInstallButtonText }}
-                </button>
+                </LtButton>
                 <div v-if="quickInstallState === 'downloading'" class="og-download">
                   <div class="og-download-track">
                     <div
@@ -137,10 +137,12 @@
       <div class="og-footer">
         <template v-if="step < 4">
           <div class="og-dots">
-            <button
+            <LtButton
               v-for="i in 4"
               :key="i"
-              type="button"
+              variant="text"
+              size="md"
+              circle
               class="og-dot-btn"
               :disabled="i === 4"
               :aria-label="t('newOnboarding.stepLabel', { n: i })"
@@ -148,33 +150,33 @@
               @click="goToStep(i)"
             >
               <span class="og-dot" :class="{ active: i === step }"></span>
-            </button>
+            </LtButton>
           </div>
           <div class="og-footer-actions">
-            <button v-if="step > 1" type="button" class="og-btn og-btn-ghost" @click="step--">
+            <LtButton v-if="step > 1" variant="ghost" @click="step--">
               {{ t('newOnboarding.prev') }}
-            </button>
-            <button type="button" class="og-btn og-btn-primary" @click="step++">
+            </LtButton>
+            <LtButton variant="primary" @click="step++">
               {{ t('newOnboarding.next') }}
-            </button>
+            </LtButton>
           </div>
         </template>
         <template v-else>
           <label class="og-check">
-            <input v-model="notShowAgain" type="checkbox" />
+            <LtSwitch
+              v-model="notShowAgain"
+              size="sm"
+              :aria-label="t('newOnboarding.notShowAgain')"
+            />
             <span>{{ t('newOnboarding.notShowAgain') }}</span>
           </label>
           <div class="og-footer-actions">
-            <button v-if="!hasConfigs" type="button" class="og-btn og-btn-ghost" @click="finish">
+            <LtButton v-if="!hasConfigs" variant="ghost" @click="finish">
               {{ t('newOnboarding.doneBtn') }}
-            </button>
-            <button
-              type="button"
-              class="og-btn og-btn-primary"
-              @click="hasConfigs ? finish() : finishAndCreate()"
-            >
+            </LtButton>
+            <LtButton variant="primary" @click="hasConfigs ? finish() : finishAndCreate()">
               {{ hasConfigs ? t('newOnboarding.doneBtn') : t('newOnboarding.createFirst') }}
-            </button>
+            </LtButton>
           </div>
         </template>
       </div>
@@ -200,6 +202,7 @@ import { DEFAULT_CORE_VERSION } from '@/constants/kernelCompat'
 import { useCoreInstall } from '@/hooks/useCoreInstall'
 import { MIRROR_SOURCE_KEY, useMirrorProbe } from '@/hooks/useMirrorProbe'
 import { useEasyTierStore } from '@/store/modules/easytier'
+import { LtButton, LtSwitch } from '@/components/ui'
 import { formatBytes } from '@/utils/easyTierUtil'
 import { downloadFile } from '@/utils/fileUtil'
 import { isAndroid } from '@/utils/platformUtil'
@@ -740,23 +743,10 @@ onBeforeUnmount(() => {
   gap: 0;
 }
 
-/* 圆点按钮：视觉保持 8px 圆点，命中区扩大到 32×32（键盘可聚焦） */
-.og-dot-btn {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  cursor: pointer;
-  background: none;
-  border: none;
-  border-radius: 50%;
-  align-items: center;
-  justify-content: center;
-}
-
 /* 第 4 步不能直接点击，保留进度指示 */
-.og-dot-btn:disabled {
+.og-dots .og-dot-btn:disabled {
   cursor: default;
+  opacity: 1;
 }
 
 .og-dot {
@@ -781,49 +771,6 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
-/* 按钮 */
-.og-btn {
-  padding: 8px 22px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill, 100px);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out),
-    border-color var(--theme-duration-fast) var(--theme-ease-out),
-    transform var(--theme-duration-fast) var(--theme-ease-out),
-    opacity var(--theme-duration-fast) var(--theme-ease-out);
-}
-
-.og-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.og-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #e8a0a0);
-}
-
-.og-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #d49090);
-  transform: translateY(-1px);
-}
-
-.og-btn-ghost {
-  color: var(--theme-text-secondary, #7a6e5e);
-  background: transparent;
-  border: 1px solid var(--theme-border, #ede4db);
-}
-
-.og-btn-ghost:hover:not(:disabled) {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-}
-
 /* 单选框 */
 .og-check {
   display: flex;
@@ -833,10 +780,5 @@ onBeforeUnmount(() => {
   color: var(--theme-text-secondary, #7a6e5e);
   cursor: pointer;
   user-select: none;
-}
-
-.og-check input {
-  accent-color: var(--theme-accent-primary, #e8a0a0);
-  cursor: pointer;
 }
 </style>

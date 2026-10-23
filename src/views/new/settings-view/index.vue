@@ -3,10 +3,10 @@
     <section v-for="group in groups" :key="group.key" class="ssv-group-wrap">
       <div v-if="group.label" class="ssv-group-label">{{ group.label }}</div>
       <div class="ssv-group">
-        <button
+        <LtButton
           v-for="row in group.rows"
           :key="row.key"
-          type="button"
+          variant="bare"
           class="ssv-row"
           @click="handleRow(row)"
         >
@@ -41,17 +41,17 @@
           >
             <path d="M9 18l6-6-6-6" />
           </svg>
-        </button>
+        </LtButton>
       </div>
     </section>
 
     <!-- 语言切换：短操作走底部面板 -->
     <CreamDialog v-model="langSheetVisible" :title="t('newSettings.language')" width="380px">
       <div class="ssv-lang-list" role="radiogroup" :aria-label="t('newSettings.language')">
-        <button
+        <LtButton
           v-for="item in langMap"
           :key="item.lang"
-          type="button"
+          variant="bare"
           class="ssv-lang-option"
           :class="{ active: currentLang === item.lang }"
           role="radio"
@@ -71,7 +71,7 @@
           >
             <path d="M20 6L9 17l-5-5" />
           </svg>
-        </button>
+        </LtButton>
       </div>
     </CreamDialog>
   </div>
@@ -83,6 +83,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton } from '@/components/ui'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useLocaleStore } from '@/store/modules/locale'
 import { useLocale } from '@/hooks/web/useLocale'
@@ -235,7 +236,7 @@ onMounted(async () => {
 }
 
 .ssv-group-label {
-  padding: 0 var(--theme-space-2);
+  padding: 0 2px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.4px;
@@ -250,19 +251,20 @@ onMounted(async () => {
   border-radius: var(--theme-radius-lg, 14px);
 }
 
-.ssv-row {
-  display: flex;
+.ssv-group .ssv-row {
   width: 100%;
-  min-height: 58px;
-  padding: 12px 14px;
-  font-family: var(--theme-font-body);
+  min-height: 60px;
+  padding: 12px 14px 12px 12px;
   color: var(--theme-text-primary);
   text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  justify-content: flex-start;
+  gap: 12px;
   transition: background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
+}
+
+.ssv-group .ssv-row :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -270,17 +272,17 @@ onMounted(async () => {
   border-top: 1px solid var(--theme-border-light);
 }
 
-.ssv-row:active {
+.ssv-group .ssv-row:active {
   background: var(--theme-bg-hover);
 }
 
 .ssv-icon {
   display: flex;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   color: var(--theme-accent-primary);
   background: color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
-  border-radius: 10px;
+  border-radius: 11px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
@@ -320,30 +322,28 @@ onMounted(async () => {
   gap: 6px;
 }
 
-.ssv-lang-option {
-  display: flex;
+.ssv-lang-list .ssv-lang-option {
   width: 100%;
   min-height: 48px;
   padding: 0 var(--theme-space-4);
-  font-family: var(--theme-font-body);
   font-size: 14px;
   font-weight: 500;
   color: var(--theme-text-secondary);
   text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
   border-radius: var(--theme-radius-md);
   transition: var(--theme-transition-interactive);
-  align-items: center;
+}
+
+.ssv-lang-option :deep(.n-button__content) {
+  width: 100%;
   justify-content: space-between;
 }
 
-.ssv-lang-option:active {
+.ssv-lang-list .ssv-lang-option:active {
   background: var(--theme-bg-hover);
 }
 
-.ssv-lang-option.active {
+.ssv-lang-list .ssv-lang-option.active {
   color: var(--theme-accent-primary);
   background: var(--theme-bg-active);
 }

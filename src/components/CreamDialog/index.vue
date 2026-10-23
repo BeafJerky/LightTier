@@ -29,7 +29,15 @@
           <!-- 标题栏（内联模式由所在页面承载标题与返回，不渲染） -->
           <div v-if="!inline" class="cd-header">
             <span class="cd-title">{{ title }}</span>
-            <button class="cd-close" @click="requestClose" :title="t('newCommon.close')">
+            <LtButton
+              variant="text"
+              size="sm"
+              circle
+              class="cd-close"
+              @click="requestClose"
+              :title="t('newCommon.close')"
+              :aria-label="t('newCommon.close')"
+            >
               <svg
                 width="16"
                 height="16"
@@ -40,7 +48,7 @@
               >
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
-            </button>
+            </LtButton>
           </div>
 
           <!-- 内容区（内容自行管理滚动时可关闭 body 滚动） -->
@@ -97,6 +105,7 @@ if (typeof window !== 'undefined') {
 import { computed, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isAndroid } from '@/utils/platformUtil'
+import { LtButton } from '@/components/ui'
 
 const { t } = useI18n()
 
@@ -315,24 +324,7 @@ onUnmounted(() => {
 }
 
 .cd-close {
-  display: flex;
-  width: 28px;
-  height: 28px;
   color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-round, 50%);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-}
-
-.cd-close:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
 }
 
 .cd-body {
@@ -434,6 +426,7 @@ onUnmounted(() => {
   margin-bottom: 0;
   border: 1px solid var(--theme-border-light, #f5ede6);
   box-shadow: none;
+  box-sizing: border-box;
 }
 
 /* Android 端（cd-*-sheet）：非内联弹窗呈现为底部动作面板 */

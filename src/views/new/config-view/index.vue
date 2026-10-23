@@ -9,82 +9,201 @@
     <!-- 左侧配置列表 -->
     <div class="nw-left">
       <div class="nw-left-header">
-        <div class="nw-left-top">
+        <div v-if="!isAndroidPlatform" class="nw-left-top">
           <div class="nw-left-label">{{ t('newConfig.configList') }}</div>
-          <!-- Android 用右下角 FAB 承担新增，列表头部不再放按钮 -->
-          <div v-if="!isAndroidPlatform" class="nw-left-btns">
-            <button
-              type="button"
+          <div class="nw-left-btns">
+            <LtButton
+              variant="secondary"
+              size="xs"
+              circle
               class="nw-add-btn"
               @click="openAdd"
               :title="t('newConfig.addConfig')"
               :aria-label="t('newConfig.addConfig')"
             >
-              +
-            </button>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </LtButton>
           </div>
         </div>
-        <!-- 搜索固定在标题栏，不随列表滚动 -->
-        <div v-if="easyTierStore.configList.length > 0" class="nw-search">
-          <input
-            v-model="configSearch"
-            type="search"
-            class="nw-search-input"
-            :placeholder="t('newCommon.searchConfig')"
-            :aria-label="t('newCommon.searchConfig')"
-            @keydown.esc="configSearch = ''"
-            @keydown.enter.prevent="blurSearchInput"
-          />
-          <button
-            v-if="configSearch"
-            type="button"
-            class="nw-search-clear"
-            :title="t('newCommon.clearSearch')"
-            :aria-label="t('newCommon.clearSearch')"
-            @click="configSearch = ''"
+        <!-- 搜索固定在标题栏，不随列表滚动；Android 与新增入口并排 -->
+        <div
+          v-if="easyTierStore.configList.length > 0"
+          class="nw-left-tools"
+          :class="{ 'nw-left-tools-android': isAndroidPlatform }"
+        >
+          <div class="nw-search">
+            <LtInput
+              v-model="configSearch"
+              class="nw-search-input"
+              variant="filled"
+              :size="isAndroidPlatform ? 'lg' : 'md'"
+              clearable
+              :placeholder="t('newCommon.searchConfig')"
+              :aria-label="t('newCommon.searchConfig')"
+              @keydown.esc="configSearch = ''"
+              @keydown.enter.prevent="blurSearchInput"
+            />
+          </div>
+          <LtButton
+            v-if="isAndroidPlatform"
+            variant="secondary"
+            size="lg"
+            circle
+            class="nw-m-add"
+            @click="openAdd"
+            :title="t('newConfig.addConfig')"
+            :aria-label="t('newConfig.addConfig')"
           >
-            ×
-          </button>
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </LtButton>
         </div>
       </div>
       <div class="nw-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.configListLoading" />
         <!-- 重排（启停后运行态优先）与搜索过滤使用 FLIP 过渡，避免卡片瞬移 -->
         <TransitionGroup name="nw-card" tag="div" class="nw-card-list">
-          <div
-            v-for="item in filteredConfigList"
-            :key="item.configFileName"
-            class="nw-card"
-            :class="{ active: selectedConfig?.configFileName === item.configFileName }"
-            @click="selectConfig(item)"
-          >
-            <div class="nw-card-top">
-              <div class="nw-card-status">
-                <span class="nw-dot" :class="getRunning(item) ? 'on' : 'off'"></span>
-                <span class="nw-status-text">{{
-                  getRunning(item) ? t('newCommon.running') : t('newCommon.stopped')
-                }}</span>
+          <!-- Android：总览式分组行，触控目标整行可点 -->
+          <template v-if="isAndroidPlatform">
+            <div
+              v-for="item in filteredConfigList"
+              :key="item.configFileName"
+              class="nw-row"
+              :class="{ 'nw-row-on': getRunning(item) }"
+              @click="selectConfig(item)"
+            >
+              <span class="nw-row-icon" :class="{ on: getRunning(item) }">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <circle cx="6" cy="12" r="2.4" />
+                  <circle cx="18" cy="6" r="2.4" />
+                  <circle cx="18" cy="18" r="2.4" />
+                  <path d="M8.2 11.1l7.6-4.1M8.2 12.9l7.6 4.1" />
+                </svg>
+              </span>
+              <span class="nw-row-text">
+                <span class="nw-row-name">{{ item.configFileName }}</span>
+                <span class="nw-row-sub">
+                  <span class="nw-dot" :class="getRunning(item) ? 'on' : 'off'"></span>
+                  <span class="nw-row-state">{{
+                    getRunning(item) ? t('newCommon.running') : t('newCommon.stopped')
+                  }}</span>
+                  <span v-if="getRunningItem(item)?.pid" class="nw-row-extra"
+                    >· PID {{ getRunningItem(item)?.pid }}</span
+                  >
+                  <span v-else-if="getRunningItem(item)?.virtualIp" class="nw-row-extra"
+                    >· {{ getRunningItem(item)?.virtualIp }}</span
+                  >
+                </span>
+              </span>
+              <LtButton
+                :variant="getRunning(item) ? 'danger' : 'success-soft'"
+                size="lg"
+                circle
+                :aria-label="getRunning(item) ? t('newCommon.stop') : t('newCommon.run')"
+                @click.stop="getRunning(item) ? stopAction(item) : startAction(item)"
+              >
+                <svg
+                  v-if="getRunning(item)"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+                <svg
+                  v-else
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M7 4.8v14.4L19 12z" />
+                </svg>
+              </LtButton>
+              <svg
+                class="nw-row-chev"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </template>
+          <!-- 桌面：保留原有卡片列表 -->
+          <template v-else>
+            <div
+              v-for="item in filteredConfigList"
+              :key="item.configFileName"
+              class="nw-card"
+              :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+              @click="selectConfig(item)"
+            >
+              <div class="nw-card-top">
+                <div class="nw-card-status">
+                  <span class="nw-dot" :class="getRunning(item) ? 'on' : 'off'"></span>
+                  <span class="nw-status-text">{{
+                    getRunning(item) ? t('newCommon.running') : t('newCommon.stopped')
+                  }}</span>
+                </div>
+                <span v-if="getRunningItem(item)?.pid" class="nw-card-pid"
+                  >PID {{ getRunningItem(item)?.pid }}</span
+                >
+                <span v-else-if="getRunningItem(item)?.virtualIp" class="nw-card-pid"
+                  >IP {{ getRunningItem(item)?.virtualIp }}</span
+                >
               </div>
-              <span v-if="getRunningItem(item)?.pid" class="nw-card-pid"
-                >PID {{ getRunningItem(item)?.pid }}</span
-              >
-              <span v-else-if="getRunningItem(item)?.virtualIp" class="nw-card-pid"
-                >IP {{ getRunningItem(item)?.virtualIp }}</span
-              >
+              <div class="nw-card-name">{{ item.configFileName }}</div>
+              <div class="nw-card-sub">{{ item.fileName }}</div>
+              <div class="nw-card-actions" @click.stop>
+                <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
+                <LtButton
+                  :variant="getRunning(item) ? 'soft' : 'success'"
+                  size="compact"
+                  @click="getRunning(item) ? stopAction(item) : startAction(item)"
+                  >{{ getRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
+                >
+              </div>
             </div>
-            <div class="nw-card-name">{{ item.configFileName }}</div>
-            <div class="nw-card-sub">{{ item.fileName }}</div>
-            <div class="nw-card-actions" @click.stop>
-              <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-              <button
-                type="button"
-                class="nw-btn"
-                :class="getRunning(item) ? 'nw-btn-stop' : 'nw-btn-run'"
-                @click="getRunning(item) ? stopAction(item) : startAction(item)"
-                >{{ getRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
-              >
-            </div>
-          </div>
+          </template>
         </TransitionGroup>
         <div
           v-if="easyTierStore.configList.length === 0 && !easyTierStore.configListLoading"
@@ -93,9 +212,9 @@
           <span class="nw-empty-icon">✦</span>
           <p class="nw-empty-title">{{ t('newConfig.emptyNoConfig') }}</p>
           <span class="nw-empty-desc">{{ t('newConfig.emptyHint') }}</span>
-          <button type="button" class="nw-empty-cta" @click="openAdd">
+          <LtButton variant="primary" size="md" class="nw-empty-cta" @click="openAdd">
             {{ t('newCommon.createConfig') }}
-          </button>
+          </LtButton>
         </div>
         <!-- 搜索无结果：与“无配置”区分，提供清除入口 -->
         <div
@@ -104,18 +223,24 @@
         >
           <span class="nw-empty-icon">⌕</span>
           <p class="nw-empty-title">{{ t('newCommon.noSearchResult') }}</p>
-          <button type="button" class="nw-empty-cta" @click="configSearch = ''">
+          <LtButton variant="text" size="sm" class="nw-empty-cta" @click="configSearch = ''">
             {{ t('newCommon.clearSearch') }}
-          </button>
+          </LtButton>
         </div>
       </div>
     </div>
 
     <!-- 右侧详情面板：宽屏常驻；窄屏为 master-detail 的详情态（列表隐藏） -->
     <div class="nw-right" v-if="selectedDetail">
-      <div class="nw-detail-header">
+      <div class="nw-detail-header" :class="{ 'nw-detail-hero-on': selectedRunning }">
         <div class="nw-detail-title-row">
-          <button v-if="!isAndroidPlatform" class="nw-back-btn" @click="closeDetail">
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="ghost"
+            size="sm"
+            class="nw-back-btn"
+            @click="closeDetail"
+          >
             <svg
               width="14"
               height="14"
@@ -127,7 +252,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             {{ t('newCommon.back') }}
-          </button>
+          </LtButton>
           <h3 class="nw-detail-title">{{ selectedConfig?.configFileName }}</h3>
           <span class="nw-badge" :class="selectedRunning ? 'on' : 'off'">
             {{ selectedRunning ? '● ' + t('newCommon.running') : '○ ' + t('newCommon.stopped') }}
@@ -137,23 +262,28 @@
           }}</span>
         </div>
         <div class="nw-detail-actions">
-          <button type="button" class="nw-btn-lg nw-btn-edit" @click="openEdit">{{
+          <LtButton variant="secondary" size="md" class="nw-detail-btn" @click="openEdit">{{
             t('newCommon.edit')
-          }}</button>
+          }}</LtButton>
           <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
-          <button
-            type="button"
-            class="nw-btn-lg nw-detail-lifecycle"
-            :class="selectedRunning ? 'nw-btn-kill' : 'nw-btn-start'"
+          <LtButton
+            :variant="selectedRunning ? 'danger' : 'success'"
+            size="md"
+            class="nw-detail-lifecycle nw-detail-btn"
             @click="
               selectedConfig &&
               (selectedRunning ? stopAction(selectedConfig) : startAction(selectedConfig))
             "
-            >{{ selectedRunning ? t('newCommon.stop') : t('newCommon.run') }}</button
+            >{{ selectedRunning ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
           >
-          <button type="button" class="nw-btn-lg nw-btn-del" @click="deleteSelectedConfig">{{
-            t('newCommon.delete')
-          }}</button>
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="danger"
+            size="md"
+            class="nw-detail-btn"
+            @click="deleteSelectedConfig"
+            >{{ t('newCommon.delete') }}</LtButton
+          >
         </div>
       </div>
 
@@ -226,10 +356,13 @@
         <div class="nw-grid"
           ><div class="nw-field-full">
             <template v-if="selectedDetail.routes?.length">
-              <input
+              <LtInput
                 v-model="routeFilter"
                 class="nw-route-filter"
+                variant="filled"
+                size="sm"
                 :placeholder="t('newConfig.routeFilterPlaceholder')"
+                :aria-label="t('newConfig.routeFilterPlaceholder')"
               />
               <div v-if="filteredRoutes.length" class="nw-route-grid">
                 <div class="nw-route-card" v-for="r in filteredRoutes" :key="r">
@@ -257,7 +390,7 @@
       </div>
 
       <!-- 5.9：退出节点路由（配置级开关，仅 Tauri 桌面端） -->
-      <div class="nw-section"
+      <div v-if="!isAndroidPlatform" class="nw-section"
         ><div class="nw-section-title">{{ t('newConfig.exitRoute') }}</div>
         <div class="nw-svc-bar">
           <div class="nw-svc-status">
@@ -273,23 +406,26 @@
           </div>
           <div class="nw-svc-actions">
             <template v-if="isTauri">
-              <button
-                class="nw-btn-sm nw-btn-svc-start"
+              <LtButton
+                variant="success"
+                size="sm"
                 :disabled="exitRouteFlag || isExitRouteBusy"
                 @click="toggleExitRoute"
-                >{{ t('newConfig.exitRouteEnable') }}</button
+                >{{ t('newConfig.exitRouteEnable') }}</LtButton
               >
-              <button
-                class="nw-btn-sm nw-btn-svc-stop"
+              <LtButton
+                variant="soft"
+                size="sm"
                 :disabled="!exitRouteFlag || isExitRouteBusy"
                 @click="toggleExitRoute"
-                >{{ t('newConfig.exitRouteDisable') }}</button
+                >{{ t('newConfig.exitRouteDisable') }}</LtButton
               >
-              <button
-                class="nw-btn-sm nw-btn-svc-stop"
+              <LtButton
+                variant="soft"
+                size="sm"
                 :disabled="isExitRouteBusy"
                 @click="openRouteCheck"
-                >{{ t('newConfig.exitRouteCheck') }}</button
+                >{{ t('newConfig.exitRouteCheck') }}</LtButton
               >
             </template>
           </div>
@@ -298,9 +434,34 @@
       </div>
 
       <!-- 日志（5.3：内联日志查看器，工具栏含刷新/自动滚动/打开目录） -->
-      <div class="nw-section"
+      <div v-if="!isAndroidPlatform" class="nw-section"
         ><div class="nw-section-title">{{ t('newConfig.logs') }}</div>
         <LogViewer :config-name="selectedConfig?.configFileName || ''" />
+      </div>
+
+      <!-- Android：破坏性操作独立成行，避免与常用操作挤在头部 -->
+      <div v-if="isAndroidPlatform" class="nw-danger-zone">
+        <LtButton
+          variant="danger"
+          size="lg"
+          block
+          class="nw-danger-btn"
+          @click="deleteSelectedConfig"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+          </svg>
+          {{ t('newCommon.delete') }}
+        </LtButton>
       </div>
 
       <!-- 服务管理（Windows 服务专属；Android 隐藏） -->
@@ -325,26 +486,28 @@
           </div>
           <div class="nw-svc-actions">
             <template v-if="currentServiceStatus === 'notInstalled'">
-              <button class="nw-btn-lg nw-btn-svc-install" @click="openServiceDialog">{{
+              <LtButton variant="primary" size="md" @click="openServiceDialog">{{
                 t('newConfig.installService')
-              }}</button>
+              }}</LtButton>
             </template>
             <template v-else>
-              <button
-                class="nw-btn-sm nw-btn-svc-start"
+              <LtButton
+                variant="success"
+                size="sm"
                 :disabled="currentServiceStatus === 'running'"
                 @click="handleStartService"
-                >{{ t('newCommon.start') }}</button
+                >{{ t('newCommon.start') }}</LtButton
               >
-              <button
-                class="nw-btn-sm nw-btn-svc-stop"
+              <LtButton
+                variant="soft"
+                size="sm"
                 :disabled="currentServiceStatus !== 'running'"
                 @click="handleStopService"
-                >{{ t('newCommon.stop') }}</button
+                >{{ t('newCommon.stop') }}</LtButton
               >
-              <button class="nw-btn-sm nw-btn-svc-uninstall" @click="handleUninstallService">{{
+              <LtButton variant="ghost" size="sm" @click="handleUninstallService">{{
                 t('newConfig.uninstall')
-              }}</button>
+              }}</LtButton>
             </template>
           </div>
         </div>
@@ -355,7 +518,13 @@
     <div class="nw-right" v-else-if="selectedConfig">
       <div class="nw-detail-header">
         <div class="nw-detail-title-row">
-          <button v-if="!isAndroidPlatform" class="nw-back-btn" @click="closeDetail">
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="ghost"
+            size="sm"
+            class="nw-back-btn"
+            @click="closeDetail"
+          >
             <svg
               width="14"
               height="14"
@@ -367,7 +536,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             {{ t('newCommon.back') }}
-          </button>
+          </LtButton>
           <h3 class="nw-detail-title">{{ selectedConfig.configFileName }}</h3>
         </div>
       </div>
@@ -378,12 +547,12 @@
         <p class="nw-detail-error-title">{{ detailErrorTitle }}</p>
         <p v-if="detailError?.message" class="nw-detail-error-desc">{{ detailError.message }}</p>
         <div class="nw-detail-error-actions">
-          <button class="nw-btn-lg nw-btn-edit" @click="retryDetail">{{
+          <LtButton variant="secondary" size="md" @click="retryDetail">{{
             t('newCommon.retry')
-          }}</button>
-          <button v-if="isTauri" class="nw-btn-lg" @click="openConfigDir">{{
+          }}</LtButton>
+          <LtButton v-if="isTauri" variant="ghost" size="md" @click="openConfigDir">{{
             t('newConfig.openConfigDir')
-          }}</button>
+          }}</LtButton>
         </div>
       </div>
     </div>
@@ -397,29 +566,6 @@
         ><span class="nw-empty-icon">✦</span><p>{{ t('newConfig.selectConfig') }}</p></div
       >
     </div>
-
-    <!-- Android 新增配置 FAB：固定在底栏之上 -->
-    <button
-      v-if="isAndroidPlatform && !isAndroidDetailRoute"
-      type="button"
-      class="nw-fab"
-      @click="openAdd"
-      :title="t('newConfig.addConfig')"
-      :aria-label="t('newConfig.addConfig')"
-    >
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        aria-hidden="true"
-      >
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-    </button>
   </div>
   <!-- 配置编辑弹窗：仅桌面端；Android 进入独立编辑页面（config-edit-view） -->
   <EditDialog
@@ -442,12 +588,12 @@
     <p class="cfm-msg">{{ cfmMessage }}</p>
     <template #footer>
       <div class="cfm-footer">
-        <button class="nw-btn-cfm nw-btn-cfm-cancel" @click="resolveConfirm(false)">{{
+        <LtButton variant="ghost" size="md" @click="resolveConfirm(false)">{{
           t('newCommon.cancel')
-        }}</button>
-        <button class="nw-btn-cfm nw-btn-cfm-ok" @click="resolveConfirm(true)">{{
+        }}</LtButton>
+        <LtButton variant="primary" size="md" @click="resolveConfirm(true)">{{
           t('newCommon.confirm')
-        }}</button>
+        }}</LtButton>
       </div>
     </template>
   </CreamDialog>
@@ -483,6 +629,7 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { resourceDir, join } from '@tauri-apps/api/path'
 import { openPath } from '@/utils/fileUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton, LtInput } from '@/components/ui'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import EditDialog from './EditDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
@@ -1452,76 +1599,16 @@ const handleUninstallService = async () => {
 
 /* 搜索框：固定于标题栏，列表滚动时保持可见 */
 .nw-search {
-  position: relative;
   display: flex;
   align-items: center;
 }
 
 .nw-search-input {
   width: 100%;
-  padding: 6px 28px 6px 10px;
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-tag);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.nw-search-input:focus {
-  border-color: var(--theme-accent-primary);
-}
-
-.nw-search-input::-webkit-search-cancel-button {
-  display: none;
-}
-
-.nw-search-clear {
-  position: absolute;
-  right: 4px;
-  display: flex;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  font-size: 15px;
-  line-height: 1;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-round);
-  align-items: center;
-  justify-content: center;
-}
-
-.nw-search-clear:hover {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
 }
 
 .nw-add-btn {
-  display: flex;
-  width: 24px;
-  height: 24px;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
   color: var(--theme-text-muted);
-  cursor: pointer;
-  background: var(--theme-bg-card);
-  border: 1.5px solid var(--theme-border);
-  border-radius: var(--theme-radius-round);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  justify-content: center;
-}
-
-.nw-add-btn:hover {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-  border-color: var(--theme-accent-primary);
 }
 
 .nw-left-scroll {
@@ -1654,41 +1741,6 @@ const handleUninstallService = async () => {
   gap: var(--theme-space-2);
 }
 
-.nw-btn {
-  padding: var(--theme-space-1) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-btn-run {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nw-btn-run:hover:not(:disabled) {
-  transform: scale(1.04);
-}
-
-.nw-btn-stop {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nw-btn-stop:hover:not(:disabled) {
-  background: var(--theme-bg-active);
-}
-
-.nw-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
-}
-
 .nw-right {
   min-height: 0;
   padding: var(--theme-space-5) var(--theme-space-6);
@@ -1722,7 +1774,7 @@ const handleUninstallService = async () => {
 
   /* 提高特异性，覆盖基础 display:none，确保窄屏详情态返回按钮可见 */
   .nw-detail-open .nw-back-btn {
-    display: flex;
+    display: inline-flex;
   }
 
   .nw-right {
@@ -1740,21 +1792,214 @@ const handleUninstallService = async () => {
 
 /* Android：详情为独立路由，任何宽度下列表与详情都互斥展示 */
 .nw-root.nw-android {
-  flex-direction: column;
-}
-
-/* 列表底部为新增 FAB 预留空间，避免最后一张卡片被悬浮按钮压住 */
-.nw-root.nw-android .nw-left-scroll {
-  padding-bottom: calc(var(--theme-space-3) + 64px);
+  display: block;
+  height: auto;
+  min-height: auto;
 }
 
 .nw-root.nw-android .nw-left {
+  display: flex;
   width: 100%;
+  flex: none;
+  flex-direction: column;
+}
+
+.nw-root.nw-android .nw-left-header {
+  padding: 0;
+  gap: var(--theme-space-2);
+}
+
+.nw-root.nw-android .nw-left-scroll {
+  display: block;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  flex: none;
+}
+
+/* --- 搜索与新增入口 --- */
+.nw-left-tools-android {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nw-left-tools-android .nw-search {
   flex: 1;
 }
 
+.nw-m-add {
+  color: var(--theme-accent-primary);
+}
+
+.nw-m-add:active {
+  background: var(--theme-bg-active);
+  transform: scale(0.94);
+}
+
+/* --- 配置分组列表 --- */
+.nw-root.nw-android .nw-card-list {
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nw-root.nw-android .nw-card-list:empty {
+  display: none;
+}
+
+.nw-row {
+  display: flex;
+  min-height: 60px;
+  padding: 10px 14px 10px 12px;
+  cursor: pointer;
+  align-items: center;
+  gap: var(--theme-space-3);
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.nw-row + .nw-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nw-row:active {
+  background: var(--theme-bg-hover);
+}
+
+.nw-row-on {
+  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+}
+
+.nw-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-hover);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nw-row-icon.on {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nw-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nw-row-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nw-row-sub {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.nw-row-sub .nw-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+
+.nw-row-state {
+  flex-shrink: 0;
+}
+
+.nw-row-extra {
+  flex-shrink: 0;
+}
+
+.nw-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) {
+  .nw-row:hover {
+    background: var(--theme-bg-hover);
+  }
+
+  .nw-row-on:hover {
+    background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+  }
+
+  .nw-m-add:hover {
+    background: var(--theme-bg-hover);
+  }
+}
+
+/* 安卓行过渡保持在同一列表容器内，不做绝对定位离场 */
+.nw-root.nw-android .nw-card-leave-active {
+  position: relative;
+  right: auto;
+  left: auto;
+}
+
+/* --- 空状态 --- */
+.nw-root.nw-android .nw-empty-cards {
+  padding: 34px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  gap: 6px;
+}
+
+.nw-root.nw-android .nw-empty-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 24px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nw-root.nw-android .nw-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nw-root.nw-android .nw-empty-desc {
+  font-size: 11.5px;
+}
+
+/* --- 详情页 --- */
 .nw-root.nw-android .nw-right {
   display: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .nw-root.nw-android.nw-detail-open .nw-left {
@@ -1763,63 +2008,203 @@ const handleUninstallService = async () => {
 
 .nw-root.nw-android.nw-detail-open .nw-right {
   display: block;
-  flex: 1;
 }
 
-/* Android 新增配置 FAB：位于底栏之上 */
-.nw-fab {
-  position: fixed;
-  right: 20px;
-  bottom: calc(76px + var(--lt-safe-area-bottom, 0px));
-  z-index: 30;
+.nw-root.nw-android .nw-detail-header {
   display: flex;
-  width: 54px;
-  height: 54px;
-  color: var(--theme-text-on-accent);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
+  padding: var(--theme-space-5);
+  margin: 0 0 var(--theme-space-4);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--theme-space-3);
+}
+
+.nw-root.nw-android .nw-detail-header.nw-detail-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 15%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nw-root.nw-android .nw-detail-title-row {
+  gap: 8px;
+}
+
+.nw-root.nw-android .nw-detail-title {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.nw-root.nw-android .nw-badge {
+  padding: 3px 9px;
+  font-size: 10.5px;
+}
+
+.nw-root.nw-android .nw-detail-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nw-root.nw-android .nw-detail-actions .nw-detail-btn {
+  height: 42px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- 详情分组：标题在外，字段为分隔行 --- */
+.nw-root.nw-android .nw-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nw-root.nw-android .nw-section-title {
+  margin: 0 2px var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  gap: 0;
+}
+
+.nw-root.nw-android .nw-section-title::after {
+  display: none;
+}
+
+.nw-root.nw-android .nw-grid {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+.nw-root.nw-android .nw-field,
+.nw-root.nw-android .nw-field-full {
+  display: flex;
+  padding: 12px 14px;
+  background: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nw-root.nw-android .nw-field-full {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.nw-root.nw-android .nw-grid > :first-child {
+  border-top: none;
+}
+
+.nw-root.nw-android .nw-label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
+.nw-root.nw-android .nw-val {
+  min-width: 0;
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.nw-root.nw-android .nw-field-full .nw-val {
+  text-align: left;
+}
+
+.nw-root.nw-android .nw-tag {
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+.nw-root.nw-android .nw-route-filter {
+  width: calc(100% - 28px);
+  margin: 12px 14px 0;
+}
+
+.nw-root.nw-android .nw-route-grid {
+  display: block;
+  margin-top: 8px;
+}
+
+.nw-root.nw-android .nw-route-card {
+  display: flex;
+  padding: 11px 14px;
+  background: transparent;
   border: none;
-  border-radius: var(--theme-radius-round);
-  box-shadow: var(--theme-shadow-md);
-  transition:
-    transform var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  border-radius: 0;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
 }
 
-.nw-fab:active {
-  transform: scale(0.94);
+.nw-root.nw-android .nw-route-target {
+  font-family: var(--theme-font-body);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
-@media (hover: hover) {
-  .nw-fab:hover {
-    background: var(--theme-accent-hover);
-  }
+.nw-root.nw-android .nw-route-gw {
+  flex-shrink: 0;
+}
+
+.nw-root.nw-android .nw-route-empty {
+  display: block;
+  padding: 12px 14px;
+}
+
+.nw-danger-zone {
+  margin-top: var(--theme-space-5);
+}
+
+.nw-danger-btn {
+  height: 48px;
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 加载/错误态也使用卡片容器 */
+.nw-root.nw-android .nw-empty {
+  height: auto;
+  padding: 44px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  opacity: 1;
 }
 
 /* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示） */
 .nw-back-btn {
   display: none;
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--theme-bg-hover);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.nw-back-btn:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-active);
 }
 
 .nw-detail-header {
@@ -1923,64 +2308,6 @@ const handleUninstallService = async () => {
   }
 }
 
-.nw-btn-lg {
-  padding: var(--theme-space-2) var(--theme-space-5);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-btn-start {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nw-btn-start:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nw-btn-edit {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
-  border: 1.5px solid var(--theme-border);
-}
-
-.nw-btn-edit:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.nw-btn-kill {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nw-btn-kill:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nw-btn-del {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-  border: 1.5px solid color-mix(in srgb, var(--theme-accent-primary) 30%, transparent);
-}
-
-.nw-btn-del:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-  transform: translateY(-1px);
-}
-
-.nw-btn-lg:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
-}
-
 .nw-section {
   margin-bottom: var(--theme-space-4);
 }
@@ -2063,24 +2390,6 @@ const handleUninstallService = async () => {
 
 .nw-route-filter {
   width: 100%;
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-tag);
-  border: 1.5px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.nw-route-filter:focus {
-  border-color: var(--theme-accent-primary);
-}
-
-.nw-route-filter::placeholder {
-  color: var(--theme-text-muted);
 }
 
 .nw-route-grid {
@@ -2170,21 +2479,7 @@ const handleUninstallService = async () => {
 }
 
 .nw-empty-cta {
-  padding: var(--theme-space-2) var(--theme-space-5);
   margin-top: var(--theme-space-2);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-white);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-empty-cta:hover {
-  transform: translateY(-1px);
 }
 
 .nw-svc-bar {
@@ -2245,6 +2540,7 @@ const handleUninstallService = async () => {
 
 .nw-svc-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--theme-space-2);
 }
 
@@ -2258,70 +2554,6 @@ const handleUninstallService = async () => {
 .nw-svc-desktop-only {
   font-size: 12px;
   color: var(--theme-text-muted);
-}
-
-.nw-btn-sm {
-  padding: var(--theme-space-1) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-btn-svc-install {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-on-accent, #fff);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-btn-svc-install:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nw-btn-svc-start {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nw-btn-svc-start:hover:not(:disabled) {
-  transform: scale(1.04);
-}
-
-.nw-btn-svc-stop {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nw-btn-svc-stop:hover:not(:disabled) {
-  background: var(--theme-bg-active);
-}
-
-.nw-btn-svc-uninstall {
-  color: var(--theme-text-muted);
-  background: var(--theme-bg-hover);
-  border: 1px solid var(--theme-border);
-}
-
-.nw-btn-svc-uninstall:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.nw-btn-sm:disabled,
-.nw-btn-svc-install:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
 }
 
 .cfm-msg {
@@ -2339,35 +2571,5 @@ const handleUninstallService = async () => {
   justify-content: flex-end;
   gap: var(--theme-space-3);
   margin-top: var(--theme-space-4);
-}
-
-.nw-btn-cfm {
-  padding: var(--theme-space-2) var(--theme-space-5);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-sm, 6px);
-  transition: var(--theme-transition-interactive);
-}
-
-.nw-btn-cfm-cancel {
-  color: var(--theme-text-secondary);
-  background: var(--theme-bg-hover);
-}
-
-.nw-btn-cfm-cancel:hover {
-  background: var(--theme-bg-active);
-}
-
-.nw-btn-cfm-ok {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary);
-}
-
-.nw-btn-cfm-ok:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
 }
 </style>

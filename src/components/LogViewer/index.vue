@@ -5,14 +5,15 @@
       <span class="lv-toolbar-info">{{ t('newConfig.viewLogDesc') }}</span>
       <div class="lv-toolbar-actions">
         <label class="lv-auto">
-          <input type="checkbox" v-model="autoScroll" />
-          <span class="lv-switch"><span class="lv-switch-slider"></span></span>
+          <LtSwitch v-model="autoScroll" size="sm" :aria-label="t('newConfig.logAutoScroll')" />
           <span>{{ t('newConfig.logAutoScroll') }}</span>
         </label>
-        <button class="lv-btn" :disabled="loading" @click="refresh">{{
+        <LtButton variant="secondary" size="sm" :disabled="loading" @click="refresh">{{
           t('newConfig.logRefresh')
-        }}</button>
-        <button class="lv-btn" @click="openLogsDir">{{ t('newConfig.openLogDir') }}</button>
+        }}</LtButton>
+        <LtButton variant="secondary" size="sm" @click="openLogsDir">{{
+          t('newConfig.openLogDir')
+        }}</LtButton>
       </div>
     </div>
 
@@ -55,6 +56,7 @@ import { getLogLineLevel } from '@/utils/coreLogUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { readTextTail } from '@/utils/easyTierUtil'
 import { useEasyTierStore } from '@/store/modules/easytier'
+import { LtButton, LtSwitch } from '@/components/ui'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -237,7 +239,6 @@ onUnmounted(() => {
 }
 
 .lv-auto {
-  position: relative;
   display: flex;
   align-items: center;
   gap: var(--theme-space-2);
@@ -246,73 +247,6 @@ onUnmounted(() => {
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-}
-
-.lv-auto input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-}
-
-.lv-switch {
-  position: relative;
-  display: inline-block;
-  width: 34px;
-  height: 19px;
-  flex-shrink: 0;
-}
-
-.lv-switch-slider {
-  position: absolute;
-  inset: 0;
-  background: var(--theme-border);
-  border-radius: 20px;
-  transition: background-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.lv-switch-slider::before {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 15px;
-  height: 15px;
-  background: var(--theme-text-white, #fff);
-  border-radius: 50%;
-  content: '';
-  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  transition: transform var(--theme-duration) var(--theme-ease-out);
-}
-
-.lv-auto input:checked + .lv-switch .lv-switch-slider {
-  background: var(--theme-color-success);
-}
-
-.lv-auto input:checked + .lv-switch .lv-switch-slider::before {
-  transform: translateX(15px);
-}
-
-.lv-btn {
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.lv-btn:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.lv-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
 }
 
 .lv-panel {

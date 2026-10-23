@@ -12,10 +12,11 @@
       <label class="ed-form-label" :for="fieldId('configName')">{{
         t('newEdit.configName')
       }}</label>
-      <input
-        :id="fieldId('configName')"
-        class="ed-form-input ed-name-input"
+      <LtInput
         v-model="newConfigName"
+        class="ed-name-input"
+        variant="outline"
+        :aria-label="t('newEdit.configName')"
         :placeholder="t('newEdit.configNamePlaceholder')"
       />
       <span v-if="nameError" class="ed-name-error" role="alert">{{ nameError }}</span>
@@ -69,10 +70,10 @@
               @keydown.esc.prevent="closeTemplateDropdown(true)"
               @keydown.tab="closeTemplateDropdown()"
             >
-              <button
+              <LtButton
                 v-for="(tpl, idx) in CONFIG_TEMPLATES"
                 :key="tpl.id"
-                type="button"
+                variant="bare"
                 role="option"
                 class="ed-template-option"
                 :class="{ active: tpl.id === templateId }"
@@ -98,14 +99,14 @@
                 >
                   <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-              </button>
+              </LtButton>
             </div>
           </Transition>
         </Teleport>
       </div>
-      <button
-        type="button"
-        class="ed-import-btn"
+      <LtButton
+        variant="ghost"
+        size="md"
         @click="handleImportToml"
         :title="t('newEdit.importToml')"
       >
@@ -123,39 +124,41 @@
           <line x1="9" y1="15" x2="15" y2="15" />
         </svg>
         {{ t('newEdit.importToml') }}
-      </button>
+      </LtButton>
     </div>
 
     <!-- 双模式切换：代码直编 / 表单结构化（切表单自动重解析；切代码先回写表单改动） -->
-    <div class="ed-tabs" role="tablist" :aria-label="t('newEdit.editModeLabel')">
-      <button
-        id="ed-tab-code"
-        ref="codeTabRef"
-        type="button"
-        class="ed-tab"
-        role="tab"
-        aria-controls="ed-panel-code"
-        :aria-selected="editMode === 'code'"
-        :tabindex="editMode === 'code' ? 0 : -1"
-        :class="{ active: editMode === 'code' }"
-        @click="switchToCode"
-        @keydown="handleEditTabKeydown"
-        >{{ t('newEdit.codeEdit') }}</button
-      >
-      <button
-        id="ed-tab-form"
-        ref="formTabRef"
-        type="button"
-        class="ed-tab"
-        role="tab"
-        aria-controls="ed-panel-form"
-        :aria-selected="editMode === 'form'"
-        :tabindex="editMode === 'form' ? 0 : -1"
-        :class="{ active: editMode === 'form' }"
-        @click="switchToForm"
-        @keydown="handleEditTabKeydown"
-        >{{ t('newEdit.formEdit') }}</button
-      >
+    <div class="ed-tabs">
+      <div class="ed-tabs-track" role="tablist" :aria-label="t('newEdit.editModeLabel')">
+        <button
+          id="ed-tab-code"
+          ref="codeTabRef"
+          type="button"
+          class="ed-tab"
+          role="tab"
+          aria-controls="ed-panel-code"
+          :aria-selected="editMode === 'code'"
+          :tabindex="editMode === 'code' ? 0 : -1"
+          :class="{ active: editMode === 'code' }"
+          @click="switchToCode"
+          @keydown="handleEditTabKeydown"
+          >{{ t('newEdit.codeEdit') }}</button
+        >
+        <button
+          id="ed-tab-form"
+          ref="formTabRef"
+          type="button"
+          class="ed-tab"
+          role="tab"
+          aria-controls="ed-panel-form"
+          :aria-selected="editMode === 'form'"
+          :tabindex="editMode === 'form' ? 0 : -1"
+          :class="{ active: editMode === 'form' }"
+          @click="switchToForm"
+          @keydown="handleEditTabKeydown"
+          >{{ t('newEdit.formEdit') }}</button
+        >
+      </div>
       <span v-if="store.detectedCoreVersion" class="ed-core-target">{{
         t('newEdit.adaptedTo', { version: store.detectedCoreVersion })
       }}</span>
@@ -206,10 +209,10 @@
               <label class="ed-form-label" :for="fieldId('hostname')">{{
                 t('newConfig.hostname')
               }}</label>
-              <input
-                :id="fieldId('hostname')"
-                class="ed-form-input"
+              <LtInput
                 v-model="formData.hostname"
+                variant="outline"
+                :aria-label="t('newConfig.hostname')"
                 placeholder="hostname"
               />
             </div>
@@ -217,10 +220,10 @@
               <label class="ed-form-label" :for="fieldId('instance_name')">{{
                 t('newConfig.instanceName')
               }}</label>
-              <input
-                :id="fieldId('instance_name')"
-                class="ed-form-input"
+              <LtInput
                 v-model="formData.instance_name"
+                variant="outline"
+                :aria-label="t('newConfig.instanceName')"
                 placeholder="instance_name"
               />
             </div>
@@ -234,10 +237,10 @@
               <label class="ed-form-label" :for="fieldId('network_name')">{{
                 t('newConfig.networkName')
               }}</label>
-              <input
-                :id="fieldId('network_name')"
-                class="ed-form-input"
+              <LtInput
                 v-model="formDataNetworkName"
+                variant="outline"
+                :aria-label="t('newConfig.networkName')"
                 placeholder="network_name"
               />
             </div>
@@ -245,27 +248,17 @@
               <label class="ed-form-label" :for="fieldId('network_secret')">{{
                 t('newEdit.networkSecret')
               }}</label>
-              <input
-                :id="fieldId('network_secret')"
-                class="ed-form-input"
+              <LtInput
                 v-model="formDataNetworkSecret"
+                variant="outline"
+                :aria-label="t('newEdit.networkSecret')"
                 placeholder="network_secret"
               />
             </div>
             <div class="ed-form-field">
               <label class="ed-form-label" :for="fieldId('dhcp')">DHCP</label>
               <div class="ed-form-switch-wrap">
-                <label class="ed-form-switch" :class="{ on: formData.dhcp }">
-                  <input
-                    :id="fieldId('dhcp')"
-                    class="lt-sr-only"
-                    type="checkbox"
-                    v-model="formData.dhcp"
-                  />
-                  <span>{{
-                    formData.dhcp ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
-                  }}</span>
-                </label>
+                <LtSwitch v-model="formData.dhcp" aria-label="DHCP" />
               </div>
             </div>
             <div v-if="showRpcPortal" class="ed-form-field">
@@ -276,11 +269,11 @@
                 >{{ t('newConfig.rpcPortal')
                 }}<span v-if="!rpcPortalSupported" class="ed-field-warn">⚠</span></label
               >
-              <input
-                :id="fieldId('rpc_portal')"
-                class="ed-form-input"
-                :class="{ 'ed-input-unsupported': !rpcPortalSupported }"
+              <LtInput
                 v-model="formData.rpc_portal"
+                variant="outline"
+                :class="{ 'ed-input-unsupported': !rpcPortalSupported }"
+                :aria-label="t('newConfig.rpcPortal')"
                 placeholder="0.0.0.0:15888"
               />
             </div>
@@ -291,25 +284,31 @@
           <div class="ed-form-section-title">{{ t('newEdit.listenSection') }}</div>
           <div class="ed-tag-list">
             <div class="ed-tag-row" v-for="(_, i) in formListeners" :key="'l' + i">
-              <input
-                class="ed-form-input ed-tag-input"
+              <LtInput
                 v-model="formListeners[i]"
+                class="ed-tag-input"
+                variant="outline"
                 :aria-label="`${t('newEdit.listenSection')} ${i + 1}`"
                 placeholder="tcp://0.0.0.0:11000"
               />
-              <button
-                type="button"
-                class="ed-tag-del"
+              <LtButton
+                variant="text"
+                size="md"
+                circle
                 :title="t('newEdit.removeItem', { label: t('newEdit.listenSection') })"
                 :aria-label="t('newEdit.removeItem', { label: t('newEdit.listenSection') })"
                 @click="formListeners.splice(i, 1)"
               >
                 ✕
-              </button>
+              </LtButton>
             </div>
-            <button type="button" class="ed-tag-add" @click="formListeners.push('')">{{
-              t('newEdit.addListen')
-            }}</button>
+            <LtButton
+              variant="ghost"
+              size="sm"
+              class="ed-tag-add"
+              @click="formListeners.push('')"
+              >{{ t('newEdit.addListen') }}</LtButton
+            >
           </div>
         </div>
 
@@ -317,25 +316,27 @@
           <div class="ed-form-section-title">{{ t('newEdit.peerSection') }}</div>
           <div class="ed-tag-list">
             <div class="ed-tag-row" v-for="(_, i) in formPeers" :key="'p' + i">
-              <input
-                class="ed-form-input ed-tag-input"
+              <LtInput
                 v-model="formPeers[i]"
+                class="ed-tag-input"
+                variant="outline"
                 :aria-label="`${t('newEdit.peerSection')} ${i + 1}`"
                 placeholder="tcp://host:port"
               />
-              <button
-                type="button"
-                class="ed-tag-del"
+              <LtButton
+                variant="text"
+                size="md"
+                circle
                 :title="t('newEdit.removeItem', { label: t('newEdit.peerSection') })"
                 :aria-label="t('newEdit.removeItem', { label: t('newEdit.peerSection') })"
                 @click="removePeer(i)"
               >
                 ✕
-              </button>
+              </LtButton>
             </div>
-            <button type="button" class="ed-tag-add" @click="addPeer">{{
+            <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="addPeer">{{
               t('newEdit.addPeer')
-            }}</button>
+            }}</LtButton>
           </div>
         </div>
 
@@ -343,25 +344,27 @@
           <div class="ed-form-section-title">{{ t('newEdit.routeSection') }}</div>
           <div class="ed-tag-list">
             <div class="ed-tag-row" v-for="(_, i) in formRoutes" :key="'rt' + i">
-              <input
-                class="ed-form-input ed-tag-input"
+              <LtInput
                 v-model="formRoutes[i]"
+                class="ed-tag-input"
+                variant="outline"
                 :aria-label="`${t('newEdit.routeSection')} ${i + 1}`"
                 placeholder="10.0.0.0/8"
               />
-              <button
-                type="button"
-                class="ed-tag-del"
+              <LtButton
+                variant="text"
+                size="md"
+                circle
                 :title="t('newEdit.removeItem', { label: t('newEdit.routeSection') })"
                 :aria-label="t('newEdit.removeItem', { label: t('newEdit.routeSection') })"
                 @click="formRoutes.splice(i, 1)"
               >
                 ✕
-              </button>
+              </LtButton>
             </div>
-            <button type="button" class="ed-tag-add" @click="formRoutes.push('')">{{
+            <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="formRoutes.push('')">{{
               t('newEdit.addRoute')
-            }}</button>
+            }}</LtButton>
           </div>
         </div>
 
@@ -369,25 +372,31 @@
           <div class="ed-form-section-title">{{ t('newEdit.exitSection') }}</div>
           <div class="ed-tag-list">
             <div class="ed-tag-row" v-for="(_, i) in formExitNodes" :key="'en' + i">
-              <input
-                class="ed-form-input ed-tag-input"
+              <LtInput
                 v-model="formExitNodes[i]"
+                class="ed-tag-input"
+                variant="outline"
                 :aria-label="`${t('newEdit.exitSection')} ${i + 1}`"
                 placeholder="10.0.0.0/24"
               />
-              <button
-                type="button"
-                class="ed-tag-del"
+              <LtButton
+                variant="text"
+                size="md"
+                circle
                 :title="t('newEdit.removeItem', { label: t('newEdit.exitSection') })"
                 :aria-label="t('newEdit.removeItem', { label: t('newEdit.exitSection') })"
                 @click="formExitNodes.splice(i, 1)"
               >
                 ✕
-              </button>
+              </LtButton>
             </div>
-            <button type="button" class="ed-tag-add" @click="formExitNodes.push('')">{{
-              t('newEdit.addExit')
-            }}</button>
+            <LtButton
+              variant="ghost"
+              size="sm"
+              class="ed-tag-add"
+              @click="formExitNodes.push('')"
+              >{{ t('newEdit.addExit') }}</LtButton
+            >
           </div>
         </div>
 
@@ -395,33 +404,37 @@
           <div class="ed-form-section-title">{{ t('newEdit.flagsSection') }}</div>
           <div class="ed-tag-list">
             <div class="ed-tag-row" v-for="(_, i) in formFlagsKeys" :key="'f' + i">
-              <input
-                class="ed-form-input ed-tag-input-short"
+              <LtInput
                 v-model="formFlagsKeys[i]"
+                class="ed-tag-input-short"
+                variant="outline"
                 :aria-label="`${t('newEdit.flagsSection')} ${i + 1} key`"
                 placeholder="key"
               />
-              <input
-                class="ed-form-input ed-tag-input"
+              <LtInput
                 v-model="formFlagsVals[i]"
+                class="ed-tag-input"
+                variant="outline"
                 :aria-label="`${t('newEdit.flagsSection')} ${i + 1} value`"
                 placeholder="value"
               />
-              <button
-                type="button"
-                class="ed-tag-del"
+              <LtButton
+                variant="text"
+                size="md"
+                circle
                 :title="t('newEdit.removeItem', { label: t('newEdit.flagsSection') })"
                 :aria-label="t('newEdit.removeItem', { label: t('newEdit.flagsSection') })"
                 @click="removeFlag(i)"
               >
                 ✕
-              </button>
+              </LtButton>
             </div>
-            <button
-              type="button"
+            <LtButton
+              variant="ghost"
+              size="sm"
               class="ed-tag-add"
               @click="(formFlagsKeys.push(''), formFlagsVals.push(''))"
-              >{{ t('newEdit.addFlag') }}</button
+              >{{ t('newEdit.addFlag') }}</LtButton
             >
           </div>
         </div>
@@ -440,18 +453,11 @@
                 >{{ t(f.labelKey) }}</label
               >
               <div class="ed-form-switch-wrap">
-                <label class="ed-form-switch" :class="{ on: isAdvancedFlagOn(f) }">
-                  <input
-                    :id="fieldId(f.key)"
-                    class="lt-sr-only"
-                    type="checkbox"
-                    :checked="isAdvancedFlagOn(f)"
-                    @change="toggleAdvancedFlag(f)"
-                  />
-                  <span>{{
-                    isAdvancedFlagOn(f) ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
-                  }}</span>
-                </label>
+                <LtSwitch
+                  :model-value="isAdvancedFlagOn(f)"
+                  :aria-label="t(f.labelKey)"
+                  @update:model-value="toggleAdvancedFlag(f)"
+                />
               </div>
             </div>
             <div class="ed-form-field" v-for="f in visibleTopSwitchDefs" :key="f.key">
@@ -462,20 +468,11 @@
                 >{{ t(f.labelKey) }}</label
               >
               <div class="ed-form-switch-wrap">
-                <label class="ed-form-switch" :class="{ on: formData[f.key] === true }">
-                  <input
-                    :id="fieldId(f.key)"
-                    class="lt-sr-only"
-                    type="checkbox"
-                    :checked="formData[f.key] === true"
-                    @change="toggleTopSwitch(f.key)"
-                  />
-                  <span>{{
-                    formData[f.key] === true
-                      ? t('newConfig.dhcpEnabled')
-                      : t('newConfig.dhcpDisabled')
-                  }}</span>
-                </label>
+                <LtSwitch
+                  :model-value="formData[f.key] === true"
+                  :aria-label="t(f.labelKey)"
+                  @update:model-value="toggleTopSwitch(f.key)"
+                />
               </div>
             </div>
             <div class="ed-form-field" v-for="f in visibleTopTextDefs" :key="f.key">
@@ -485,18 +482,18 @@
                 :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
                 >{{ t(f.labelKey) }}</label
               >
-              <input
+              <LtInput
                 v-if="f.key === 'stun_servers'"
-                :id="fieldId(f.key)"
-                class="ed-form-input"
                 v-model="formStunServers"
+                variant="outline"
+                :aria-label="t(f.labelKey)"
                 :placeholder="f.key"
               />
-              <input
+              <LtInput
                 v-else
-                :id="fieldId(f.key)"
-                class="ed-form-input"
                 v-model="formData[f.key]"
+                variant="outline"
+                :aria-label="t(f.labelKey)"
                 :placeholder="f.key"
               />
             </div>
@@ -514,17 +511,7 @@
         <div v-if="securitySectionVisible" class="ed-form-section ed-secure-section">
           <div class="ed-secure-head" :title="t('newEdit.tipSecureMode')">
             <span class="ed-secure-title">🔒 {{ t('newEdit.securitySection') }}</span>
-            <label class="ed-form-switch" :class="{ on: secureModeEnabled }">
-              <input
-                class="lt-sr-only"
-                type="checkbox"
-                v-model="secureModeEnabled"
-                :aria-label="t('newEdit.securitySection')"
-              />
-              <span>{{
-                secureModeEnabled ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
-              }}</span>
-            </label>
+            <LtSwitch v-model="secureModeEnabled" :aria-label="t('newEdit.securitySection')" />
           </div>
           <div v-if="secureModeEnabled" class="ed-form-grid">
             <div
@@ -540,19 +527,19 @@
                 >{{ t(f.labelKey) }}</label
               >
               <div class="ed-secret-row">
-                <input
-                  :id="fieldId(f.key)"
-                  class="ed-form-input"
+                <LtInput
                   :class="{ 'ed-secret-input': f.secret }"
-                  :value="secretDisplays[f.key] ?? formData[f.key] ?? ''"
-                  @input="onSecurityInput(f, ($event.target as HTMLInputElement).value)"
+                  :model-value="secretDisplays[f.key] ?? formData[f.key] ?? ''"
+                  variant="outline"
+                  :aria-label="t(f.labelKey)"
                   :placeholder="f.key"
                   :type="f.secret && !secretVisible[f.key] ? 'password' : 'text'"
+                  @update:model-value="onSecurityInput(f, $event)"
                 />
-                <button
+                <LtButton
                   v-if="f.secret"
-                  type="button"
-                  class="ed-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   :title="secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
                   :aria-label="
                     secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')
@@ -560,16 +547,16 @@
                   @click="toggleSecretVisible(f.key)"
                   >{{
                     secretVisible[f.key] ? t('newEdit.hideSecret') : t('newEdit.showSecret')
-                  }}</button
+                  }}</LtButton
                 >
-                <button
+                <LtButton
                   v-if="f.filePick"
-                  type="button"
-                  class="ed-btn-sm"
+                  variant="ghost"
+                  size="sm"
                   :title="t('newEdit.pickFile')"
                   :aria-label="t('newEdit.pickFile')"
                   @click="pickCredentialFile"
-                  >📁 {{ t('newEdit.pickFile') }}</button
+                  >📁 {{ t('newEdit.pickFile') }}</LtButton
                 >
               </div>
             </div>
@@ -604,12 +591,12 @@
           dialogMode === 'add' ? t('newEdit.addFooter') : t('newEdit.editFooter')
         }}</span>
         <div class="ed-footer-btns">
-          <button type="button" class="ed-btn ed-btn-cancel" @click="requestCloseFromButton">{{
+          <LtButton variant="ghost" size="md" @click="requestCloseFromButton">{{
             t('newCommon.cancel')
-          }}</button>
-          <button
-            type="button"
-            class="ed-btn ed-btn-primary"
+          }}</LtButton>
+          <LtButton
+            variant="primary"
+            size="md"
             :disabled="saving || (editMode === 'code' && !!codeIssue)"
             :title="editMode === 'code' && codeIssue ? t('newEdit.codeInvalidSave') : undefined"
             @click="handleSave"
@@ -619,7 +606,7 @@
                 : dialogMode === 'add'
                   ? t('newEdit.create')
                   : t('newEdit.save')
-            }}</button
+            }}</LtButton
           >
         </div>
       </div>
@@ -636,12 +623,12 @@
   >
     <p class="ed-discard-msg">{{ t('newCommon.discardMsg') }}</p>
     <template #footer>
-      <button type="button" class="ed-btn ed-btn-cancel" @click="resolveDiscard(false)">{{
+      <LtButton variant="ghost" size="md" @click="resolveDiscard(false)">{{
         t('newCommon.cancel')
-      }}</button>
-      <button type="button" class="ed-btn ed-btn-danger" @click="resolveDiscard(true)">{{
+      }}</LtButton>
+      <LtButton variant="danger" size="md" @click="resolveDiscard(true)">{{
         t('newCommon.discardConfirm')
-      }}</button>
+      }}</LtButton>
     </template>
   </CreamDialog>
 </template>
@@ -669,6 +656,7 @@ import {
   type ConfigFormModel
 } from '@/utils/configFormUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton, LtInput, LtSwitch } from '@/components/ui'
 import {
   CONFIG_TEMPLATES,
   SECURITY_FIELD_DEFS,
@@ -1480,30 +1468,6 @@ const handleImportToml = async () => {
   white-space: nowrap;
 }
 
-.ed-import-btn {
-  display: flex;
-  padding: 6px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-muted, #c8bdb2);
-  white-space: nowrap;
-  cursor: pointer;
-  background: none;
-  border: 1.5px dashed var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-}
-
-.ed-import-btn:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-  border-style: solid;
-}
-
 /* 模板下拉：触发器沿用胶囊边框，菜单 Teleport 到 body 避免被弹窗裁剪 */
 .ed-template-select {
   position: relative;
@@ -1646,6 +1610,12 @@ const handleImportToml = async () => {
   flex-wrap: wrap;
 }
 
+.ed-tabs-track {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .ed-core-target {
   padding: 3px 10px;
   margin-left: auto;
@@ -1705,7 +1675,8 @@ const handleImportToml = async () => {
   color: var(--theme-color-warning, #d9a441);
 }
 
-.ed-input-unsupported {
+.ed-input-unsupported :deep(.n-input__border),
+.ed-input-unsupported :deep(.n-input__state-border) {
   border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 45%, transparent);
 }
 
@@ -1835,49 +1806,8 @@ const handleImportToml = async () => {
   text-transform: uppercase;
 }
 
-.ed-form-input {
-  padding: 8px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.ed-form-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
 .ed-form-switch-wrap {
   padding: 4px 0;
-}
-
-.ed-form-switch {
-  position: relative;
-  display: inline-flex;
-  padding: 4px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: color-mix(in srgb, var(--theme-text-muted, #c8bdb2) 10%, transparent);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-}
-
-/* 隐藏的原生 checkbox 键盘聚焦时给整个开关画焦点环 */
-.ed-form-switch:focus-within {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
-}
-
-.ed-form-switch.on {
-  color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
 }
 
 .ed-tag-list {
@@ -1901,42 +1831,8 @@ const handleImportToml = async () => {
   flex-shrink: 0;
 }
 
-.ed-tag-del {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: none;
-  border: none;
-  border-radius: 50%;
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  justify-content: center;
-}
-
-.ed-tag-del:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 10%, transparent);
-}
-
 .ed-tag-add {
-  padding: 6px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: none;
-  border: 1.5px dashed var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
   align-self: flex-start;
-}
-
-.ed-tag-add:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 /* 5.6：折叠分组 + 安全字段 */
@@ -2046,31 +1942,13 @@ const handleImportToml = async () => {
   align-items: center;
 }
 
-.ed-secret-row .ed-form-input {
+.ed-secret-row .lt-input {
   flex: 1;
 }
 
-.ed-secret-input {
+.ed-secret-input :deep(.n-input__input-el) {
   font-family: 'Cascadia Code', Consolas, monospace;
   letter-spacing: 2px;
-}
-
-.ed-btn-sm {
-  padding: 6px 12px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-secondary, #7a6e5e);
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
-}
-
-.ed-btn-sm:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 .ed-footer {
@@ -2089,48 +1967,6 @@ const handleImportToml = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.ed-btn {
-  padding: 6px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: var(--theme-radius-sm, 10px);
-  transition: var(--theme-transition-interactive);
-}
-
-.ed-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.ed-btn-cancel {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.ed-btn-cancel:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.ed-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.ed-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
-}
-
-.ed-btn-danger {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-hover, #c9955f);
-}
-
-.ed-btn-danger:hover:not(:disabled) {
-  background: var(--theme-accent-primary, #d4a574);
 }
 
 /* 移动端窄屏：名称栏换行、表单单列、编辑区降矮、底部按钮可换行 */

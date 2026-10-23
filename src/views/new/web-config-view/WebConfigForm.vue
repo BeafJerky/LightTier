@@ -8,12 +8,12 @@
   >
     <!-- 配置名称（仅新增模式） -->
     <div v-if="mode === 'add'" class="wcf-field-bar">
-      <label class="wcf-label" :for="fieldId('configName')">{{ t('newWebForm.configName') }}</label>
-      <input
-        :id="fieldId('configName')"
-        class="wcf-input"
+      <label class="wcf-label">{{ t('newWebForm.configName') }}</label>
+      <LtInput
         v-model="form.configFileName"
+        variant="outline"
         :placeholder="t('newWebForm.configNamePlaceholder')"
+        :aria-label="t('newWebForm.configName')"
       />
       <span v-if="nameError" class="wcf-error" role="alert">{{ nameError }}</span>
     </div>
@@ -23,34 +23,37 @@
       <div class="wcf-section-title">{{ t('newWebForm.serverInfo') }}</div>
       <div class="wcf-grid">
         <div class="wcf-field">
-          <label class="wcf-label" :for="fieldId('protocol')">{{ t('newWebForm.protocol') }}</label>
-          <select :id="fieldId('protocol')" class="wcf-select" v-model="form.protocol">
-            <option value="udp">udp</option>
-            <option value="tcp">tcp</option>
-          </select>
+          <label class="wcf-label">{{ t('newWebForm.protocol') }}</label>
+          <LtSelect
+            v-model="form.protocol"
+            :options="protocolOptions"
+            variant="outline"
+            :aria-label="t('newWebForm.protocol')"
+          />
         </div>
         <div class="wcf-field">
-          <label class="wcf-label" :for="fieldId('host')">{{ t('newWebForm.host') }}</label>
-          <input
-            :id="fieldId('host')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebForm.host') }}</label>
+          <LtInput
             v-model="form.host"
+            variant="outline"
             :placeholder="t('newWebForm.hostPlaceholder')"
+            :aria-label="t('newWebForm.host')"
           />
           <span v-if="hostError" class="wcf-error" role="alert">{{ hostError }}</span>
         </div>
         <div class="wcf-field">
           <label class="wcf-label" :for="fieldId('port')">{{ t('newWebForm.port') }}</label>
-          <input
-            :id="fieldId('port')"
-            class="wcf-input"
-            type="number"
-            v-model.number="form.port"
-            min="1"
-            max="65535"
+          <LtInput
+            :model-value="portInput"
+            variant="outline"
+            inputmode="numeric"
+            :maxlength="5"
+            :input-id="fieldId('port')"
             placeholder="22020"
+            :aria-label="t('newWebForm.port')"
             :aria-invalid="!!portError"
             :aria-describedby="portError ? 'wcf-port-error' : undefined"
+            @update:model-value="handlePortInput"
             @blur="validatePort"
           />
           <span v-if="portError" id="wcf-port-error" class="wcf-error" role="alert">{{
@@ -65,25 +68,23 @@
       <div class="wcf-section-title">{{ t('newWebForm.account') }}</div>
       <div class="wcf-grid">
         <div class="wcf-field">
-          <label class="wcf-label" :for="fieldId('userName')">{{ t('newWebForm.username') }}</label>
-          <input
-            :id="fieldId('userName')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebForm.username') }}</label>
+          <LtInput
             v-model="form.userName"
-            maxlength="36"
+            variant="outline"
+            :maxlength="36"
             :placeholder="t('newWebForm.usernamePlaceholder')"
+            :aria-label="t('newWebForm.username')"
           />
           <span v-if="userError" class="wcf-error" role="alert">{{ userError }}</span>
         </div>
         <div class="wcf-field">
-          <label class="wcf-label" :for="fieldId('webUrl')">{{
-            t('newWebForm.consoleAddr')
-          }}</label>
-          <input
-            :id="fieldId('webUrl')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebForm.consoleAddr') }}</label>
+          <LtInput
             v-model="form.webUrl"
+            variant="outline"
             :placeholder="t('newWebForm.consolePlaceholder')"
+            :aria-label="t('newWebForm.consoleAddr')"
           />
         </div>
       </div>
@@ -94,23 +95,17 @@
         <span class="wcf-footer-hint">{{
           mode === 'add' ? t('newWebForm.addHint') : t('newWebForm.editHint')
         }}</span>
-        <div>
-          <button type="button" class="wcf-btn wcf-btn-cancel" @click="requestCloseFromButton">{{
+        <div class="wcf-footer-btns">
+          <LtButton variant="ghost" @click="requestCloseFromButton">{{
             t('newCommon.cancel')
-          }}</button>
-          <button
-            type="button"
-            class="wcf-btn wcf-btn-primary"
-            :disabled="saving"
-            @click="handleSave"
-            >{{
-              saving
-                ? t('newCommon.saving')
-                : mode === 'add'
-                  ? t('newWebForm.create')
-                  : t('newWebForm.save')
-            }}</button
-          >
+          }}</LtButton>
+          <LtButton variant="primary" :disabled="saving" @click="handleSave">{{
+            saving
+              ? t('newCommon.saving')
+              : mode === 'add'
+                ? t('newWebForm.create')
+                : t('newWebForm.save')
+          }}</LtButton>
         </div>
       </div>
     </template>
@@ -125,12 +120,12 @@
   >
     <p class="wcf-discard-msg">{{ t('newCommon.discardMsg') }}</p>
     <template #footer>
-      <button type="button" class="wcf-btn wcf-btn-cancel" @click="resolveDiscard(false)">{{
+      <LtButton variant="ghost" @click="resolveDiscard(false)">{{
         t('newCommon.cancel')
-      }}</button>
-      <button type="button" class="wcf-btn wcf-btn-primary" @click="resolveDiscard(true)">{{
+      }}</LtButton>
+      <LtButton variant="danger" @click="resolveDiscard(true)">{{
         t('newCommon.discardConfirm')
-      }}</button>
+      }}</LtButton>
     </template>
   </CreamDialog>
 </template>
@@ -146,12 +141,18 @@
 import { computed, ref, watch, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton, LtInput, LtSelect } from '@/components/ui'
 import type { FormWebData } from '@/types/formTypes'
 import DefaultData from '@/constants/defaultData'
 import { isValidConfigName } from '@/utils/configNameUtil'
 import { cloneDeep } from 'lodash-es'
 
 const { t } = useI18n()
+
+const protocolOptions = [
+  { label: 'udp', value: 'udp' },
+  { label: 'tcp', value: 'tcp' }
+]
 
 const props = defineProps<{
   modelValue: boolean
@@ -167,7 +168,6 @@ const emit = defineEmits<{
 }>()
 
 const dialogRef = ref<InstanceType<typeof CreamDialog> | null>(null)
-// label for / 控件 id 一一对应，避免仅占位符充当可访问名称
 const uid = useId()
 const fieldId = (key: string) => `wcf-${uid}-${key}`
 const visible = ref(props.modelValue)
@@ -183,6 +183,13 @@ watch(visible, (v) => {
 })
 
 const form = ref<FormWebData>(cloneDeep(DefaultData.defaultFormWebData))
+// 端口以文本承接原始输入，避免非法字符被数字输入立即吞掉而无法提示
+const portInput = ref(String(form.value.port ?? ''))
+const handlePortInput = (value: string) => {
+  portInput.value = value
+  form.value.port = value.trim() ? Number(value) : undefined
+  portError.value = ''
+}
 // 各字段校验错误文案（非空时在输入框下方展示）
 const nameError = ref('')
 const hostError = ref('')
@@ -205,6 +212,7 @@ const resetForm = () => {
   } else {
     form.value = cloneDeep(props.configData)
   }
+  portInput.value = String(form.value.port ?? '')
   nameError.value = ''
   hostError.value = ''
   userError.value = ''
@@ -367,28 +375,6 @@ const handleSave = async () => {
   text-transform: uppercase;
 }
 
-.wcf-input,
-.wcf-select {
-  padding: 8px 14px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.wcf-select {
-  cursor: pointer;
-}
-
-.wcf-input:focus,
-.wcf-select:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
 .wcf-error {
   font-size: 12px;
   color: var(--theme-accent-primary, #e8a0a0);
@@ -413,38 +399,9 @@ const handleSave = async () => {
   color: var(--theme-text-muted, #c8bdb2);
 }
 
-.wcf-btn {
-  padding: 6px 16px;
-  margin-left: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: var(--theme-transition-interactive);
-}
-
-.wcf-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.wcf-btn-cancel {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.wcf-btn-cancel:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.wcf-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.wcf-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
+.wcf-footer-btns {
+  display: flex;
+  gap: 8px;
 }
 
 /* 移动端：表单单列，避免两列在 390px 下横向溢出 */

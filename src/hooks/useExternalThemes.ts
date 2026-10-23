@@ -1,10 +1,11 @@
 /**
  * 外部主题发现与恢复
  *
- * - 扫描 resource/themes/*.css（Tauri Resource 目录），至少含 3 个 --theme- 变量才视为合法主题
+ * - 预置外部主题在构建期由前端打包（Android APK 的 resource 目录不可枚举，见下方 glob 说明）
+ * - 桌面端另行扫描 resource/themes/*.css（Tauri Resource 目录），同名文件覆盖内置版本，支持用户自定义
+ * - 至少含 3 个 --theme- 变量才视为合法主题
  * - 显示名优先取 CSS 内的 `@theme-label: <中文名>` 元数据，缺省回退文件名
  * - 主题色徽标从 --theme-accent-primary 或 --theme-color-success 提取
- * - 浏览器 dev 模式（无 Tauri API）下静默跳过，不阻塞页面
  */
 import { ref } from 'vue'
 import { readTextFile, readDir } from '@tauri-apps/plugin-fs'
@@ -32,6 +33,9 @@ export const isValidThemeName = (name: string): boolean => THEME_NAME_PATTERN.te
 const THEME_LABEL_PATTERN = /@theme-label\s*:\s*([^*\r\n]+)/
 const THEME_LABEL_MAX_LENGTH = 40
 
+// 主题色徽标：优先主强调色，其次成功色
+const THEME_COLOR_PATTERN = /--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/
+
 /** 提取主题显示名；未声明、为空或超长时按规则回退/截断（文件名始终作为稳定 ID） */
 export const extractThemeLabel = (cssText: string, fallback: string): string => {
   const label = cssText.match(THEME_LABEL_PATTERN)?.[1].trim()
@@ -39,13 +43,46 @@ export const extractThemeLabel = (cssText: string, fallback: string): string => 
   return label.slice(0, THEME_LABEL_MAX_LENGTH)
 }
 
+const toThemeInfo = (name: string, cssText: string): ExternalThemeInfo | null => {
+  if (!isValidThemeName(name) || !isValidThemeCss(cssText)) return null
+  const match = cssText.match(THEME_COLOR_PATTERN)
+  return {
+    name,
+    label: extractThemeLabel(cssText, name),
+    color: match ? match[1].trim() : '#888',
+    cssText
+  }
+}
+
+/**
+ * 预置外部主题在构建期内联：Android 安装包只包含 asset URI（无法 readDir 枚举），
+ * 若仅在桌面端扫描资源目录，Android 的主题选择器中会完全没有这些主题。
+ * 桌面端仍会扫描 resource/themes 并以同名文件覆盖，保留用户自定义能力。
+ */
+const bundledThemeCss = import.meta.glob('/src-tauri/resource/themes/*.css', {
+  query: '?raw',
+  import: 'default',
+  eager: true
+}) as Record<string, string>
+
+const themeNameFromPath = (path: string): string =>
+  path
+    .split('/')
+    .pop()!
+    .replace(/\.css$/i, '')
+
+const bundledThemes: ExternalThemeInfo[] = Object.entries(bundledThemeCss)
+  .map(([path, cssText]) => toThemeInfo(themeNameFromPath(path), cssText))
+  .filter((theme): theme is ExternalThemeInfo => theme !== null)
+  .sort((a, b) => a.name.localeCompare(b.name))
+
 // 模块级单例：发现列表多组件共享
 const extThemes = ref<ExternalThemeInfo[]>([])
 
 export const useExternalThemes = () => {
-  // 扫描资源目录并解析全部合法主题
+  // 合并内置主题与资源目录扫描结果（资源目录中的同名主题优先）
   const discoverThemes = async (): Promise<ExternalThemeInfo[]> => {
-    extThemes.value = []
+    const merged = new Map(bundledThemes.map((theme) => [theme.name, theme]))
     try {
       const entries = await readDir('resource/themes', { baseDir: BaseDirectory.Resource })
       for (const e of entries.filter((e) => e.name?.endsWith('.css'))) {
@@ -55,25 +92,33 @@ export const useExternalThemes = () => {
           const cssText = (await readTextFile(`resource/themes/${e.name}`, {
             baseDir: BaseDirectory.Resource
           })) as string
-          if (!isValidThemeCss(cssText)) continue
-          const match = cssText.match(/--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/)
-          extThemes.value.push({
-            name,
-            label: extractThemeLabel(cssText, name),
-            color: match ? match[1].trim() : '#888',
-            cssText
-          })
+          const theme = toThemeInfo(name, cssText)
+          if (theme) merged.set(name, theme)
         } catch {
-          /* 单个文件读取失败，跳过 */
+          /* 单个文件读取失败，保留内置版本或跳过 */
         }
       }
     } catch {
-      /* Tauri API 不可用，浏览器 dev 模式降级 */
+      /* Tauri API 不可用（浏览器 dev / Android asset 目录）：仅使用内置主题 */
     }
+    extThemes.value = [...merged.values()].sort((a, b) => a.name.localeCompare(b.name))
     return extThemes.value
   }
 
   return { externalThemes: extThemes, discoverThemes }
+}
+
+/** 读取主题 CSS：桌面端优先资源目录，缺失或不可读时回退构建期内置版本 */
+export const loadThemeCss = async (name: string): Promise<string | null> => {
+  try {
+    const css = (await readTextFile(`resource/themes/${name}.css`, {
+      baseDir: BaseDirectory.Resource
+    })) as string
+    if (isValidThemeCss(css)) return css
+  } catch {
+    /* 资源目录不可读：尝试内置主题 */
+  }
+  return bundledThemes.find((theme) => theme.name === name)?.cssText ?? null
 }
 
 /** 重启后恢复上次使用的外部主题 */
@@ -83,12 +128,10 @@ export const restoreTheme = async () => {
   if (!saved || saved === 'cream' || saved === 'dark') return
   if (!isValidThemeName(saved)) return
   try {
-    const css = (await readTextFile(`resource/themes/${saved}.css`, {
-      baseDir: BaseDirectory.Resource
-    })) as string
+    const css = await loadThemeCss(saved)
+    if (!css) return
     // 恢复前再次确认 localStorage 中的主题仍是预期的（防止异步期间用户手动切换被覆盖）
     if (localStorage.getItem('theme') !== saved) return
-    if (!isValidThemeCss(css)) return
     const { applyTheme } = useThemeLoader()
     applyTheme(saved, css) // 统一处理：注入CSS + 更新currentTheme + 设置data-theme
   } catch {

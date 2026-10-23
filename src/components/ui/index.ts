@@ -1,0 +1,5 @@
+export { default as LtButton } from './LtButton.vue'
+export { default as LtInput } from './LtInput.vue'
+export { default as LtSelect } from './LtSelect.vue'
+export { default as LtSwitch } from './LtSwitch.vue'
+export { default as LtTag } from './LtTag.vue'

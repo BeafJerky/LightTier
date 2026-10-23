@@ -26,6 +26,14 @@ body,
   border: 0;
 }
 
+// 按钮/表单控件统一 border-box：固定宽高不再被 padding/border 撑开
+button,
+input,
+select,
+textarea {
+  box-sizing: border-box;
+}
+
 // 按钮文案不换行：空间不足时由外层布局换行，避免文字被挤成多行
 button {
   white-space: nowrap;

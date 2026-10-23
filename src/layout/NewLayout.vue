@@ -9,8 +9,8 @@
     >
       <span class="nl-drag-title">LightTier</span>
       <div class="nl-win-actions" @dblclick.stop>
-        <button
-          type="button"
+        <LtButton
+          variant="bare"
           class="nl-win-btn"
           @click.stop="minimizeWindow"
           :title="t('newLayout.minimize')"
@@ -26,9 +26,9 @@
           >
             <path d="M5 12h14" />
           </svg>
-        </button>
-        <button
-          type="button"
+        </LtButton>
+        <LtButton
+          variant="bare"
           class="nl-win-btn"
           @click.stop="toggleMaximize"
           :title="isMaximized ? t('newLayout.restore') : t('newLayout.maximize')"
@@ -57,9 +57,9 @@
           >
             <rect x="5" y="5" width="14" height="14" rx="1" />
           </svg>
-        </button>
-        <button
-          type="button"
+        </LtButton>
+        <LtButton
+          variant="bare"
           class="nl-win-btn nl-win-close"
           @click.stop="closeWindow"
           :title="t('newCommon.closeWindow')"
@@ -75,7 +75,7 @@
           >
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
-        </button>
+        </LtButton>
       </div>
     </div>
 
@@ -90,9 +90,10 @@
         <div class="nl-section-label">{{ t('newLayout.sectionNav') }}</div>
 
         <nav class="nl-menu" role="navigation" :aria-label="t('newLayout.ariaMainNav')">
-          <button
+          <LtButton
             v-for="item in menuItems"
             :key="item.fullPath"
+            variant="bare"
             class="nl-menu-item"
             :class="{ active: isActive(item.fullPath) }"
             @click="navigate(item.fullPath)"
@@ -101,17 +102,21 @@
               <Icon :icon="item.icon" :size="18" />
             </span>
             <span class="nl-menu-label">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
-          </button>
+          </LtButton>
         </nav>
 
         <div class="nl-sidebar-footer">
           <div class="nl-footer-actions">
             <!-- 语言切换 -->
             <div class="nl-lang-wrap">
-              <button
+              <LtButton
+                variant="text"
+                size="sm"
+                circle
                 class="nl-action-btn"
                 @click.stop="langDropdownVisible = !langDropdownVisible"
                 :title="currentLangName"
+                :aria-label="t('newSettings.language')"
               >
                 <svg
                   width="14"
@@ -123,22 +128,31 @@
                 >
                   <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18l3-6 3 6" />
                 </svg>
-              </button>
+              </LtButton>
               <Transition name="lang-drop">
                 <div v-if="langDropdownVisible" class="nl-lang-dropdown">
-                  <button
+                  <LtButton
                     v-for="item in langMap"
                     :key="item.lang"
+                    variant="bare"
                     class="nl-lang-option"
                     :class="{ active: currentLang === item.lang }"
                     @click="switchLang(item.lang)"
-                    >{{ item.name }}</button
+                    >{{ item.name }}</LtButton
                   >
                 </div>
               </Transition>
             </div>
             <!-- 主题切换 -->
-            <button class="nl-action-btn" @click="openTheme" :title="t('newLayout.theme')">
+            <LtButton
+              variant="text"
+              size="sm"
+              circle
+              class="nl-action-btn"
+              @click="openTheme"
+              :title="t('newLayout.theme')"
+              :aria-label="t('newLayout.theme')"
+            >
               <svg
                 width="14"
                 height="14"
@@ -152,9 +166,17 @@
                   d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
                 />
               </svg>
-            </button>
+            </LtButton>
             <!-- 设置 -->
-            <button class="nl-action-btn" @click="openSettings" :title="t('newSettings.settings')">
+            <LtButton
+              variant="text"
+              size="sm"
+              circle
+              class="nl-action-btn"
+              @click="openSettings"
+              :title="t('newSettings.settings')"
+              :aria-label="t('newSettings.settings')"
+            >
               <svg
                 width="14"
                 height="14"
@@ -168,7 +190,7 @@
                   d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
                 />
               </svg>
-            </button>
+            </LtButton>
           </div>
         </div>
       </aside>
@@ -191,8 +213,11 @@
         >
           <div class="nl-toolbar-left">
             <!-- 二级页面：返回上一页；桌面一级页为窄屏菜单开关 -->
-            <button
+            <LtButton
               v-if="isSubPage"
+              variant="text"
+              size="lg"
+              circle
               class="nl-back-btn"
               @click="goBack"
               :aria-label="t('newCommon.back')"
@@ -207,9 +232,12 @@
               >
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-            </button>
-            <button
+            </LtButton>
+            <LtButton
               v-else-if="!isAndroidPlatform"
+              variant="text"
+              size="md"
+              circle
               class="nl-hamburger"
               @click="sidebarOpen = true"
               :aria-label="t('newLayout.ariaOpenMenu')"
@@ -224,7 +252,7 @@
               >
                 <path d="M3 6h18M3 12h18M3 18h18" />
               </svg>
-            </button>
+            </LtButton>
             <div class="nl-page-header">
               <h1 class="nl-page-title">{{ pageTitle }}</h1>
               <p v-if="showSubtitle && pageSubtitle" class="nl-page-subtitle">
@@ -234,9 +262,11 @@
           </div>
           <div class="nl-toolbar-right">
             <!-- Android：一级页提供刷新（替代桌面悬浮菜单） -->
-            <button
+            <LtButton
               v-if="showAndroidRefresh"
-              type="button"
+              variant="text"
+              size="lg"
+              circle
               class="nl-appbar-action"
               :class="{ spinning: isRefreshing }"
               :disabled="isRefreshing"
@@ -255,7 +285,7 @@
                 <path d="M23 4v6h-6M1 20v-6h6" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
               </svg>
-            </button>
+            </LtButton>
           </div>
         </header>
 
@@ -272,10 +302,10 @@
 
         <!-- Android 底部导航：一级入口（子页面隐藏） -->
         <nav v-if="showTabBar" class="nl-tabbar" :aria-label="t('newLayout.ariaBottomNav')">
-          <button
+          <LtButton
             v-for="tab in androidTabs"
             :key="tab.path"
-            type="button"
+            variant="bare"
             class="nl-tab"
             :class="{ active: isTabActive(tab.path) }"
             :aria-current="isTabActive(tab.path) ? 'page' : undefined"
@@ -334,7 +364,7 @@
               />
             </svg>
             <span class="nl-tab-label">{{ t(tab.labelKey) }}</span>
-          </button>
+          </LtButton>
         </nav>
       </div>
     </div>
@@ -381,6 +411,7 @@ import { useCreamToast } from '@/hooks/useCreamToast'
 import ThemeDialog from '@/components/ThemeDialog/index.vue'
 import SettingsDialog from '@/components/SettingsDialog/index.vue'
 import FloatingMenu from '@/components/FloatingMenu/index.vue'
+import { LtButton } from '@/components/ui'
 import { restoreTheme } from '@/hooks/useExternalThemes'
 import { resolveDefaultTheme, useThemeLoader } from '@/hooks/useThemeLoader'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -679,24 +710,19 @@ onBeforeUnmount(() => {
   -webkit-app-region: no-drag;
 }
 
-.nl-win-btn {
-  display: flex;
+.nl-win-actions .nl-win-btn {
   width: 32px;
   height: 32px;
+  min-height: 32px;
   color: var(--theme-text-muted);
-  cursor: pointer;
-  background: transparent;
-  border: none;
   border-radius: var(--theme-radius-sm);
   transition:
     color var(--theme-duration-fast) var(--theme-ease-out),
     background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
   -webkit-app-region: no-drag;
 }
 
-.nl-win-btn:hover {
+.nl-win-actions .nl-win-btn:hover {
   color: var(--theme-text-on-accent);
   background: var(--theme-accent-primary);
 }
@@ -778,6 +804,7 @@ onBeforeUnmount(() => {
     color var(--theme-duration-fast) var(--theme-ease-out),
     background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
+  justify-content: flex-start;
   gap: var(--theme-space-3);
 }
 
@@ -838,24 +865,7 @@ onBeforeUnmount(() => {
 }
 
 .nl-action-btn {
-  display: flex;
-  width: 28px;
-  height: 28px;
   color: var(--theme-text-muted);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-sm);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-}
-
-.nl-action-btn:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
 }
 
 /* 语言下拉 */
@@ -939,51 +949,12 @@ onBeforeUnmount(() => {
 /* 窄屏菜单开关（默认隐藏） */
 .nl-hamburger {
   display: none;
-  width: 32px;
-  height: 32px;
   margin-right: var(--theme-space-3);
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-sm);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-}
-
-.nl-hamburger:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
 }
 
 /* 二级页面返回按钮（移动端设置/主题页，替代菜单开关） */
 .nl-back-btn {
-  display: flex;
-  width: 32px;
-  height: 32px;
   margin-right: var(--theme-space-3);
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-sm);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-}
-
-.nl-back-btn:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nl-back-btn:active {
-  background: var(--theme-bg-active);
 }
 
 /* 窄屏抽屉遮罩 */
@@ -1123,7 +1094,7 @@ onBeforeUnmount(() => {
   }
 
   .nl-hamburger {
-    display: flex;
+    display: inline-flex;
   }
 
   .nl-toolbar {
@@ -1161,7 +1132,7 @@ onBeforeUnmount(() => {
 }
 
 .nl-toolbar-android.is-sub {
-  height: 54px;
+  height: 56px;
   background: var(--theme-bg-toolbar);
 }
 
@@ -1199,30 +1170,7 @@ onBeforeUnmount(() => {
 
 /* 应用栏刷新：替代桌面悬浮菜单 */
 .nl-appbar-action {
-  display: flex;
-  width: 40px;
-  height: 40px;
   margin-right: calc(-1 * var(--theme-space-2));
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-round);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.nl-appbar-action:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nl-appbar-action:active {
-  background: var(--theme-bg-active);
 }
 
 .nl-appbar-action:disabled {
@@ -1271,35 +1219,37 @@ onBeforeUnmount(() => {
   align-items: stretch;
 }
 
-.nl-tab {
+.nl-tabbar .nl-tab {
   position: relative;
-  display: flex;
+  height: 100%;
   padding: 0;
-  font-family: var(--theme-font-body);
   color: var(--theme-text-muted);
-  cursor: pointer;
-  background: transparent;
-  border: none;
   flex: 1;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   gap: 2px;
   transition: color var(--theme-duration-fast) var(--theme-ease-out);
-  -webkit-tap-highlight-color: transparent;
 }
 
-.nl-tab:hover {
+.nl-tab :deep(.n-button__content) {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.nl-tabbar .nl-tab:hover {
   color: var(--theme-text-secondary);
 }
 
 /* 触摸端按下反馈：WebView 没有鼠标悬停，按压反馈靠 :active */
-.nl-tab:active {
+.nl-tabbar .nl-tab:active {
   color: var(--theme-accent-primary);
   opacity: 0.75;
 }
 
-.nl-tab.active {
+.nl-tabbar .nl-tab.active {
   color: var(--theme-accent-primary);
 }
 

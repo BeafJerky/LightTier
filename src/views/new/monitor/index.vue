@@ -8,43 +8,79 @@
   >
     <!-- 左侧配置列表 -->
     <div class="nm-left">
-      <div class="nm-left-header">
+      <div v-if="!isAndroidPlatform" class="nm-left-header">
         <div class="nm-left-label">{{ t('newMonitor.monitorLabel') }}</div>
       </div>
       <div class="nm-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.configListLoading" />
-        <div
-          v-for="item in displayList"
-          :key="item.configFileName"
-          class="nm-card"
-          :class="{ active: selectedConfig?.configFileName === item.configFileName }"
-          @click="selectConfig(item)"
-        >
-          <div class="nmc-top">
-            <div class="nmc-status">
-              <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
-              <span class="nmc-status-text">{{
-                item.running ? t('newCommon.running') : t('newCommon.stopped')
-              }}</span>
+        <!-- Android：与总览一致的分组行列表 -->
+        <template v-if="isAndroidPlatform">
+          <div v-if="displayList.length > 0" class="nm-list">
+            <div
+              v-for="item in displayList"
+              :key="item.configFileName"
+              class="nm-row"
+              :class="{ 'nm-row-on': item.running }"
+              @click="selectConfig(item)"
+            >
+              <span class="nm-row-icon" :class="{ on: item.running }">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 12h3l2.5-6 4 12 2.5-6h6" />
+                </svg>
+              </span>
+              <span class="nm-row-text">
+                <span class="nm-row-name">{{ item.configFileName }}</span>
+                <span class="nm-row-sub">
+                  <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
+                  {{ item.running ? t('newCommon.running') : t('newCommon.stopped') }}
+                  <span v-if="item.pid">· PID {{ item.pid }}</span>
+                </span>
+              </span>
+              <svg
+                class="nm-row-chev"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
             </div>
-            <span v-if="item.pid" class="nmc-pid">PID {{ item.pid }}</span>
           </div>
-          <div class="nmc-name">{{ item.configFileName }}</div>
-          <!-- Android 列表卡片即详情入口，补右侧箭头提示可点击 -->
-          <svg
-            v-if="isAndroidPlatform"
-            class="nmc-chev"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
+        </template>
+        <template v-else>
+          <div
+            v-for="item in displayList"
+            :key="item.configFileName"
+            class="nm-card"
+            :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+            @click="selectConfig(item)"
           >
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </div>
+            <div class="nmc-top">
+              <div class="nmc-status">
+                <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
+                <span class="nmc-status-text">{{
+                  item.running ? t('newCommon.running') : t('newCommon.stopped')
+                }}</span>
+              </div>
+              <span v-if="item.pid" class="nmc-pid">PID {{ item.pid }}</span>
+            </div>
+            <div class="nmc-name">{{ item.configFileName }}</div>
+          </div>
+        </template>
         <!-- 空态分流：无配置 / 有配置但无运行实例，避免同一句“暂无配置”误导 -->
         <div
           v-if="easyTierStore.configList.length === 0 && !easyTierStore.configListLoading"
@@ -52,24 +88,40 @@
         >
           <span class="nm-empty-icon">✦</span>
           <p>{{ t('newMonitor.emptyNoConfig') }}</p>
-          <button class="nm-empty-cta" @click="goCreateConfig">{{
-            t('newCommon.createConfig')
-          }}</button>
+          <LtButton
+            variant="primary"
+            :size="isAndroidPlatform ? 'lg' : 'md'"
+            class="nm-empty-cta"
+            @click="goCreateConfig"
+            >{{ t('newCommon.createConfig') }}</LtButton
+          >
         </div>
         <div v-else-if="displayList.length === 0 && !loading" class="nm-empty-cards">
           <span class="nm-empty-icon">✦</span>
           <p>{{ t('newMonitor.emptyNoRunning') }}</p>
           <span class="nm-empty-desc">{{ t('newMonitor.emptyNoRunningDesc') }}</span>
-          <button class="nm-empty-cta" @click="goConfigPage">{{ t('newCommon.goConfig') }}</button>
+          <LtButton
+            variant="primary"
+            :size="isAndroidPlatform ? 'lg' : 'md'"
+            class="nm-empty-cta"
+            @click="goConfigPage"
+            >{{ t('newCommon.goConfig') }}</LtButton
+          >
         </div>
       </div>
     </div>
 
     <!-- 右侧详情 -->
     <div class="nm-right" v-if="selectedData">
-      <div class="nm-detail-header">
+      <div class="nm-detail-header" :class="{ 'nm-detail-hero-on': selectedRunning }">
         <div class="nm-detail-title-row">
-          <button v-if="!isAndroidPlatform" class="nm-back-btn" @click="closeMonitorDetail">
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="ghost"
+            size="sm"
+            class="nm-back-btn"
+            @click="closeMonitorDetail"
+          >
             <svg
               width="14"
               height="14"
@@ -81,7 +133,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             {{ t('newCommon.back') }}
-          </button>
+          </LtButton>
           <h3 class="nm-detail-title">{{ selectedConfig?.configFileName }}</h3>
           <span class="nm-badge" :class="selectedRunning ? 'on' : 'off'">
             {{ selectedRunning ? '● ' + t('newCommon.running') : '○ ' + t('newCommon.stopped') }}
@@ -109,9 +161,15 @@
         <span class="nm-stale-time">{{
           t('newCommon.lastUpdated', { time: formatTime(selectedData.lastUpdate) })
         }}</span>
-        <button v-if="pollFailed" class="nm-stale-retry" @click="retryPolling">
+        <LtButton
+          v-if="pollFailed"
+          variant="primary"
+          size="xs"
+          class="nm-stale-retry"
+          @click="retryPolling"
+        >
           {{ t('newCommon.retry') }}
-        </button>
+        </LtButton>
       </div>
 
       <div v-if="selectedRunning && selectedData.peerList.length > 0" class="nm-peer-summary">
@@ -265,7 +323,13 @@
     <div class="nm-right" v-else-if="selectedConfig">
       <div class="nm-detail-header">
         <div class="nm-detail-title-row">
-          <button v-if="!isAndroidPlatform" class="nm-back-btn" @click="closeMonitorDetail">
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="ghost"
+            size="sm"
+            class="nm-back-btn"
+            @click="closeMonitorDetail"
+          >
             <svg
               width="14"
               height="14"
@@ -277,7 +341,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             {{ t('newCommon.back') }}
-          </button>
+          </LtButton>
           <h3 class="nm-detail-title">{{ selectedConfig.configFileName }}</h3>
         </div>
       </div>
@@ -286,13 +350,25 @@
           <span class="nm-state-icon">○</span>
           <p class="nm-state-title">{{ t('newMonitor.emptyNoRunning') }}</p>
           <span class="nm-empty-desc">{{ t('newMonitor.emptyNoRunningDesc') }}</span>
-          <button class="nm-empty-cta" @click="goConfigPage">{{ t('newCommon.goConfig') }}</button>
+          <LtButton
+            variant="primary"
+            :size="isAndroidPlatform ? 'lg' : 'md'"
+            class="nm-empty-cta"
+            @click="goConfigPage"
+            >{{ t('newCommon.goConfig') }}</LtButton
+          >
         </template>
         <template v-else-if="pollFailed">
           <span class="nm-state-icon">!</span>
           <p class="nm-state-title">{{ t('newMonitor.fetchFailed') }}</p>
           <span class="nm-empty-desc">{{ t('newMonitor.fetchFailedDesc') }}</span>
-          <button class="nm-empty-cta" @click="retryPolling">{{ t('newCommon.retry') }}</button>
+          <LtButton
+            variant="primary"
+            :size="isAndroidPlatform ? 'lg' : 'md'"
+            class="nm-empty-cta"
+            @click="retryPolling"
+            >{{ t('newCommon.retry') }}</LtButton
+          >
         </template>
         <template v-else>
           <span class="nm-state-spinner" aria-hidden="true"></span>
@@ -343,6 +419,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import TrendChart from '@/components/TrendChart/index.vue'
+import { LtButton } from '@/components/ui'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { useTrendBuffer, type TrendPoint } from '@/hooks/useTrendBuffer'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
@@ -1090,6 +1167,7 @@ onUnmounted(() => {
 
 .nm-left-header {
   display: flex;
+  min-height: 24px;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--theme-space-1);
@@ -1251,26 +1329,8 @@ onUnmounted(() => {
 }
 
 /* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示） */
-.nm-back-btn {
+.nm-detail-title-row .nm-back-btn {
   display: none;
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--theme-bg-hover);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.nm-back-btn:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-active);
 }
 
 /* 移动端适配：master-detail 互斥，列表与详情单独展示 */
@@ -1299,8 +1359,8 @@ onUnmounted(() => {
     padding: var(--theme-space-4);
   }
 
-  .nm-back-btn {
-    display: flex;
+  .nm-detail-title-row .nm-back-btn {
+    display: inline-flex;
   }
 
   /* 详情头部允许换行，避免标题与按钮组互挤导致标题竖排/按钮溢出 */
@@ -1323,18 +1383,170 @@ onUnmounted(() => {
   }
 }
 
-/* Android：详情为独立路由，任何宽度下列表与详情都互斥展示 */
+/* ===== Android：与总览/设置一致的分组卡片语言 ===== */
 .nm-root.nm-android {
-  flex-direction: column;
+  display: block;
+  height: auto;
+  min-height: auto;
 }
 
 .nm-root.nm-android .nm-left {
+  display: flex;
   width: 100%;
-  flex: 1;
+  flex: none;
+  flex-direction: column;
 }
 
+.nm-root.nm-android .nm-left-scroll {
+  display: block;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  flex: none;
+}
+
+/* 列表分组 */
+.nm-list {
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nm-row {
+  display: flex;
+  min-height: 60px;
+  padding: 10px 14px 10px 12px;
+  cursor: pointer;
+  box-sizing: border-box;
+  align-items: center;
+  gap: var(--theme-space-3);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nm-row + .nm-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nm-row:active {
+  background: var(--theme-bg-hover);
+}
+
+.nm-row-on {
+  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+}
+
+.nm-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-hover);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-row-icon.on {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nm-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nm-row-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nm-row-sub {
+  display: flex;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.nm-row-sub .nmc-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+
+.nm-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) {
+  .nm-row:hover {
+    background: var(--theme-bg-hover);
+  }
+
+  .nm-row-on:hover {
+    background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+  }
+}
+
+/* 空状态 */
+.nm-root.nm-android .nm-empty-cards {
+  padding: 34px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  gap: 6px;
+}
+
+.nm-root.nm-android .nm-empty-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 24px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-root.nm-android .nm-empty-cards p {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-root.nm-android .nm-empty-desc {
+  font-size: 11.5px;
+}
+
+.nm-root.nm-android .nm-empty-cta {
+  margin-top: 8px;
+}
+
+/* 详情 */
 .nm-root.nm-android .nm-right {
   display: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .nm-root.nm-android.nm-detail-open .nm-left {
@@ -1343,7 +1555,279 @@ onUnmounted(() => {
 
 .nm-root.nm-android.nm-detail-open .nm-right {
   display: block;
-  flex: 1;
+  flex: none;
+}
+
+.nm-root.nm-android .nm-detail-header {
+  display: flex;
+  padding: var(--theme-space-5);
+  margin: 0 0 var(--theme-space-4);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--theme-space-3);
+}
+
+.nm-root.nm-android .nm-detail-header.nm-detail-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 15%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nm-root.nm-android .nm-detail-title-row {
+  gap: 8px;
+}
+
+.nm-root.nm-android .nm-detail-title {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.nm-root.nm-android .nm-badge {
+  padding: 3px 9px;
+  font-size: 10.5px;
+}
+
+.nm-root.nm-android .nm-detail-rpc {
+  padding: 3px 9px;
+  margin-left: auto;
+  font-size: 10.5px;
+  background: var(--theme-bg-tag);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-pill);
+}
+
+/* 指标 2×2 卡片 */
+.nm-root.nm-android .nm-peer-summary {
+  display: grid;
+  margin-bottom: var(--theme-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nm-root.nm-android .nm-peer-stat {
+  padding: 12px 14px;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.nm-root.nm-android .nm-ps-num {
+  font-size: 17px;
+}
+
+.nm-root.nm-android .nm-ps-lbl {
+  font-size: 10.5px;
+  letter-spacing: 0.2px;
+}
+
+/* 分区与节点信息 */
+.nm-root.nm-android .nm-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-root.nm-android .nm-section-title {
+  margin: 0 2px var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  gap: 4px;
+}
+
+.nm-root.nm-android .nm-section-title::after {
+  display: none;
+}
+
+.nm-root.nm-android .nm-grid {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+.nm-root.nm-android .nm-field {
+  display: flex;
+  padding: 12px 14px;
+  background: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nm-root.nm-android .nm-field:first-child {
+  border-top: none;
+}
+
+.nm-root.nm-android .nm-label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
+.nm-root.nm-android .nm-val {
+  min-width: 0;
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* 趋势卡 */
+.nm-root.nm-android .nm-trend-collapse {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-root.nm-android .nm-trend-summary {
+  padding: 0 2px var(--theme-space-2);
+  align-items: center;
+}
+
+.nm-root.nm-android .nm-trend-summary::after {
+  display: none;
+}
+
+.nm-root.nm-android .nm-trend-summary::before {
+  order: 1;
+  margin: 0 2px 0 auto;
+}
+
+.nm-root.nm-android .nm-trend-label {
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+}
+
+.nm-root.nm-android .nm-trend-body {
+  padding: 10px 8px 8px;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 对等节点分组卡 */
+.nm-root.nm-android .nm-peer-grid {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  gap: 0;
+}
+
+.nm-root.nm-android .nm-peer-card {
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.nm-root.nm-android .nm-peer-card + .nm-peer-card {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+@media (hover: hover) {
+  .nm-root.nm-android .nm-peer-card:hover {
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.nm-root.nm-android .nmp-top {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.nm-root.nm-android .nmp-hostname {
+  font-family: var(--theme-font-body);
+  font-size: 13.5px;
+}
+
+.nm-root.nm-android .nmp-lat {
+  font-family: var(--theme-font-body);
+  font-size: 12.5px;
+}
+
+.nm-root.nm-android .nmp-row {
+  font-size: 12px;
+}
+
+.nm-root.nm-android .nmp-key {
+  color: var(--theme-text-muted);
+}
+
+.nm-root.nm-android .nmp-val {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nm-root.nm-android .nm-update-time {
+  padding: var(--theme-space-2) 0 4px;
+  font-size: 10.5px;
+  text-align: center;
+  border-top: none;
+}
+
+/* 加载 / 未运行 / 失败状态 */
+.nm-root.nm-android .nm-state,
+.nm-root.nm-android .nm-empty {
+  height: auto;
+  padding: 44px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  opacity: 1;
+}
+
+.nm-root.nm-android .nm-state-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 26px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-root.nm-android .nm-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-root.nm-android .nm-stale-banner {
+  border-radius: var(--theme-radius-lg, 14px);
 }
 
 /* 手机尺寸：字段网格降为单列，避免长值被挤成两行 */
@@ -1737,21 +2221,7 @@ onUnmounted(() => {
 }
 
 .nm-empty-cta {
-  padding: var(--theme-space-2) var(--theme-space-5);
   margin-top: var(--theme-space-2);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-white);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nm-empty-cta:hover {
-  transform: translateY(-1px);
 }
 
 /* 选中实例但无快照时的居中状态（加载 / 未运行 / 从未成功） */
@@ -1825,19 +2295,6 @@ onUnmounted(() => {
 }
 
 .nm-stale-retry {
-  padding: 2px var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-white);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nm-stale-retry:hover {
-  transform: translateY(-1px);
+  flex-shrink: 0;
 }
 </style>

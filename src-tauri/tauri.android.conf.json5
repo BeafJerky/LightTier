@@ -9,7 +9,8 @@
       // 最低支持的 Android API 级别
       "minSdkVersion": 24
     },
-    // Android 端内核以库形式内嵌运行，不需要打包桌面版内核压缩包等资源
+    // Android 端内核以库形式内嵌运行，不需要打包桌面版内核压缩包等资源；
+    // 内置外部主题已在构建期由前端打包（useExternalThemes），不依赖 APK 资源目录
     "resources": []
   }
 }

@@ -17,9 +17,10 @@
         aria-orientation="vertical"
         :aria-label="t('newSettings.tabsLabel')"
       >
-        <button
+        <LtButton
           v-for="(tab, idx) in tabs"
           :key="tab.key"
+          variant="bare"
           :id="`sd-tab-${tab.key}`"
           :ref="(el) => setTabRef(el, idx)"
           class="sd-nav-item"
@@ -98,7 +99,7 @@
             </svg>
           </span>
           <span class="sd-nav-label">{{ tab.label }}</span>
-        </button>
+        </LtButton>
       </div>
 
       <!-- 右侧内容区（唯一纵向滚动容器） -->
@@ -112,20 +113,17 @@
           :aria-labelledby="section ? undefined : 'sd-tab-general'"
           :tabindex="section ? undefined : 0"
         >
-          <label class="sd-row">
+          <label class="sd-row" @click="handleAutoRunToggle(!store.autoRunNetworkSetting)">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.autoRun') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.autoRunDesc') }}</span>
             </div>
-            <span class="sd-switch">
-              <input
-                type="checkbox"
-                v-model="store.autoRunNetworkSetting"
-                :aria-label="t('newSettings.autoRun')"
-                @change="handleAutoRunToggle"
-              />
-              <span class="sd-switch-slider"></span>
-            </span>
+            <LtSwitch
+              :model-value="store.autoRunNetworkSetting"
+              :aria-label="t('newSettings.autoRun')"
+              @update:model-value="handleAutoRunToggle"
+              @click.stop
+            />
           </label>
 
           <div v-if="store.autoRunNetworkSetting" class="sd-row">
@@ -133,21 +131,14 @@
               <span class="sd-row-title">{{ t('newSettings.autoRunConfig') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.autoRunConfigDesc') }}</span>
             </div>
-            <select
-              class="sd-select"
-              :value="store.autoRunConfigName"
-              :aria-label="t('newSettings.autoRunConfig')"
-              @change="handleAutoRunConfigSelect"
-            >
-              <option value="">{{ t('newSettings.lastRunConfig') }}</option>
-              <option
-                v-for="item in store.configList"
-                :key="item.configFileName"
-                :value="item.configFileName"
-              >
-                {{ item.configFileName }}
-              </option>
-            </select>
+            <div class="sd-select-field">
+              <LtSelect
+                :model-value="store.autoRunConfigName"
+                :options="autoRunConfigOptions"
+                :aria-label="t('newSettings.autoRunConfig')"
+                @update:model-value="handleAutoRunConfigSelect"
+              />
+            </div>
           </div>
 
           <div class="sd-row">
@@ -156,15 +147,12 @@
               <span class="sd-row-desc">{{ t('newSettings.refreshIntervalDesc') }}</span>
             </div>
             <div class="sd-number-wrap">
-              <input
+              <LtInput
                 v-model="refreshInput"
-                type="number"
                 class="sd-number"
-                :class="{ invalid: !!refreshError }"
-                min="1"
-                max="60"
-                step="1"
+                variant="filled"
                 inputmode="numeric"
+                :maxlength="2"
                 :aria-label="t('newSettings.refreshInterval')"
                 :aria-invalid="!!refreshError"
                 :aria-describedby="refreshError ? 'sd-refresh-error' : undefined"
@@ -183,61 +171,55 @@
               <span class="sd-row-title">{{ t('newSettings.defaultServiceMethod') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultServiceMethodDesc') }}</span>
             </div>
-            <select
-              class="sd-select"
-              :value="store.defaultServiceInstallMethod"
-              :aria-label="t('newSettings.defaultServiceMethod')"
-              @change="handleServiceMethodSelect"
-            >
-              <option value="nssm">NSSM</option>
-              <option value="official">{{ t('newWebConfig.officialCli') }}</option>
-            </select>
+            <div class="sd-select-field">
+              <LtSelect
+                :model-value="store.defaultServiceInstallMethod"
+                :options="serviceMethodOptions"
+                :aria-label="t('newSettings.defaultServiceMethod')"
+                @update:model-value="handleServiceMethodSelect"
+              />
+            </div>
           </div>
 
-          <label v-if="isDesktopRuntime" class="sd-row">
+          <label
+            v-if="isDesktopRuntime"
+            class="sd-row"
+            @click="store.defaultEnableAutostart = !store.defaultEnableAutostart"
+          >
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.defaultAutostart') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.defaultAutostartDesc') }}</span>
             </div>
-            <span class="sd-switch">
-              <input
-                type="checkbox"
-                v-model="store.defaultEnableAutostart"
-                :aria-label="t('newSettings.defaultAutostart')"
-              />
-              <span class="sd-switch-slider"></span>
-            </span>
+            <LtSwitch
+              v-model="store.defaultEnableAutostart"
+              :aria-label="t('newSettings.defaultAutostart')"
+              @click.stop
+            />
           </label>
 
-          <label class="sd-row">
+          <label class="sd-row" @click="store.errRunNotify = !store.errRunNotify">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.errorNotify') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.errorNotifyDesc') }}</span>
             </div>
-            <span class="sd-switch">
-              <input
-                type="checkbox"
-                v-model="store.errRunNotify"
-                :aria-label="t('newSettings.errorNotify')"
-              />
-              <span class="sd-switch-slider"></span>
-            </span>
+            <LtSwitch
+              v-model="store.errRunNotify"
+              :aria-label="t('newSettings.errorNotify')"
+              @click.stop
+            />
           </label>
 
           <!-- P2P 直连通知（5.4） -->
-          <label class="sd-row">
+          <label class="sd-row" @click="store.p2pNotifySetting = !store.p2pNotifySetting">
             <div class="sd-row-info">
               <span class="sd-row-title">{{ t('newSettings.p2pNotify') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.p2pNotifyDesc') }}</span>
             </div>
-            <span class="sd-switch">
-              <input
-                type="checkbox"
-                v-model="store.p2pNotifySetting"
-                :aria-label="t('newSettings.p2pNotify')"
-              />
-              <span class="sd-switch-slider"></span>
-            </span>
+            <LtSwitch
+              v-model="store.p2pNotifySetting"
+              :aria-label="t('newSettings.p2pNotify')"
+              @click.stop
+            />
           </label>
         </div>
 
@@ -278,14 +260,14 @@
                 }"
                 >{{ coreVersion }}</span
               >
-              <button
+              <LtButton
                 v-if="isDesktopRuntime"
-                class="sd-btn sd-btn-ghost"
+                variant="ghost"
                 @click="handleCheckCore"
                 :disabled="checkingCore"
               >
                 {{ checkingCore ? t('newCommon.checking') : t('newSettings.recheck') }}
-              </button>
+              </LtButton>
             </div>
           </div>
 
@@ -312,12 +294,12 @@
               <span class="sd-row-desc">{{ t('newSettings.openDirDesc') }}</span>
             </div>
             <div class="sd-btn-group">
-              <button class="sd-btn sd-btn-ghost" @click="handleOpenCorePath">{{
+              <LtButton variant="ghost" @click="handleOpenCorePath">{{
                 t('newSettings.coreDir')
-              }}</button>
-              <button class="sd-btn sd-btn-ghost" @click="handleOpenConfigPath">{{
+              }}</LtButton>
+              <LtButton variant="ghost" @click="handleOpenConfigPath">{{
                 t('newSettings.configDir')
-              }}</button>
+              }}</LtButton>
             </div>
           </div>
 
@@ -326,8 +308,10 @@
             <div class="sd-core-install-head">
               <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
               <!-- 加速源入口：列表/增删放在下级弹窗，避免占用内核面板纵向空间 -->
-              <button
+              <LtButton
                 type="button"
+                variant="secondary"
+                size="sm"
                 class="sd-mirror-open"
                 :title="t('newSettings.mirrorSourceDesc')"
                 @click="openMirrorDialog"
@@ -350,7 +334,7 @@
                 <span class="sd-mirror-open-value" :title="currentMirrorLabel">{{
                   currentMirrorLabel
                 }}</span>
-              </button>
+              </LtButton>
             </div>
             <div class="sd-core-install-hint">
               {{ t('newSettings.downloadInstallHint') }}
@@ -360,10 +344,12 @@
             </div>
             <div class="sd-core-install-actions">
               <div class="sd-core-version-select">
-                <button
+                <LtButton
                   ref="coreVerTriggerRef"
                   type="button"
-                  class="sd-select sd-core-version-trigger"
+                  variant="ghost"
+                  size="sm"
+                  class="sd-core-version-trigger"
                   :aria-label="t('newSettings.coreVersion')"
                   aria-haspopup="listbox"
                   :aria-expanded="coreVerDropdownOpen"
@@ -389,7 +375,7 @@
                       stroke-linecap="round"
                     />
                   </svg>
-                </button>
+                </LtButton>
                 <Teleport to="body">
                   <Transition name="sd-select-drop">
                     <div
@@ -406,10 +392,11 @@
                       @keydown.esc.prevent="closeCoreVerDropdown(true)"
                       @keydown.tab="closeCoreVerDropdown()"
                     >
-                      <button
+                      <LtButton
                         v-for="(item, idx) in coreVerOptions"
                         :key="item.tag_name"
                         type="button"
+                        variant="bare"
                         role="option"
                         class="sd-core-version-option"
                         :class="{ active: item.tag_name === coreVerSelect }"
@@ -419,30 +406,30 @@
                         @mouseenter="coreVerHighlighted = idx"
                       >
                         {{ coreVerOptionLabel(item.tag_name) }}
-                      </button>
+                      </LtButton>
                     </div>
                   </Transition>
                 </Teleport>
               </div>
             </div>
             <div class="sd-core-install-actions">
-              <button
-                class="sd-btn sd-btn-primary"
+              <LtButton
+                variant="primary"
                 @click="handleDownloadCore"
                 :disabled="downloadingCore || mirrorProbing"
               >
                 {{ downloadBtnText }}
-              </button>
-              <button
-                class="sd-btn sd-btn-success"
+              </LtButton>
+              <LtButton
+                variant="success"
                 @click="handleInstallCore"
                 :disabled="installingCore || downloadingCore || !selectedCoreReady"
               >
                 {{ installingCore ? t('newCommon.installing') : t('newSettings.installCore') }}
-              </button>
-              <button
+              </LtButton>
+              <LtButton
                 v-if="isSelectedCoreDownloaded"
-                class="sd-btn sd-btn-danger"
+                variant="danger"
                 @click="handleDeleteCorePackage"
                 :disabled="deletingCore || downloadingCore || installingCore"
               >
@@ -451,7 +438,7 @@
                     ? t('newSettings.deletingPackage')
                     : t('newSettings.deleteCorePackage')
                 }}
-              </button>
+              </LtButton>
             </div>
             <!-- 下载进度：已知总大小时显示百分比进度条，缺失 Content-Length 时显示不确定态 -->
             <div v-if="downloadActive" class="sd-download-progress">
@@ -490,9 +477,9 @@
               <span class="sd-row-title">{{ t('newSettings.backupRestore') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.backupRestoreDesc') }}</span>
             </div>
-            <button class="sd-btn sd-btn-ghost" @click="backupDialogVisible = true">
+            <LtButton variant="ghost" @click="backupDialogVisible = true">
               {{ t('newSettings.backupRestoreOpen') }}
-            </button>
+            </LtButton>
           </div>
 
           <div class="sd-row">
@@ -500,13 +487,9 @@
               <span class="sd-row-title">{{ t('newSettings.clearCache') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.clearCacheDesc') }}</span>
             </div>
-            <button
-              class="sd-btn sd-btn-danger"
-              @click="handleClearCache"
-              :disabled="clearingCache"
-            >
+            <LtButton variant="danger" @click="handleClearCache" :disabled="clearingCache">
               {{ clearingCache ? t('newSettings.clearing') : t('newSettings.clearCache') }}
-            </button>
+            </LtButton>
           </div>
 
           <div class="sd-row">
@@ -514,9 +497,9 @@
               <span class="sd-row-title">{{ t('newSettings.clearLogs') }}</span>
               <span class="sd-row-desc">{{ t('newSettings.clearLogsDesc') }}</span>
             </div>
-            <button class="sd-btn sd-btn-danger" @click="handleClearLogs" :disabled="clearingLogs">
+            <LtButton variant="danger" @click="handleClearLogs" :disabled="clearingLogs">
               {{ clearingLogs ? t('newSettings.clearing') : t('newSettings.clearLogs') }}
-            </button>
+            </LtButton>
           </div>
         </div>
 
@@ -552,22 +535,26 @@
                     t('newSettings.lockPasswordNew')
                   }}</label>
                   <div class="sd-lock-input-bar">
-                    <input
-                      id="sd-lock-new"
+                    <LtInput
                       ref="lockPwdInputRef"
-                      class="sd-lock-input"
-                      :type="lockPwdVisible ? 'text' : 'password'"
                       v-model="lockPwdInput"
+                      class="sd-lock-input"
+                      variant="filled"
+                      input-id="sd-lock-new"
+                      :type="lockPwdVisible ? 'text' : 'password'"
                       :placeholder="t('newSettings.lockPasswordNewPlaceholder')"
                       :aria-label="t('newSettings.lockPasswordNew')"
                       :aria-invalid="!!lockPwdError"
                       :aria-describedby="lockPwdError ? 'sd-lock-error' : undefined"
                       autocomplete="new-password"
-                      maxlength="32"
+                      :maxlength="32"
                       @input="lockPwdError = ''"
                       @keyup.enter="commitLockPassword"
                     />
-                    <button
+                    <LtButton
+                      variant="text"
+                      size="xs"
+                      circle
                       class="sd-lock-eye"
                       type="button"
                       @mousedown.prevent
@@ -606,24 +593,25 @@
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                         <circle cx="12" cy="12" r="3" />
                       </svg>
-                    </button>
+                    </LtButton>
                   </div>
                 </div>
                 <div class="sd-lock-field">
                   <label class="sd-lock-label" for="sd-lock-confirm">{{
                     t('newSettings.lockPasswordConfirm')
                   }}</label>
-                  <input
-                    id="sd-lock-confirm"
-                    class="sd-lock-input"
-                    :type="lockPwdVisible ? 'text' : 'password'"
+                  <LtInput
                     v-model="lockPwdConfirm"
+                    class="sd-lock-input"
+                    variant="filled"
+                    input-id="sd-lock-confirm"
+                    :type="lockPwdVisible ? 'text' : 'password'"
                     :placeholder="t('newSettings.lockPasswordConfirmPlaceholder')"
                     :aria-label="t('newSettings.lockPasswordConfirm')"
                     :aria-invalid="!!lockPwdError"
                     :aria-describedby="lockPwdError ? 'sd-lock-error' : undefined"
                     autocomplete="new-password"
-                    maxlength="32"
+                    :maxlength="32"
                     @input="lockPwdError = ''"
                     @keyup.enter="commitLockPassword"
                   />
@@ -633,27 +621,27 @@
                 lockPwdError
               }}</span>
               <div class="sd-lock-actions">
-                <button
+                <LtButton
                   v-if="store.lockPassword"
-                  class="sd-btn sd-btn-ghost"
+                  variant="ghost"
                   type="button"
                   @click="cancelLockEdit"
-                  >{{ t('newCommon.cancel') }}</button
+                  >{{ t('newCommon.cancel') }}</LtButton
                 >
-                <button class="sd-btn sd-btn-primary" type="button" @click="commitLockPassword">{{
+                <LtButton variant="primary" type="button" @click="commitLockPassword">{{
                   store.lockPassword
                     ? t('newSettings.lockPasswordSave')
                     : t('newSettings.lockPasswordSet')
-                }}</button>
+                }}</LtButton>
               </div>
             </div>
             <div v-else class="sd-lock-actions">
-              <button class="sd-btn" type="button" @click="startLockEdit">{{
+              <LtButton variant="ghost" type="button" @click="startLockEdit">{{
                 t('newSettings.lockPasswordChange')
-              }}</button>
-              <button class="sd-btn sd-btn-danger" type="button" @click="handleClearLockPassword">{{
+              }}</LtButton>
+              <LtButton variant="danger" type="button" @click="handleClearLockPassword">{{
                 t('newSettings.lockPasswordClear')
-              }}</button>
+              }}</LtButton>
             </div>
           </div>
         </div>
@@ -712,21 +700,21 @@
                 :class="{ 'sd-core-ver-ok': hasManagerUpdate }"
                 >{{ latestManagerVersion }}</span
               >
-              <button
+              <LtButton
                 v-if="hasManagerUpdate"
                 type="button"
-                class="sd-btn sd-btn-primary"
+                variant="primary"
                 @click="handleOpenManagerReleases"
-                >{{ t('newSettings.goDownload') }}</button
+                >{{ t('newSettings.goDownload') }}</LtButton
               >
-              <button
+              <LtButton
                 type="button"
-                class="sd-btn sd-btn-ghost"
+                variant="ghost"
                 @click="handleCheckUpdate"
                 :disabled="checkingUpdate"
               >
                 {{ checkingUpdate ? t('newCommon.checking') : t('newSettings.checkUpdate') }}
-              </button>
+              </LtButton>
             </div>
           </div>
         </div>
@@ -743,22 +731,22 @@
       <div class="sd-mirror-dialog-head">
         <span class="sd-mirror-dialog-desc">{{ t('newSettings.mirrorSourceDesc') }}</span>
         <div class="sd-btn-group">
-          <button
+          <LtButton
             v-if="canRestoreDefaults"
             type="button"
-            class="sd-btn sd-btn-ghost"
+            variant="ghost"
             @click="handleRestoreMirrors"
           >
             {{ t('newSettings.mirrorRestoreDefaults') }}
-          </button>
-          <button
+          </LtButton>
+          <LtButton
             type="button"
-            class="sd-btn sd-btn-ghost"
+            variant="ghost"
             :disabled="mirrorProbing"
             @click="handleProbeMirrors"
           >
             {{ mirrorProbing ? t('newSettings.mirrorProbing') : t('newSettings.mirrorProbe') }}
-          </button>
+          </LtButton>
         </div>
       </div>
 
@@ -793,10 +781,12 @@
           <span v-if="mirrorSelected === s.value" class="sd-mirror-inuse">{{
             t('newSettings.mirrorInUse')
           }}</span>
-          <button
+          <LtButton
             v-if="!s.official"
             type="button"
-            class="sd-mirror-remove"
+            variant="danger"
+            size="xs"
+            circle
             :aria-label="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
             :title="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
             @click="handleRemoveMirror(s.value)"
@@ -813,27 +803,27 @@
             >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </LtButton>
         </div>
       </div>
 
       <form class="sd-mirror-add" @submit.prevent="handleAddMirror">
-        <input
+        <LtInput
           v-model="mirrorInput"
           class="sd-mirror-input"
-          type="text"
+          variant="filled"
           inputmode="url"
           autocomplete="off"
-          spellcheck="false"
+          :spellcheck="false"
           :placeholder="t('newSettings.mirrorAddPlaceholder')"
           :aria-label="t('newSettings.mirrorAddLabel')"
-          :aria-invalid="mirrorAddError ? 'true' : undefined"
+          :aria-invalid="!!mirrorAddError"
           :aria-describedby="mirrorAddError ? 'sd-mirror-add-error' : 'sd-mirror-add-hint'"
           @input="mirrorAddError = ''"
         />
-        <button type="submit" class="sd-btn sd-btn-primary" :disabled="!mirrorInput.trim()">
+        <LtButton type="submit" variant="primary" :disabled="!mirrorInput.trim()">
           {{ t('newSettings.mirrorAdd') }}
-        </button>
+        </LtButton>
       </form>
       <div v-if="mirrorAddError" id="sd-mirror-add-error" class="sd-mirror-error" role="alert">
         {{ mirrorAddError }}
@@ -844,9 +834,9 @@
     </div>
     <template #footer>
       <span class="sd-mirror-footer-hint">{{ t('newSettings.mirrorApplyHint') }}</span>
-      <button type="button" class="sd-btn sd-btn-primary" @click="mirrorDialogVisible = false">
+      <LtButton type="button" variant="primary" @click="mirrorDialogVisible = false">
         {{ t('newSettings.mirrorDone') }}
-      </button>
+      </LtButton>
     </template>
   </CreamDialog>
 
@@ -873,12 +863,12 @@
     </div>
     <template #footer>
       <div class="sd-btn-group">
-        <button class="sd-btn sd-btn-ghost" @click="resolveConfirm(false)">{{
+        <LtButton variant="ghost" @click="resolveConfirm(false)">{{
           t('newCommon.cancel')
-        }}</button>
-        <button class="sd-btn sd-btn-primary" @click="resolveConfirm(true)">{{
+        }}</LtButton>
+        <LtButton variant="primary" @click="resolveConfirm(true)">{{
           t('newCommon.confirm')
-        }}</button>
+        }}</LtButton>
       </div>
     </template>
   </CreamDialog>
@@ -898,6 +888,7 @@ import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import BackupDialog from './BackupDialog.vue'
+import { LtButton, LtInput, LtSelect, LtSwitch } from '@/components/ui'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useCoreInstall } from '@/hooks/useCoreInstall'
 import {
@@ -1020,7 +1011,7 @@ const lockPwdInput = ref('')
 const lockPwdConfirm = ref('')
 const lockPwdError = ref('')
 const lockEditMode = ref(false)
-const lockPwdInputRef = ref<HTMLInputElement | null>(null)
+const lockPwdInputRef = ref<InstanceType<typeof LtInput> | null>(null)
 const LOCK_PWD_MIN_LENGTH = 6
 
 // 重置为“未在编辑”状态并清空明文
@@ -1157,8 +1148,11 @@ const coreVersion = computed(() => {
 const tabRefs = ref<HTMLButtonElement[]>([])
 const navRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
+// LtButton 的模板 ref 是组件实例，取出根按钮元素供焦点管理使用
 const setTabRef = (el: unknown, idx: number) => {
-  if (el) tabRefs.value[idx] = el as HTMLButtonElement
+  if (!el) return
+  const rootEl = (el as { $el?: HTMLElement }).$el ?? (el as HTMLElement)
+  tabRefs.value[idx] = rootEl as HTMLButtonElement
 }
 // 窄屏横向 tab：切换后把当前分类滚入可视区。
 // 只滚动导航自身，避免 scrollIntoView 连带滚动弹窗或内容区等祖先容器。
@@ -1200,16 +1194,10 @@ const handleTabKeydown = (e: KeyboardEvent, idx: number) => {
   nextTick(() => tabRefs.value[next]?.focus())
 }
 
-// 原生下拉/单选的 change 处理器（替代自定义 dropdown 的点击逻辑）
-const handleAutoRunConfigSelect = (e: Event) => {
-  handleAutoRunConfigChange((e.target as HTMLSelectElement).value)
-}
-const handleServiceMethodSelect = (e: Event) => {
-  const val = (e.target as HTMLSelectElement).value
-  store.setDefaultServiceInstallMethod(val === 'nssm' ? 'nssm' : 'official')
-}
 // 内核版本自定义下拉：原生 <select> 的弹层由系统绘制，无法跟随主题
-const coreVerTriggerRef = ref<HTMLButtonElement | null>(null)
+// LtButton 的 ref 为组件实例，统一经 $el 取根按钮用于定位与焦点恢复
+const coreVerTriggerRef = ref<{ $el?: HTMLButtonElement } | null>(null)
+const coreVerTriggerEl = (): HTMLButtonElement | null => coreVerTriggerRef.value?.$el ?? null
 const coreVerMenuRef = ref<HTMLElement | null>(null)
 const coreVerDropdownOpen = ref(false)
 const coreVerHighlighted = ref(0)
@@ -1231,7 +1219,7 @@ const coreVerOptionLabel = (tag: string) => {
 
 // 弹层 Teleport 到 body，用 fixed 坐标贴合触发器；空间不足时向上展开
 const positionCoreVerMenu = () => {
-  const trigger = coreVerTriggerRef.value
+  const trigger = coreVerTriggerEl()
   if (!trigger) return
   const rect = trigger.getBoundingClientRect()
   const menuHeight = coreVerMenuRef.value?.offsetHeight || coreVerOptions.length * 32 + 10
@@ -1274,7 +1262,7 @@ const openCoreVerDropdown = async (direction = 0) => {
 const closeCoreVerDropdown = (restoreFocus = false) => {
   if (!coreVerDropdownOpen.value) return
   coreVerDropdownOpen.value = false
-  if (restoreFocus) nextTick(() => coreVerTriggerRef.value?.focus())
+  if (restoreFocus) nextTick(() => coreVerTriggerEl()?.focus())
 }
 
 const toggleCoreVerDropdown = () => {
@@ -1290,7 +1278,7 @@ const selectCoreVersion = (tag: string) => {
 const handleCoreVerOutsideClick = (e: MouseEvent) => {
   if (!coreVerDropdownOpen.value) return
   const target = e.target as Node
-  if (coreVerTriggerRef.value?.contains(target) || coreVerMenuRef.value?.contains(target)) return
+  if (coreVerTriggerEl()?.contains(target) || coreVerMenuRef.value?.contains(target)) return
   closeCoreVerDropdown()
 }
 
@@ -1573,13 +1561,35 @@ const commitRefreshInterval = () => {
   refreshInput.value = String(val)
 }
 
-// 自动运行设置：关闭开关时同步清除已选配置，并持久化到 localStorage
-const handleAutoRunToggle = () => {
-  localStorage.setItem('settings.autoRunNetwork', String(store.autoRunNetworkSetting))
-  if (!store.autoRunNetworkSetting) {
+// 自动运行设置：开关写回 store，关闭时同步清除已选配置，并持久化到 localStorage
+const handleAutoRunToggle = (value: boolean) => {
+  store.setAutoRunNetworkSetting(value)
+  localStorage.setItem('settings.autoRunNetwork', String(value))
+  if (!value) {
     store.setAutoRunConfigName('')
     localStorage.removeItem('settings.autoRunConfigName')
   }
+}
+
+// 自动运行配置下拉：空字符串表示“上次运行的配置”
+const autoRunConfigOptions = computed(() => [
+  { label: t('newSettings.lastRunConfig'), value: '' },
+  ...store.configList.map((item) => ({
+    label: item.configFileName,
+    value: item.configFileName
+  }))
+])
+const handleAutoRunConfigSelect = (value: string | number | null) => {
+  handleAutoRunConfigChange(value == null ? '' : String(value))
+}
+
+// 默认服务安装方式下拉
+const serviceMethodOptions = computed(() => [
+  { label: 'NSSM', value: 'nssm' },
+  { label: t('newWebConfig.officialCli'), value: 'official' }
+])
+const handleServiceMethodSelect = (value: string | number | null) => {
+  store.setDefaultServiceInstallMethod(value === 'nssm' ? 'nssm' : 'official')
 }
 
 // 选择/清除自动运行的默认配置（空字符串表示“上次运行的配置”）
@@ -1828,6 +1838,7 @@ const handleInstallCore = async () => {
   border-radius: var(--theme-radius-md, 10px);
   transition: var(--theme-transition-interactive);
   align-items: center;
+  justify-content: flex-start;
   gap: var(--theme-space-2);
 }
 
@@ -1863,7 +1874,7 @@ const handleInstallCore = async () => {
   min-width: 0;
   min-height: 0;
   padding: var(--theme-space-3) var(--theme-space-4) var(--theme-space-3) var(--theme-space-3);
-  overflow-y: auto;
+  overflow: hidden auto;
   background: var(--theme-bg-card, #fff);
   border: 1px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-lg, 14px);
@@ -2056,35 +2067,6 @@ label.sd-row:active {
   flex-shrink: 0;
 }
 
-/* 删除加速源：官方源不渲染，内置/自定义源可删 */
-.sd-mirror-remove {
-  display: flex;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-sm, 6px);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.sd-mirror-remove:hover {
-  color: var(--theme-color-danger, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 8%));
-}
-
-.sd-mirror-remove:focus-visible {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 1px;
-}
-
 /* 加速源下级弹窗 */
 .sd-mirror-dialog {
   display: flex;
@@ -2115,26 +2097,9 @@ label.sd-row:active {
   gap: var(--theme-space-2);
 }
 
-.sd-mirror-input {
+.sd-mirror-add .sd-mirror-input {
   min-width: 0;
-  padding: var(--theme-space-2) var(--theme-space-3);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-tag, #f5ede6);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-md, 10px);
-  outline: none;
-  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
   flex: 1;
-}
-
-.sd-mirror-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.sd-mirror-input[aria-invalid='true'] {
-  border-color: var(--theme-color-danger, #e8a0a0);
 }
 
 .sd-mirror-error {
@@ -2155,79 +2120,15 @@ label.sd-row:active {
   flex: 1;
 }
 
-/* 纯 CSS 开关 */
-.sd-switch {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.sd-switch input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-}
-
-.sd-switch-slider {
-  position: absolute;
-  inset: 0;
-  background: var(--theme-border, #ede4db);
-  border-radius: 20px;
-  transition: background-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.sd-switch-slider::before {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--theme-text-white, #fff);
-  border-radius: 50%;
-  content: '';
-  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-  transition: transform var(--theme-duration) var(--theme-ease-out);
-}
-
-.sd-switch input:checked + .sd-switch-slider {
-  background: var(--theme-color-success, #7fba8a);
-}
-
-.sd-switch input:focus-visible + .sd-switch-slider {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
-}
-
-.sd-switch input:checked + .sd-switch-slider::before {
-  transform: translateX(16px);
-}
-
 /* 数字输入 */
-.sd-number {
-  width: 72px;
-  padding: var(--theme-space-1) var(--theme-space-2);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  text-align: center;
-  background: var(--theme-bg-tag, #f5ede6);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
+.sd-number-wrap .sd-number {
+  width: 90px;
   flex-shrink: 0;
 }
 
-.sd-number:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.sd-number.invalid {
-  border-color: var(--theme-accent-primary, #e8a0a0);
+.sd-number-wrap .sd-number :deep(.n-input__input-el) {
+  font-size: 13px;
+  text-align: center;
 }
 
 .sd-number-wrap {
@@ -2246,27 +2147,11 @@ label.sd-row:active {
   text-align: right;
 }
 
-/* 下拉选择 */
-.sd-select {
-  padding: var(--theme-space-1) var(--theme-space-6) var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-primary, #4a3728);
-  cursor: pointer;
-  background: var(--theme-bg-tag, #f5ede6);
-  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237a6e5e' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-position: right 8px center;
-  background-repeat: no-repeat;
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
-  appearance: none;
+/* 下拉选择：固定宽度，避免挤压左侧说明 */
+.sd-select-field {
+  width: 220px;
+  max-width: 100%;
   flex-shrink: 0;
-}
-
-.sd-select:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 /* 内核版本自定义下拉：需容纳版本号 + 渠道/已安装标记文本 */
@@ -2276,18 +2161,10 @@ label.sd-row:active {
 }
 
 .sd-core-version-trigger {
-  display: flex;
   width: 100%;
-  color: var(--theme-text-primary, #4a3728);
-  background-image: none;
   align-items: center;
   justify-content: space-between;
   gap: var(--theme-space-2);
-}
-
-.sd-core-version-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .sd-core-version-label {
@@ -2340,6 +2217,7 @@ label.sd-row:active {
     color var(--theme-duration-fast) var(--theme-ease-out),
     background-color var(--theme-duration-fast) var(--theme-ease-out);
   align-items: center;
+  justify-content: flex-start;
 }
 
 .sd-core-version-option:hover,
@@ -2387,63 +2265,7 @@ label.sd-row:active {
   color: var(--theme-text-secondary, #8b7355);
 }
 
-/* 数据管理按钮 */
-.sd-btn {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: var(--theme-transition-interactive);
-  flex-shrink: 0;
-}
-
-.sd-btn-danger {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-}
-
-.sd-btn-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 8%, transparent);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.sd-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.sd-btn-ghost {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.sd-btn-ghost:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.sd-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.sd-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
-}
-
-.sd-btn-success {
-  color: var(--theme-text-white, #fff);
-  background: var(--theme-color-success, #7fba8a);
-}
-
-.sd-btn-success:hover:not(:disabled) {
-  background: var(--theme-color-success-dark, #6aaa78);
-}
-
+/* 按钮组 */
 .sd-btn-group {
   display: flex;
   gap: var(--theme-space-2);
@@ -2500,31 +2322,7 @@ label.sd-row:active {
 
 /* 加速源入口：按钮内展示当前选中源，列表收进下级弹窗 */
 .sd-mirror-open {
-  display: flex;
   max-width: 100%;
-  padding: 3px 10px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-secondary, #8b7355);
-  cursor: pointer;
-  background: var(--theme-bg-card, #fff);
-  border: 1px solid var(--theme-border, #e8ddd3);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition:
-    color var(--theme-duration-fast) var(--theme-ease-out),
-    border-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
-  gap: 6px;
-}
-
-.sd-mirror-open:hover {
-  color: var(--theme-accent-primary, #d4a574);
-  border-color: var(--theme-accent-primary, #d4a574);
-}
-
-.sd-mirror-open:focus-visible {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
 }
 
 .sd-mirror-open-value {
@@ -2777,55 +2575,37 @@ label.sd-row:active {
 
 .sd-lock-input {
   width: 100%;
-  min-height: 34px;
-  padding: var(--theme-space-2) 34px var(--theme-space-2) var(--theme-space-3);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 12px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-tag, #f5ede6);
-  border: 1px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+/* 自定义眼睛按钮悬浮在右侧，输入文字避开该区域 */
+.sd-lock-input-bar .sd-lock-input :deep(.n-input__input-el) {
+  padding-right: 26px;
 }
 
 /* 确认密码没有眼睛按钮，右侧留白收窄 */
-.sd-lock-field > .sd-lock-input {
-  padding-right: var(--theme-space-3);
+.sd-lock-field > .sd-lock-input :deep(.n-input__input-el) {
+  padding-right: 0;
 }
 
 /* WebView2/Edge 自带密码揭示按钮，会与自定义眼睛图标重复，隐藏之 */
-.sd-lock-input::-ms-reveal,
-.sd-lock-input::-ms-clear {
+.sd-lock-input :deep(input::-ms-reveal),
+.sd-lock-input :deep(input::-ms-clear) {
   display: none;
 }
 
-.sd-lock-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
+.sd-lock-input-bar .sd-lock-eye {
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.sd-lock-input-bar .sd-lock-eye:hover:not(:disabled) {
+  color: var(--theme-accent-primary, #e8a0a0);
 }
 
 .sd-lock-eye {
   position: absolute;
   top: 50%;
   right: 6px;
-  display: flex;
-  width: 22px;
-  height: 22px;
-  color: var(--theme-text-muted, #c8bdb2);
-  cursor: pointer;
-  background: none;
-  border: none;
-  border-radius: 50%;
   transform: translateY(-50%);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  justify-content: center;
-}
-
-.sd-lock-eye:hover {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
 }
 
 /* 移动端（含 Android 二级页面）：导航转为顶部横向滚动 tab，内容区占满全宽 */

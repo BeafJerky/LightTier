@@ -13,9 +13,10 @@
 import pkg from '../../package.json'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { BaseDirectory, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { CONFIG_PATH, GITHUB_EASYTIER } from '@/constants/easytier'
 import { MIRROR_CUSTOM_KEY, MIRROR_HIDDEN_KEY, MIRROR_SOURCE_KEY } from '@/hooks/useMirrorProbe'
+import { loadThemeCss } from '@/hooks/useExternalThemes'
 import { useMockData } from '@/hooks/useMockData'
 import { useAppStore } from '@/store/modules/app'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -403,12 +404,8 @@ const resolveRestorableTheme = async (theme: string): Promise<string> => {
   if (!theme) return ''
   if (theme === 'cream' || theme === 'dark') return theme
   if (!THEME_ID_PATTERN.test(theme)) return ''
-  if (!isDesktopRuntime()) return ''
   try {
-    const css = await readTextFile(`resource/themes/${theme}.css`, {
-      baseDir: BaseDirectory.Resource
-    })
-    return typeof css === 'string' && (css.match(/--theme-/g) || []).length >= 3 ? theme : ''
+    return (await loadThemeCss(theme)) ? theme : ''
   } catch {
     return ''
   }

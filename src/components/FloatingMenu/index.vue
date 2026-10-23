@@ -10,7 +10,7 @@
         :aria-label="t('newCommon.quickActions')"
       >
         <!-- 刷新配置 -->
-        <button type="button" role="menuitem" class="fab-menu-item" @click="handleRefresh">
+        <LtButton variant="bare" class="fab-menu-item" role="menuitem" @click="handleRefresh">
           <svg
             class="fab-menu-icon"
             width="14"
@@ -24,14 +24,15 @@
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
           <span>{{ t('newCommon.refreshConfig') }}</span>
-        </button>
+        </LtButton>
       </div>
     </Transition>
 
     <!-- 主按钮 -->
-    <button
-      ref="triggerRef"
-      type="button"
+    <LtButton
+      variant="secondary"
+      size="lg"
+      circle
       class="fab-trigger"
       :class="{ active: menuOpen }"
       @click.stop="toggleMenu"
@@ -50,7 +51,7 @@
       >
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
       </svg>
-    </button>
+    </LtButton>
   </div>
 </template>
 
@@ -65,6 +66,7 @@
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEasyTierStore } from '@/store/modules/easytier'
+import { LtButton } from '@/components/ui'
 
 defineOptions({ name: 'FloatingMenu' })
 
@@ -74,7 +76,6 @@ const easyTierStore = useEasyTierStore()
 const menuOpen = ref(false)
 const fabRoot = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLElement | null>(null)
-const triggerRef = ref<HTMLButtonElement | null>(null)
 
 // 展开后聚焦首个菜单项：键盘用户可直接操作，Esc 也能从菜单内冒泡到根节点
 const toggleMenu = async () => {
@@ -88,7 +89,7 @@ const toggleMenu = async () => {
 const handleEscape = () => {
   if (!menuOpen.value) return
   menuOpen.value = false
-  triggerRef.value?.focus()
+  fabRoot.value?.querySelector<HTMLElement>('.fab-trigger')?.focus()
 }
 
 // 刷新配置（重新加载所有配置文件 + 刷新当前页运行时状态）
@@ -132,15 +133,14 @@ onBeforeUnmount(() => {
 }
 
 /* 主按钮 */
-.fab-trigger {
-  display: flex;
+.fab-root .fab-trigger {
   width: 40px;
   height: 40px;
+  max-width: 40px;
+  min-width: 40px;
   color: var(--theme-text-secondary);
-  cursor: pointer;
   background: var(--theme-bg-card);
   border: 1.5px solid var(--theme-border-light);
-  border-radius: var(--theme-radius-round, 50%);
   opacity: 0.65;
   box-shadow: var(--theme-shadow-sm);
   transition:
@@ -150,30 +150,24 @@ onBeforeUnmount(() => {
     border-color var(--theme-duration-fast) var(--theme-ease-out),
     box-shadow var(--theme-duration) var(--theme-ease-out),
     transform var(--theme-duration) var(--theme-ease-out);
-  align-items: center;
-  justify-content: center;
 }
 
 .fab-root:hover .fab-trigger,
-.fab-trigger:hover,
-.fab-trigger:focus-visible,
-.fab-trigger.active {
+.fab-root .fab-trigger:hover,
+.fab-root .fab-trigger:focus-visible,
+.fab-root .fab-trigger.active {
   opacity: 1;
 }
 
-.fab-trigger:focus-visible {
-  outline: 2px solid var(--theme-accent-primary);
-  outline-offset: 2px;
-}
-
-.fab-trigger:hover {
+.fab-root .fab-trigger:hover {
   color: var(--theme-accent-primary);
+  background: var(--theme-bg-card);
   border-color: var(--theme-accent-primary);
   transform: scale(1.08);
   box-shadow: var(--theme-shadow-md);
 }
 
-.fab-trigger.active {
+.fab-root .fab-trigger.active {
   color: var(--theme-accent-primary);
   background: var(--theme-bg-hover);
   border-color: var(--theme-accent-primary);
@@ -194,28 +188,27 @@ onBeforeUnmount(() => {
 }
 
 /* 菜单项 */
-.fab-menu-item {
-  display: flex;
+.fab-menu .fab-menu-item {
   width: 100%;
   padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body);
   font-size: 12px;
   font-weight: 500;
   color: var(--theme-text-secondary);
   text-align: left;
   white-space: nowrap;
-  cursor: pointer;
-  background: transparent;
-  border: none;
   border-radius: var(--theme-radius-sm);
   transition:
     color var(--theme-duration-fast) var(--theme-ease-out),
     background-color var(--theme-duration-fast) var(--theme-ease-out);
-  align-items: center;
+}
+
+.fab-menu-item :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
   gap: var(--theme-space-2);
 }
 
-.fab-menu-item:hover {
+.fab-menu .fab-menu-item:hover {
   color: var(--theme-text-primary);
   background: var(--theme-bg-hover);
 }
@@ -253,9 +246,11 @@ onBeforeUnmount(() => {
    故常态即保持可见，并把尺寸提到 48dp 主操作按钮标准。
    桌面端（hover: hover）仍沿用 0.3 + 悬停显现的低干扰策略 */
 @media (hover: none) {
-  .fab-trigger {
+  .fab-root .fab-trigger {
     width: 48px;
     height: 48px;
+    max-width: 48px;
+    min-width: 48px;
     opacity: 0.9;
   }
 }

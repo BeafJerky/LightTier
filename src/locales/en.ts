@@ -10,7 +10,7 @@ export default {
     webConfigSub: 'Manage web config server connections',
     theme: 'Theme Settings',
     configDetail: 'Config Details',
-    configDetailSub: 'View config parameters and runtime logs',
+    configDetailSub: 'View config parameters and connection info',
     monitorDetail: 'Node Monitor',
     monitorDetailSub: 'Live node status and peer connections',
     sectionNav: 'Navigation',
@@ -27,11 +27,9 @@ export default {
     default: 'Default',
     resetDefault: 'Reset to Default',
     applyTheme: 'Apply Theme',
+    previewLabel: 'Theme Preview',
     cream: 'Cream',
-    dark: 'Dark',
-    previewTitle: 'Title Text',
-    previewSub: 'Secondary text showing theme colors',
-    previewCard: 'Config Card'
+    dark: 'Dark'
   },
   newCommon: {
     running: 'Running',

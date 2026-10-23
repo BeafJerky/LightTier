@@ -9,9 +9,10 @@
   >
     <div class="bk-root">
       <div class="bk-tabs" role="tablist" :aria-label="t('newBackup.title')">
-        <button
+        <LtButton
           v-for="(tab, idx) in tabs"
           :key="tab.key"
+          variant="bare"
           :id="`bk-tab-${tab.key}`"
           :ref="(el) => setTabRef(el, idx)"
           type="button"
@@ -57,7 +58,7 @@
             <path d="M4 5h16" />
           </svg>
           <span>{{ tab.label }}</span>
-        </button>
+        </LtButton>
       </div>
 
       <div class="bk-scroll">
@@ -75,12 +76,12 @@
           <div class="bk-section-head">
             <span class="bk-section-title">{{ t('newBackup.contentTitle') }}</span>
             <div class="bk-inline-actions">
-              <button type="button" class="bk-text-btn" @click="selectAllCategories">
+              <LtButton variant="text" size="xs" type="button" @click="selectAllCategories">
                 {{ t('newBackup.selectAll') }}
-              </button>
-              <button type="button" class="bk-text-btn" @click="clearCategories">
+              </LtButton>
+              <LtButton variant="text" size="xs" type="button" @click="clearCategories">
                 {{ t('newBackup.clearAll') }}
-              </button>
+              </LtButton>
             </div>
           </div>
 
@@ -147,12 +148,7 @@
                 <span class="bk-section-title">{{ t('newBackup.baseTitle') }}</span>
                 <span class="bk-hint">{{ t('newBackup.baseDesc') }}</span>
               </div>
-              <button
-                type="button"
-                class="bk-btn bk-btn-ghost"
-                :disabled="reading"
-                @click="pickFile('base')"
-              >
+              <LtButton type="button" variant="ghost" :disabled="reading" @click="pickFile('base')">
                 {{
                   reading
                     ? t('newBackup.reading')
@@ -160,7 +156,7 @@
                       ? t('newBackup.baseChange')
                       : t('newBackup.basePick')
                 }}
-              </button>
+              </LtButton>
             </div>
             <div v-if="baseManifest" class="bk-base-file">
               <span class="bk-base-file-name" :title="baseFileName">{{ baseFileName }}</span>
@@ -268,14 +264,14 @@
                 </svg>
               </span>
               <span class="bk-hint bk-pick-hint">{{ t('newBackup.restoreHint') }}</span>
-              <button
+              <LtButton
                 type="button"
-                class="bk-btn bk-btn-primary"
+                variant="primary"
                 :disabled="reading"
                 @click="pickFile('restore')"
               >
                 {{ reading ? t('newBackup.reading') : t('newBackup.pickFile') }}
-              </button>
+              </LtButton>
               <div v-if="restoreError" class="bk-error" role="alert">{{ restoreError }}</div>
             </div>
 
@@ -300,14 +296,14 @@
                     }}
                   </span>
                 </div>
-                <button
+                <LtButton
                   type="button"
-                  class="bk-btn bk-btn-ghost"
+                  variant="ghost"
                   :disabled="reading || applying"
                   @click="pickFile('restore')"
                 >
                   {{ reading ? t('newBackup.reading') : t('newBackup.changeFile') }}
-                </button>
+                </LtButton>
               </div>
 
               <div class="bk-summary">
@@ -336,15 +332,15 @@
                 <div class="bk-bulk">
                   <span class="bk-section-title">{{ t('newBackup.chooseHint') }}</span>
                   <div class="bk-inline-actions">
-                    <button type="button" class="bk-text-btn" @click="chooseAll('backup')">
+                    <LtButton variant="text" size="xs" type="button" @click="chooseAll('backup')">
                       {{ t('newBackup.allBackup') }}
-                    </button>
-                    <button type="button" class="bk-text-btn" @click="chooseAll('local')">
+                    </LtButton>
+                    <LtButton variant="text" size="xs" type="button" @click="chooseAll('local')">
                       {{ t('newBackup.allLocal') }}
-                    </button>
-                    <button type="button" class="bk-text-btn" @click="resetChoices">
+                    </LtButton>
+                    <LtButton variant="text" size="xs" type="button" @click="resetChoices">
                       {{ t('newBackup.resetChoices') }}
-                    </button>
+                    </LtButton>
                   </div>
                 </div>
 
@@ -391,22 +387,24 @@
                       role="group"
                       :aria-label="t('newBackup.itemChoiceLabel', { name: itemTitle(entry) })"
                     >
-                      <button
+                      <LtButton
                         type="button"
+                        variant="bare"
                         :class="{ active: choices[entry.item.id] === 'backup' }"
                         :aria-pressed="choices[entry.item.id] === 'backup'"
                         @click="choices[entry.item.id] = 'backup'"
                       >
                         {{ t('newBackup.useBackup') }}
-                      </button>
-                      <button
+                      </LtButton>
+                      <LtButton
                         type="button"
+                        variant="bare"
                         :class="{ active: choices[entry.item.id] === 'local' }"
                         :aria-pressed="choices[entry.item.id] === 'local'"
                         @click="choices[entry.item.id] = 'local'"
                       >
                         {{ t('newBackup.useLocal') }}
-                      </button>
+                      </LtButton>
                     </div>
                   </div>
                 </div>
@@ -432,27 +430,27 @@
     <template #footer>
       <span class="bk-footer-hint">{{ footerHint }}</span>
       <div class="bk-footer-actions">
-        <button
+        <LtButton
           type="button"
-          class="bk-btn bk-btn-ghost"
+          variant="ghost"
           :disabled="applying || exporting"
           @click="visible = false"
         >
           {{ t('newCommon.close') }}
-        </button>
-        <button
+        </LtButton>
+        <LtButton
           v-if="activeTab === 'create'"
           type="button"
-          class="bk-btn bk-btn-primary"
+          variant="primary"
           :disabled="exporting || selectedCategories.length === 0"
           @click="handleExport"
         >
           {{ exporting ? t('newBackup.exporting') : t('newBackup.export') }}
-        </button>
-        <button
+        </LtButton>
+        <LtButton
           v-else-if="restorePlan && phase === 'plan'"
           type="button"
-          class="bk-btn bk-btn-primary"
+          variant="primary"
           :disabled="applying || selectedCount.backup === 0"
           @click="openConfirm"
         >
@@ -461,15 +459,10 @@
               ? t('newBackup.applying')
               : t('newBackup.apply', { count: selectedCount.backup })
           }}
-        </button>
-        <button
-          v-else-if="phase === 'done'"
-          type="button"
-          class="bk-btn bk-btn-primary"
-          @click="reloadNow"
-        >
+        </LtButton>
+        <LtButton v-else-if="phase === 'done'" type="button" variant="primary" @click="reloadNow">
           {{ t('newBackup.reloadNow') }}
-        </button>
+        </LtButton>
       </div>
     </template>
   </CreamDialog>
@@ -500,12 +493,12 @@
     </div>
     <template #footer>
       <div class="bk-footer-actions">
-        <button type="button" class="bk-btn bk-btn-ghost" @click="confirmVisible = false">
+        <LtButton type="button" variant="ghost" @click="confirmVisible = false">
           {{ t('newCommon.cancel') }}
-        </button>
-        <button type="button" class="bk-btn bk-btn-primary" @click="handleApply">
+        </LtButton>
+        <LtButton type="button" variant="primary" @click="handleApply">
           {{ t('newBackup.confirmApply') }}
-        </button>
+        </LtButton>
       </div>
     </template>
   </CreamDialog>
@@ -522,6 +515,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/components/CreamDialog/index.vue'
+import { LtButton } from '@/components/ui'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import {
   applyRestore,
@@ -577,8 +571,11 @@ const tabs = computed(() => [
   { key: 'restore' as const, label: t('newBackup.tabRestore') }
 ])
 const tabRefs = ref<HTMLButtonElement[]>([])
+// LtButton 的模板 ref 是组件实例，取出根按钮元素供焦点管理使用
 const setTabRef = (el: unknown, idx: number) => {
-  if (el) tabRefs.value[idx] = el as HTMLButtonElement
+  if (!el) return
+  const rootEl = (el as { $el?: HTMLElement }).$el ?? (el as HTMLElement)
+  tabRefs.value[idx] = rootEl as HTMLButtonElement
 }
 const selectTab = (key: 'create' | 'restore') => {
   activeTab.value = key
@@ -1114,26 +1111,6 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-.bk-text-btn {
-  padding: 2px 0;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 11px;
-  color: var(--theme-text-secondary, #8b7355);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-}
-
-.bk-text-btn:hover {
-  color: var(--theme-accent-primary, #d4a574);
-}
-
-.bk-text-btn:focus-visible {
-  border-radius: 3px;
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
-}
-
 /* 分类卡片：两列排布，窄屏回落单列 */
 .bk-cat-grid,
 .bk-mode-grid {
@@ -1664,48 +1641,6 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--theme-space-2);
   flex-shrink: 0;
-}
-
-.bk-btn {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: var(--theme-transition-interactive);
-  flex-shrink: 0;
-}
-
-.bk-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.bk-btn-ghost {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.bk-btn-ghost:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.bk-btn-primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.bk-btn-primary:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
-}
-
-.bk-btn:focus-visible {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
 }
 
 @media (width <= 720px) {

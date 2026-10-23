@@ -50,6 +50,7 @@ watch(
 }
 
 .nss-page :deep(.cd-body) {
+  padding: var(--theme-space-4);
   overflow: visible;
 }
 

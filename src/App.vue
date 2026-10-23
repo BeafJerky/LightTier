@@ -9,6 +9,7 @@
 import { ConfigGlobal } from '@/components/ConfigGlobal'
 import OnboardingGuide from '@/components/OnboardingGuide/index.vue'
 import StartupTasks from '@/components/StartupTasks/index.vue'
+import { LtButton, LtInput } from '@/components/ui'
 import { useDesign } from '@/hooks/web/useDesign'
 import { useAppStore } from '@/store/modules/app'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -41,7 +42,7 @@ const easytierStore = useEasyTierStore()
 const isLocked = ref(false)
 const inputPassword = ref('')
 const lockError = ref(false)
-const lockInputRef = ref<HTMLInputElement | null>(null)
+const lockInputRef = ref<InstanceType<typeof LtInput> | null>(null)
 const isFirstLoad = ref(true)
 // 首次引导屏：未勾选“下次不再显示”时每次打开都显示
 const showOnboarding = ref(localStorage.getItem('settings.onboardingDone') !== 'true')
@@ -208,12 +209,14 @@ onUnmounted(() => {
         <div class="lock-icon">✦</div>
         <h2 class="lock-title">{{ t('newLock.title') }}</h2>
         <p class="lock-sub">{{ t('newLock.subtitle') }}</p>
-        <input
+        <LtInput
           ref="lockInputRef"
+          v-model="inputPassword"
           class="lock-input"
           :class="{ error: lockError }"
+          variant="filled"
           type="password"
-          v-model="inputPassword"
+          size="lg"
           :placeholder="t('newLock.placeholder')"
           :aria-label="t('newLock.passwordLabel')"
           autocomplete="current-password"
@@ -225,9 +228,16 @@ onUnmounted(() => {
         <p v-if="lockError" id="lock-error" class="lock-error" role="alert">
           {{ t('newLock.error') }}
         </p>
-        <button type="button" class="lock-btn" :disabled="!inputPassword" @click="unlock">
+        <LtButton
+          variant="primary"
+          size="lg"
+          block
+          class="lock-btn"
+          :disabled="!inputPassword"
+          @click="unlock"
+        >
           {{ t('newLock.unlock') }}
-        </button>
+        </LtButton>
       </div>
     </div>
     <!-- 首次引导屏：解锁后显示（锁屏优先级更高） -->
@@ -330,25 +340,8 @@ body {
   color: var(--theme-text-muted, #c8bdb2);
 }
 
-.lock-input {
-  width: 100%;
-  padding: 9px 16px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-tag, #f5ede6);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.lock-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.lock-input.error {
+.lock-input.error :deep(.n-input__border),
+.lock-input.error :deep(.n-input__state-border) {
   border-color: var(--theme-color-danger, #e57373);
 }
 
@@ -359,31 +352,6 @@ body {
 }
 
 .lock-btn {
-  width: 100%;
-  padding: 9px 0;
   margin-top: 16px;
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--theme-text-on-accent, #fff);
-  cursor: pointer;
-  background: var(--theme-accent-primary, #e8a0a0);
-  border: none;
-  border-radius: var(--theme-radius-pill, 100px);
-  transition:
-    background-color var(--theme-duration-fast) var(--theme-ease-out),
-    transform var(--theme-duration-fast) var(--theme-ease-out),
-    opacity var(--theme-duration-fast) var(--theme-ease-out);
-}
-
-.lock-btn:hover {
-  background: var(--theme-accent-hover, #c9955f);
-  transform: translateY(-1px);
-}
-
-.lock-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-  transform: none;
 }
 </style>

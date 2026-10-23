@@ -5,14 +5,27 @@
       <div class="nwc-left-header">
         <div class="nwc-left-label">{{ t('newWebConfig.webConfigLabel') }}</div>
         <div class="nwc-left-btns">
-          <button
-            type="button"
-            class="nwc-add-btn"
+          <LtButton
+            variant="secondary"
+            size="xs"
+            circle
             @click="openAdd"
             :title="t('newWebConfig.addConfig')"
             :aria-label="t('newWebConfig.addConfig')"
-            >+</button
           >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </LtButton>
         </div>
       </div>
       <div class="nwc-left-scroll lt-loading-host">
@@ -37,13 +50,12 @@
           <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
           <div class="nwc-card-actions" @click.stop>
             <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-            <button
-              type="button"
-              class="nwc-btn"
-              :class="isRunning(item) ? 'nwc-btn-stop' : 'nwc-btn-run'"
+            <LtButton
+              size="compact"
+              :variant="isRunning(item) ? 'soft' : 'success'"
               :disabled="isChecking(item)"
               @click="isRunning(item) ? stopWeb(item) : startWeb(item)"
-              >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</button
+              >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
             >
           </div>
         </div>
@@ -61,7 +73,7 @@
     <div class="nwc-right" v-if="selectedConfig">
       <div class="nwc-detail-header">
         <div class="nwc-detail-title-row">
-          <button type="button" class="nwc-back-btn" @click="closeWebDetail">
+          <LtButton class="nwc-back-btn" variant="ghost" size="sm" @click="closeWebDetail">
             <svg
               width="14"
               height="14"
@@ -73,7 +85,7 @@
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             {{ t('newCommon.back') }}
-          </button>
+          </LtButton>
           <h3 class="nwc-detail-title">{{ selectedConfig.configFileName }}</h3>
           <span
             class="nwc-badge"
@@ -91,25 +103,18 @@
           </span>
         </div>
         <div class="nwc-detail-actions">
-          <button type="button" class="nwc-btn-lg nwc-btn-edit" @click="openEdit">{{
-            t('newCommon.edit')
-          }}</button>
+          <LtButton variant="secondary" @click="openEdit">{{ t('newCommon.edit') }}</LtButton>
           <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
-          <button
-            type="button"
-            class="nwc-btn-lg nwc-detail-lifecycle"
-            :class="isRunning(selectedConfig) ? 'nwc-btn-kill' : 'nwc-btn-start'"
+          <LtButton
+            class="nwc-detail-lifecycle"
+            :variant="isRunning(selectedConfig) ? 'soft' : 'success'"
             :disabled="isChecking(selectedConfig)"
             @click="isRunning(selectedConfig) ? stopWeb(selectedConfig) : startWeb(selectedConfig)"
-            >{{ isRunning(selectedConfig) ? t('newCommon.stop') : t('newCommon.run') }}</button
+            >{{ isRunning(selectedConfig) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
           >
-          <button
-            type="button"
-            class="nwc-btn-lg nwc-btn-del"
-            :disabled="isChecking(selectedConfig)"
-            @click="deleteConfig"
-            >{{ t('newCommon.delete') }}</button
-          >
+          <LtButton variant="danger" :disabled="isChecking(selectedConfig)" @click="deleteConfig">{{
+            t('newCommon.delete')
+          }}</LtButton>
         </div>
       </div>
 
@@ -135,13 +140,13 @@
           >
           <div class="nwc-field"
             ><span class="nwc-label">{{ t('newWebConfig.consoleAddr') }}</span>
-            <button
+            <LtButton
               v-if="selectedConfig.webUrl"
-              type="button"
+              variant="bare"
               class="nwc-val nwc-link"
               :title="selectedConfig.webUrl"
               @click="openConsoleUrl"
-              >{{ selectedConfig.webUrl }}</button
+              >{{ selectedConfig.webUrl }}</LtButton
             >
             <span class="nwc-val" v-else>—</span>
           </div>
@@ -162,34 +167,28 @@
           </div>
           <div class="nwc-svc-actions">
             <template v-if="currentServiceStatus === 'notInstalled'">
-              <button
-                type="button"
-                class="nwc-btn-lg nwc-btn-svc-install"
-                @click="openServiceDialog"
-                >{{ t('newWebConfig.installService') }}</button
-              >
+              <LtButton variant="primary" @click="openServiceDialog">{{
+                t('newWebConfig.installService')
+              }}</LtButton>
             </template>
             <template v-else-if="currentServiceStatus">
-              <button
-                type="button"
-                class="nwc-btn-sm nwc-btn-svc-start"
+              <LtButton
+                variant="success"
+                size="sm"
                 :disabled="currentServiceStatus === 'running'"
                 @click="handleStartService"
-                >{{ t('newCommon.start') }}</button
+                >{{ t('newCommon.start') }}</LtButton
               >
-              <button
-                type="button"
-                class="nwc-btn-sm nwc-btn-svc-stop"
+              <LtButton
+                variant="soft"
+                size="sm"
                 :disabled="currentServiceStatus !== 'running'"
                 @click="handleStopService"
-                >{{ t('newCommon.stop') }}</button
+                >{{ t('newCommon.stop') }}</LtButton
               >
-              <button
-                type="button"
-                class="nwc-btn-sm nwc-btn-svc-uninstall"
-                @click="handleUninstallService"
-                >{{ t('newConfig.uninstall') }}</button
-              >
+              <LtButton variant="ghost" size="sm" @click="handleUninstallService">{{
+                t('newConfig.uninstall')
+              }}</LtButton>
             </template>
           </div>
         </div>
@@ -250,51 +249,42 @@
       </div>
       <template v-if="svcForm.installMethod === 'nssm'">
         <div class="nwc-svc-field">
-          <label class="wcf-label" :for="fieldId('svc-user')">{{
-            t('newWebConfig.runUser')
-          }}</label>
-          <input
-            :id="fieldId('svc-user')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebConfig.runUser') }}</label>
+          <LtInput
             v-model="svcForm.username"
+            variant="outline"
             :placeholder="t('newWebConfig.runUserPlaceholder')"
+            :aria-label="t('newWebConfig.runUser')"
           />
         </div>
         <div class="nwc-svc-field" v-if="svcForm.username">
-          <label class="wcf-label" :for="fieldId('svc-password')">{{
-            t('newWebConfig.userPassword')
-          }}</label>
-          <input
-            :id="fieldId('svc-password')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebConfig.userPassword') }}</label>
+          <LtInput
             v-model="svcForm.password"
             type="password"
-            autocomplete="new-password"
+            variant="outline"
             :placeholder="t('newWebConfig.passwordPlaceholder')"
+            :aria-label="t('newWebConfig.userPassword')"
           />
         </div>
       </template>
       <template v-if="svcForm.installMethod === 'official'">
         <div class="nwc-svc-field">
-          <label class="wcf-label" :for="fieldId('svc-name')">{{
-            t('newWebConfig.displayName')
-          }}</label>
-          <input
-            :id="fieldId('svc-name')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebConfig.displayName') }}</label>
+          <LtInput
             v-model="svcForm.displayName"
+            variant="outline"
             :placeholder="t('newWebConfig.displayNamePlaceholder')"
+            :aria-label="t('newWebConfig.displayName')"
           />
         </div>
         <div class="nwc-svc-field">
-          <label class="wcf-label" :for="fieldId('svc-desc')">{{
-            t('newWebConfig.svcDesc')
-          }}</label>
-          <input
-            :id="fieldId('svc-desc')"
-            class="wcf-input"
+          <label class="wcf-label">{{ t('newWebConfig.svcDesc') }}</label>
+          <LtInput
             v-model="svcForm.description"
+            variant="outline"
             :placeholder="t('newWebConfig.svcDescPlaceholder')"
+            :aria-label="t('newWebConfig.svcDesc')"
           />
         </div>
       </template>
@@ -302,20 +292,13 @@
     <template #footer>
       <div class="wcf-footer">
         <span class="wcf-footer-hint">{{ t('newWebConfig.installHint') }}</span>
-        <div>
-          <button
-            type="button"
-            class="nwc-btn-cfm nwc-btn-cfm-cancel"
-            @click="svcDialogVisible = false"
-            >{{ t('newCommon.cancel') }}</button
-          >
-          <button
-            type="button"
-            class="nwc-btn-cfm nwc-btn-cfm-ok"
-            :disabled="svcInstalling"
-            @click="handleServiceInstalled"
-            >{{ svcInstalling ? t('newCommon.installing') : t('newWebConfig.install') }}</button
-          >
+        <div class="nwc-footer-actions">
+          <LtButton variant="ghost" @click="svcDialogVisible = false">{{
+            t('newCommon.cancel')
+          }}</LtButton>
+          <LtButton variant="primary" :disabled="svcInstalling" @click="handleServiceInstalled">{{
+            svcInstalling ? t('newCommon.installing') : t('newWebConfig.install')
+          }}</LtButton>
         </div>
       </div>
     </template>
@@ -326,15 +309,12 @@
     <p class="cfm-msg">{{ cfmMessage }}</p>
     <template #footer>
       <div class="cfm-footer">
-        <button
-          type="button"
-          class="nwc-btn-cfm nwc-btn-cfm-cancel"
-          @click="resolveConfirm(false)"
-          >{{ t('newCommon.cancel') }}</button
-        >
-        <button type="button" class="nwc-btn-cfm nwc-btn-cfm-ok" @click="resolveConfirm(true)">{{
+        <LtButton variant="ghost" @click="resolveConfirm(false)">{{
+          t('newCommon.cancel')
+        }}</LtButton>
+        <LtButton variant="primary" @click="resolveConfirm(true)">{{
           t('newCommon.confirm')
-        }}</button>
+        }}</LtButton>
       </div>
     </template>
   </CreamDialog>
@@ -350,7 +330,7 @@
  * - 状态判定：进程扫描（命令行匹配 config-server URL）+ 服务状态，合并为卡片状态
  * 平台差异：窄屏 master-detail 互斥展示；控制台地址可点击直接打开外部浏览器。
  */
-import { computed, onMounted, onUnmounted, ref, useId, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
@@ -358,6 +338,7 @@ import { useCreamToast } from '@/hooks/useCreamToast'
 import { openPath } from '@/utils/fileUtil'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
+import { LtButton, LtInput } from '@/components/ui'
 import WebConfigForm from './WebConfigForm.vue'
 import type { FormWebData } from '@/types/formTypes'
 
@@ -434,9 +415,6 @@ const svcForm = ref({
   displayName: '',
   description: ''
 })
-// 服务安装表单的 label/输入框关联 id（Vue 3.5 useId 避免多实例冲突）
-const uid = useId()
-const fieldId = (key: string) => `nwc-${uid}-${key}`
 const currentServiceStatus = computed(() => {
   if (!selectedConfig.value) return ''
   // 未检测到结果时保持空串（显示“检测中”），不能默认成“未安装”误导用户
@@ -864,29 +842,6 @@ onUnmounted(() => {
   gap: var(--theme-space-1);
 }
 
-.nwc-add-btn {
-  display: flex;
-  width: 24px;
-  height: 24px;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  background: var(--theme-bg-card);
-  border: 1.5px solid var(--theme-border);
-  border-radius: var(--theme-radius-round);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  justify-content: center;
-}
-
-.nwc-add-btn:hover {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-  border-color: var(--theme-accent-primary);
-}
-
 .nwc-left-scroll {
   display: flex;
   min-height: 0;
@@ -981,41 +936,6 @@ onUnmounted(() => {
   gap: var(--theme-space-2);
 }
 
-.nwc-btn {
-  padding: var(--theme-space-1) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nwc-btn-run {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nwc-btn-run:hover:not(:disabled) {
-  transform: scale(1.04);
-}
-
-.nwc-btn-stop {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nwc-btn-stop:hover:not(:disabled) {
-  background: var(--theme-bg-active);
-}
-
-.nwc-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
-}
-
 .nwc-right {
   min-height: 0;
   padding: var(--theme-space-5) var(--theme-space-6);
@@ -1026,27 +946,9 @@ onUnmounted(() => {
   flex: 1;
 }
 
-/* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示） */
-.nwc-back-btn {
+/* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示；提高选择器优先级覆盖 LtButton 默认 display） */
+.nwc-detail-title-row .nwc-back-btn {
   display: none;
-  padding: var(--theme-space-1) var(--theme-space-3);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-  background: var(--theme-bg-hover);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.nwc-back-btn:hover {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-active);
 }
 
 /* 移动端适配：master-detail 互斥，列表与详情单独展示 */
@@ -1075,11 +977,11 @@ onUnmounted(() => {
     padding: var(--theme-space-4);
   }
 
-  .nwc-back-btn {
-    display: flex;
+  .nwc-detail-title-row .nwc-back-btn {
+    display: inline-flex;
   }
 
-  .nwc-detail-lifecycle {
+  .nwc-detail-actions .nwc-detail-lifecycle {
     display: inline-flex;
   }
 }
@@ -1151,68 +1053,12 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-/* 宽屏列表卡片已提供生命周期操作，详情不再重复；窄屏列表隐藏时才显示 */
-.nwc-detail-lifecycle {
-  display: none;
-  align-items: center;
-}
-
-.nwc-btn-lg {
-  padding: var(--theme-space-2) var(--theme-space-5);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nwc-btn-start {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nwc-btn-start:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nwc-btn-edit {
-  color: var(--theme-text-primary);
-  background: var(--theme-bg-hover);
-  border: 1.5px solid var(--theme-border);
-}
-
-.nwc-btn-edit:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.nwc-btn-kill {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nwc-btn-kill:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nwc-btn-del {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-  border: 1.5px solid color-mix(in srgb, var(--theme-accent-primary) 30%, transparent);
-}
-
-.nwc-btn-del:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-  transform: translateY(-1px);
-}
-
-.nwc-btn-lg:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
+/* 宽屏列表卡片已提供生命周期操作，详情不再重复；窄屏列表隐藏时才显示。
+   用宽度条件而非基础 display:none，避免与上方窄屏媒体查询同优先级时被后续规则覆盖 */
+@media (width > 900px) {
+  .nwc-detail-actions .nwc-detail-lifecycle {
+    display: none;
+  }
 }
 
 .nwc-section {
@@ -1271,14 +1117,10 @@ onUnmounted(() => {
 }
 
 .nwc-link {
-  padding: 0;
-  font-family: inherit;
   color: var(--theme-accent-primary);
   text-align: left;
   text-decoration: underline;
   cursor: pointer;
-  background: none;
-  border: none;
 }
 
 .nwc-link:hover {
@@ -1382,70 +1224,6 @@ onUnmounted(() => {
   gap: var(--theme-space-2);
 }
 
-.nwc-btn-sm {
-  padding: var(--theme-space-1) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nwc-btn-svc-install {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-on-accent, #fff);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nwc-btn-svc-install:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.nwc-btn-svc-start {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-}
-
-.nwc-btn-svc-start:hover:not(:disabled) {
-  transform: scale(1.04);
-}
-
-.nwc-btn-svc-stop {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.nwc-btn-svc-stop:hover:not(:disabled) {
-  background: var(--theme-bg-active);
-}
-
-.nwc-btn-svc-uninstall {
-  color: var(--theme-text-muted);
-  background: var(--theme-bg-hover);
-  border: 1px solid var(--theme-border);
-}
-
-.nwc-btn-svc-uninstall:hover:not(:disabled) {
-  color: var(--theme-accent-primary);
-  border-color: var(--theme-accent-primary);
-}
-
-.nwc-btn-sm:disabled,
-.nwc-btn-svc-install:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
-}
-
 /* 服务安装弹窗 */
 .nwc-svc-form {
   display: flex;
@@ -1471,22 +1249,6 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
   color: var(--theme-text-muted, #c8bdb2);
   text-transform: uppercase;
-}
-
-.wcf-input {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-family: var(--theme-font-body, 'Sora', sans-serif);
-  font-size: 13px;
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-card, #fff);
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  outline: none;
-  transition: border-color var(--theme-duration) var(--theme-ease-out);
-}
-
-.wcf-input:focus {
-  border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
 .wcf-radio {
@@ -1541,6 +1303,11 @@ onUnmounted(() => {
   width: 100%;
 }
 
+.nwc-footer-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}
+
 .wcf-footer-hint {
   padding: var(--theme-space-2) var(--theme-space-3);
   margin: 0;
@@ -1564,40 +1331,5 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: var(--theme-space-3);
   margin-top: var(--theme-space-4);
-}
-
-.nwc-btn-cfm {
-  padding: var(--theme-space-2) var(--theme-space-4);
-  margin-left: var(--theme-space-2);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: var(--theme-transition-interactive);
-}
-
-.nwc-btn-cfm:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.nwc-btn-cfm-cancel {
-  color: var(--theme-text-secondary, #8b7355);
-  background: var(--theme-surface-secondary, #f5ede4);
-  border-color: var(--theme-border, #e8ddd3);
-}
-
-.nwc-btn-cfm-cancel:hover:not(:disabled) {
-  background: var(--theme-surface-hover, #efe5d9);
-}
-
-.nwc-btn-cfm-ok {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #d4a574);
-}
-
-.nwc-btn-cfm-ok:hover:not(:disabled) {
-  background: var(--theme-accent-hover, #c9955f);
 }
 </style>

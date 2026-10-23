@@ -56,11 +56,9 @@
     touch-action: manipulation;
   }
 
-  /* 命中区基线：所有按钮 ≥40dp（原多数小按钮实际高度仅 24~32px）
-     用 min-height 而非 height，避免与 scoped 的固定尺寸声明冲突 */
-  button {
-    min-height: 40px;
-  }
+  /* 命中区基线由 LtButton 按尺寸统一处理：
+     文字按钮在触屏下提升到 40dp，图标按钮保持正方形并用透明热区扩展命中范围。
+     不再对全量 button 写 min-height，避免定宽图标按钮被拉成椭圆。 */
 
   /* 主导航菜单项：按 Android 48dp 标准（抽屉为纵向列表，空间充足） */
   .nl-menu-item {

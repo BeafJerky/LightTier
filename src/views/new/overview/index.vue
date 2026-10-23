@@ -43,10 +43,11 @@
         </div>
 
         <div v-if="heroConfig" class="nda-hero-actions">
-          <button
+          <LtButton
             v-if="activeConfig"
-            type="button"
-            class="nda-btn nda-btn-stop"
+            variant="danger"
+            size="lg"
+            class="nda-btn"
             :disabled="isQueued"
             @click="stopHero"
           >
@@ -62,10 +63,11 @@
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
             <span>{{ t('newOverview.disconnect') }}</span>
-          </button>
-          <button
+          </LtButton>
+          <LtButton
             v-else
-            type="button"
+            variant="success"
+            size="lg"
             class="nda-btn nda-btn-connect"
             :disabled="isQueued"
             @click="connectHero"
@@ -76,12 +78,13 @@
               />
             </svg>
             <span>{{ t('newOverview.connectNow') }}</span>
-          </button>
+          </LtButton>
 
-          <button
+          <LtButton
             v-if="activeConfig"
-            type="button"
-            class="nda-btn nda-btn-ghost"
+            variant="soft"
+            size="lg"
+            class="nda-btn"
             @click="openHeroMonitor"
           >
             <svg
@@ -96,8 +99,8 @@
               <path d="M3 12h4l2-6 4 12 2-6h6" />
             </svg>
             <span>{{ t('newOverview.viewMonitor') }}</span>
-          </button>
-          <button v-else type="button" class="nda-btn nda-btn-ghost" @click="openHeroConfig">
+          </LtButton>
+          <LtButton v-else variant="soft" size="lg" class="nda-btn" @click="openHeroConfig">
             <svg
               width="16"
               height="16"
@@ -111,7 +114,7 @@
               <path d="M14 3v5h5M9 13h6M9 17h5" />
             </svg>
             <span>{{ t('newOverview.configDetail') }}</span>
-          </button>
+          </LtButton>
         </div>
 
         <div class="nda-hero-foot">
@@ -126,9 +129,11 @@
       <section class="nda-config-section">
         <div class="nda-section-head">
           <h2 class="nda-section-title">{{ t('newOverview.myConfigs') }}</h2>
-          <button
+          <LtButton
             v-if="displayList.length > 0"
-            type="button"
+            variant="text"
+            size="lg"
+            circle
             class="nda-new-btn"
             :aria-label="t('newConfig.addConfig')"
             :title="t('newConfig.addConfig')"
@@ -146,7 +151,7 @@
             >
               <path d="M12 5v14M5 12h14" />
             </svg>
-          </button>
+          </LtButton>
         </div>
 
         <div class="nda-list lt-loading-host">
@@ -160,8 +165,8 @@
               'nda-row-conflict': cfg.conflictPorts.length > 0
             }"
           >
-            <button
-              type="button"
+            <LtButton
+              variant="bare"
               class="nda-row-main"
               :aria-label="t('newOverview.openConfig', { name: cfg.configFileName })"
               @click="goConfigDetail(cfg)"
@@ -208,11 +213,12 @@
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>
-            </button>
-            <button
-              type="button"
+            </LtButton>
+            <LtButton
+              :variant="cfg.running ? 'danger' : 'success-soft'"
+              size="lg"
+              circle
               class="nda-row-action"
-              :class="cfg.running ? 'stop' : 'run'"
               :disabled="isQueued"
               :aria-label="cfg.running ? t('newCommon.stop') : t('newCommon.run')"
               @click="toggleConfig(cfg)"
@@ -241,7 +247,7 @@
                   d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z"
                 />
               </svg>
-            </button>
+            </LtButton>
           </div>
 
           <div
@@ -266,9 +272,9 @@
             </span>
             <p class="nda-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
             <span class="nda-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
-            <button type="button" class="nda-empty-cta" @click="goCreateConfig">
+            <LtButton variant="primary" size="lg" class="nda-empty-cta" @click="goCreateConfig">
               {{ t('newCommon.createConfig') }}
-            </button>
+            </LtButton>
           </div>
         </div>
       </section>
@@ -335,12 +341,11 @@
             </div>
             <div class="ndc-actions">
               <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-              <button
-                type="button"
-                class="ndc-btn"
-                :class="cfg.running ? 'ndc-btn-stop' : 'ndc-btn-run'"
+              <LtButton
+                :variant="cfg.running ? 'soft' : 'success'"
+                size="compact"
                 @click="cfg.running ? stopAction(cfg) : startAction(cfg)"
-                >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</button
+                >{{ cfg.running ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
               >
             </div>
           </div>
@@ -348,9 +353,9 @@
             <span class="nd-empty-icon">✦</span>
             <p class="nd-empty-title">{{ t('newOverview.emptyNoConfig') }}</p>
             <span class="nd-empty-desc">{{ t('newOverview.emptyNoConfigDesc') }}</span>
-            <button type="button" class="nd-empty-cta" @click="goCreateConfig">
+            <LtButton variant="primary" size="sm" class="nd-empty-cta" @click="goCreateConfig">
               {{ t('newCommon.createConfig') }}
-            </button>
+            </LtButton>
           </div>
         </div>
       </div>
@@ -361,12 +366,12 @@
       <p class="nd-cfm-msg">{{ cfmMessage }}</p>
       <template #footer>
         <div class="nd-cfm-footer">
-          <button type="button" class="nd-btn-cfm nd-btn-cfm-cancel" @click="resolveConfirm(false)">
+          <LtButton variant="ghost" @click="resolveConfirm(false)">
             {{ t('newCommon.cancel') }}
-          </button>
-          <button type="button" class="nd-btn-cfm nd-btn-cfm-ok" @click="resolveConfirm(true)">
+          </LtButton>
+          <LtButton variant="primary" @click="resolveConfirm(true)">
             {{ t('newCommon.confirm') }}
-          </button>
+          </LtButton>
         </div>
       </template>
     </CreamDialog>
@@ -388,6 +393,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
+import { LtButton } from '@/components/ui'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useI18n } from 'vue-i18n'
 import { useAutoMetric } from '@/hooks/useAutoMetric'
@@ -1019,44 +1025,6 @@ onUnmounted(() => {
   gap: var(--theme-space-2);
 }
 
-.ndc-btn {
-  padding: var(--theme-space-1) var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.ndc-btn-run {
-  color: var(--theme-text-white);
-  background: var(--theme-color-success);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--theme-color-success) 20%, transparent);
-}
-
-.ndc-btn-run:hover:not(:disabled) {
-  transform: scale(1.04);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-color-success) 30%, transparent);
-}
-
-.ndc-btn-stop {
-  color: var(--theme-accent-primary);
-  background: var(--theme-bg-hover);
-}
-
-.ndc-btn-stop:hover:not(:disabled) {
-  background: var(--theme-bg-active);
-  transform: scale(1.04);
-}
-
-.ndc-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.3;
-  transform: none !important;
-}
-
 .nd-empty {
   display: flex;
   padding: var(--theme-space-10) 0;
@@ -1089,21 +1057,7 @@ onUnmounted(() => {
 }
 
 .nd-empty-cta {
-  padding: var(--theme-space-2) var(--theme-space-5);
   margin-top: var(--theme-space-2);
-  font-family: var(--theme-font-body);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--theme-text-white);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
-  transition: var(--theme-transition-interactive);
-}
-
-.nd-empty-cta:hover {
-  transform: translateY(-1px);
 }
 
 /* ===== Android：连接状态优先 ===== */
@@ -1255,55 +1209,25 @@ onUnmounted(() => {
   gap: 10px;
 }
 
-.nda-btn {
-  display: flex;
+.nda-hero-actions .nda-btn {
   height: 44px;
   min-width: 0;
-  padding: 0 var(--theme-space-4);
-  font-family: var(--theme-font-body);
-  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: var(--theme-radius-pill);
-  transition:
-    filter var(--theme-duration-fast) var(--theme-ease-out),
-    transform var(--theme-duration-fast) var(--theme-ease-out);
   flex: 1;
-  align-items: center;
-  justify-content: center;
+}
+
+.nda-btn :deep(.n-button__content) {
+  min-width: 0;
   gap: 6px;
 }
 
-.nda-btn > span {
+.nda-btn :deep(.n-button__content > span) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.nda-btn > svg {
-  flex-shrink: 0;
-}
-
-.nda-btn:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
 .nda-btn-connect {
-  color: var(--theme-text-on-accent);
-  background: var(--theme-color-success);
   box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-color-success) 24%, transparent);
-}
-
-.nda-btn-stop {
-  color: var(--theme-color-danger);
-  background: color-mix(in srgb, var(--theme-color-danger) 10%, transparent);
-  border-color: color-mix(in srgb, var(--theme-color-danger) 24%, transparent);
-}
-
-.nda-btn-ghost {
-  color: var(--theme-text-secondary);
-  background: var(--theme-bg-hover);
 }
 
 .nda-hero-foot {
@@ -1346,18 +1270,8 @@ onUnmounted(() => {
 }
 
 .nda-new-btn {
-  display: flex;
-  width: 40px;
-  height: 40px;
-  padding: 0;
   margin: -8px -8px -8px 0;
   color: var(--theme-accent-primary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-round);
-  align-items: center;
-  justify-content: center;
 }
 
 .nda-list {
@@ -1369,7 +1283,8 @@ onUnmounted(() => {
 
 .nda-row {
   display: flex;
-  padding-right: 6px;
+  min-height: 60px;
+  padding-right: 12px;
   align-items: stretch;
 }
 
@@ -1385,19 +1300,19 @@ onUnmounted(() => {
   box-shadow: inset 3px 0 0 var(--theme-color-danger);
 }
 
-.nda-row-main {
-  display: flex;
+.nda-row .nda-row-main {
+  height: auto;
   min-width: 0;
-  padding: 12px 4px 12px 14px;
-  font-family: var(--theme-font-body);
-  color: inherit;
+  min-height: 60px;
+  padding: 12px 4px 12px 12px;
   text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
   flex: 1;
-  align-items: center;
+}
+
+.nda-row .nda-row-main :deep(.n-button__content) {
+  min-width: 0;
   gap: var(--theme-space-3);
+  justify-content: flex-start;
 }
 
 .nda-row-icon {
@@ -1466,33 +1381,7 @@ onUnmounted(() => {
 }
 
 .nda-row-action {
-  display: flex;
-  width: 40px;
-  height: 40px;
-  padding: 0;
   margin: auto 0;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--theme-radius-round);
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-}
-
-.nda-row-action.run {
-  color: var(--theme-color-success-dark);
-  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
-}
-
-.nda-row-action.stop {
-  color: var(--theme-color-danger);
-  background: color-mix(in srgb, var(--theme-color-danger) 10%, transparent);
-}
-
-.nda-row-action:disabled {
-  cursor: default;
-  opacity: 0.45;
 }
 
 .nda-empty {
@@ -1531,31 +1420,12 @@ onUnmounted(() => {
 }
 
 .nda-empty-cta {
-  height: 40px;
-  padding: 0 22px;
   margin-top: 6px;
-  font-family: var(--theme-font-body);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text-on-accent);
-  cursor: pointer;
-  background: var(--theme-accent-primary);
-  border: none;
-  border-radius: var(--theme-radius-pill);
 }
 
 @media (hover: hover) {
-  .nda-btn:hover:not(:disabled) {
-    filter: brightness(1.04);
-  }
-
-  .nda-row-main:hover {
+  .nda-row .nda-row-main:hover {
     background: var(--theme-bg-hover);
-  }
-
-  .nda-row-action:hover:not(:disabled),
-  .nda-new-btn:hover {
-    filter: brightness(0.96);
   }
 
   .nda-new-btn:hover {
@@ -1614,35 +1484,5 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: var(--theme-space-3);
   margin-top: var(--theme-space-4);
-}
-
-.nd-btn-cfm {
-  padding: var(--theme-space-2) var(--theme-space-5);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--theme-radius-sm, 6px);
-  transition: var(--theme-transition-interactive);
-}
-
-.nd-btn-cfm-cancel {
-  color: var(--theme-text-secondary);
-  background: var(--theme-bg-hover);
-}
-
-.nd-btn-cfm-cancel:hover {
-  background: var(--theme-bg-active);
-}
-
-.nd-btn-cfm-ok {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary);
-}
-
-.nd-btn-cfm-ok:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
 }
 </style>

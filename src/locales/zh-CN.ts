@@ -10,7 +10,7 @@ export default {
     webConfigSub: '管理 Web 配置服务器连接',
     theme: '主题设置',
     configDetail: '配置详情',
-    configDetailSub: '查看配置参数与运行日志',
+    configDetailSub: '查看配置参数与连接信息',
     monitorDetail: '节点监控',
     monitorDetailSub: '实时查看节点状态与对等连接',
     sectionNav: '导航',
@@ -27,11 +27,9 @@ export default {
     default: '默认',
     resetDefault: '恢复默认',
     applyTheme: '应用主题',
+    previewLabel: '主题预览',
     cream: '奶油',
-    dark: '暗色',
-    previewTitle: '标题文字',
-    previewSub: '次要说明文字，展示主题色效果',
-    previewCard: '配置卡片'
+    dark: '暗色'
   },
   newCommon: {
     running: '运行中',
