@@ -717,6 +717,23 @@
               </LtButton>
             </div>
           </div>
+
+          <label
+            v-if="UPDATE_CHECK_ENABLED"
+            class="sd-row"
+            @click="handleUpdateStableOnlyToggle(!store.updateStableOnly)"
+          >
+            <div class="sd-row-info">
+              <span class="sd-row-title">{{ t('newSettings.updateStableOnly') }}</span>
+              <span class="sd-row-desc">{{ t('newSettings.updateStableOnlyDesc') }}</span>
+            </div>
+            <LtSwitch
+              :model-value="store.updateStableOnly"
+              :aria-label="t('newSettings.updateStableOnly')"
+              @update:model-value="handleUpdateStableOnlyToggle"
+              @click.stop
+            />
+          </label>
         </div>
       </div>
     </div>
@@ -1097,6 +1114,13 @@ const updateDesc = computed(() => {
   return t('newSettings.checkUpdateDesc')
 })
 
+// 切换更新通道：清掉上次结果，避免“只更新稳定版”下仍显示 nightly 版本号
+const handleUpdateStableOnlyToggle = (value: boolean) => {
+  store.updateStableOnly = value
+  latestManagerVersion.value = ''
+  updateCheckError.value = false
+}
+
 const handleCheckUpdate = async () => {
   checkingUpdate.value = true
   updateCheckError.value = false
@@ -1104,8 +1128,15 @@ const handleCheckUpdate = async () => {
     const data = (await store.refreshManagerReleaseInfo(mirrorSelected.value)) as any[]
     // 空列表是接口异常，不能误报“已是最新”
     if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
-    const latest = data.find((r) => !r.draft) || data[0]
-    const latestVersion = latest?.tag_name || ''
+    // 默认只认正式版：nightly 等预发布只在该开关关闭时参与比较
+    const releases = data.filter((r) => !r.draft)
+    const latest = store.updateStableOnly ? releases.find((r) => !r.prerelease) : releases[0]
+    if (!latest) {
+      latestManagerVersion.value = ''
+      toast.success(t('newSettings.upToDate'))
+      return
+    }
+    const latestVersion = latest.tag_name || ''
     if (!latestVersion) throw new Error('missing tag_name')
     latestManagerVersion.value = latestVersion
     if (hasManagerUpdate.value) {

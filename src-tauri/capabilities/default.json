@@ -43,6 +43,8 @@
     "fs:allow-app-read-recursive",
     "log:default",
     "log:allow-log",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "os:default",
     "os:allow-hostname",
     "core:tray:default",

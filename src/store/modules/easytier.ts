@@ -88,6 +88,8 @@ export const useEasyTierStore = defineStore(
     const lockPassword = ref('')
     // 启动直接报错提示
     const errRunNotify = ref(true)
+    // 检查更新只认正式版（忽略 nightly 等预发布），默认开启
+    const updateStableOnly = ref(true)
     const defaultFormData = ref()
     const os = ref('windows')
     const publicPeerList = ref<any[]>([])
@@ -492,6 +494,7 @@ export const useEasyTierStore = defineStore(
       lockPassword,
       defaultFormData,
       errRunNotify,
+      updateStableOnly,
       os,
       selectedColumns,
       defaultServiceInstallMethod,

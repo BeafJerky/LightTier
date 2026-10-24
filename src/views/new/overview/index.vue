@@ -901,7 +901,11 @@ onUnmounted(() => {
 }
 
 .nd-block {
-  margin-bottom: var(--theme-space-5);
+  padding: var(--theme-space-5);
+  margin-bottom: var(--theme-space-4);
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
 }
 
 .nd-stats {
@@ -912,7 +916,7 @@ onUnmounted(() => {
 .nd-stat-card {
   display: flex;
   padding: var(--theme-space-4);
-  background: var(--theme-bg-card);
+  background: var(--theme-bg);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
   transition: var(--theme-transition-surface);
@@ -996,7 +1000,7 @@ onUnmounted(() => {
 .nd-config-card {
   display: flex;
   padding: var(--theme-space-4);
-  background: var(--theme-bg-card);
+  background: var(--theme-bg);
   border: 1.5px solid var(--theme-border-light);
   border-radius: var(--theme-radius-lg);
   transition: var(--theme-transition-surface);
@@ -1009,7 +1013,7 @@ onUnmounted(() => {
 }
 
 .ndc-on {
-  background: color-mix(in srgb, var(--theme-color-success) 4%, var(--theme-bg-card));
+  background: color-mix(in srgb, var(--theme-color-success) 4%, var(--theme-bg));
   border-color: color-mix(in srgb, var(--theme-color-success) 22%, var(--theme-border-light));
 }
 

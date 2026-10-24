@@ -20,6 +20,8 @@
     "fs:allow-applog-write-recursive",
     "log:default",
     "log:allow-log",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "os:default",
     "os:allow-hostname",
     "notification:default",
