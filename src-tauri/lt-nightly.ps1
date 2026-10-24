@@ -44,7 +44,8 @@ $versionCode = [int]$baseParts[0] * 1000000 + [int]$baseParts[1] * 1000 + [int]$
 $commit = (git -C $root rev-parse HEAD 2>$null)
 $shortCommit = (git -C $root rev-parse --short HEAD 2>$null)
 $branch = (git -C $root rev-parse --abbrev-ref HEAD 2>$null)
-$dirtyCount = @(git -C $root status --porcelain 2>$null | Where-Object { $_ }).Count
+# 只统计已跟踪文件的改动：未跟踪的本地文档不会进入构建，不应触发“产物与提交不一致”提示
+$dirtyCount = @(git -C $root status --porcelain --untracked-files=no 2>$null | Where-Object { $_ }).Count
 
 $stage = Join-Path $env:TEMP "lighttier-nightly\$version"
 $cfgPath = Join-Path $env:TEMP "lighttier-nightly-tauri.json"
