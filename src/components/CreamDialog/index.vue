@@ -220,9 +220,25 @@ const isAndroidPlatform = isAndroid()
 const sheetMode = computed(() => isAndroidPlatform && !props.inline)
 
 let sheetPushed = false
+// 注入条目对应的路由地址：关闭时若地址已变化，说明条目被路由 replace 覆盖或已前进到其他页面
+let sheetPushedHash = ''
 const dropSheetEntry = () => {
   const i = sheetStack.indexOf(sheetEntry)
   if (i >= 0) sheetStack.splice(i, 1)
+}
+// 界面内关闭时回收注入条目。延后一拍再判断：关闭回调可能同时触发路由跳转
+//（如删除后回列表并 replace 掉当前条目），此后再 back() 会退回旧路由
+const popSheetEntry = () => {
+  if (!sheetPushed) return
+  sheetPushed = false
+  dropSheetEntry()
+  const pushedHash = sheetPushedHash
+  sheetPushedHash = ''
+  setTimeout(() => {
+    if (!pushedHash || location.hash !== pushedHash) return
+    sheetPopping = true
+    window.history.back()
+  }, 0)
 }
 const sheetEntry: SheetHistoryEntry = {
   isPushed: () => sheetPushed,
@@ -234,6 +250,7 @@ const sheetEntry: SheetHistoryEntry = {
       // 守卫取消关闭：补回 history 条目，保持“返回键关闭面板”的语义
       if (!sheetPushed) {
         sheetPushed = true
+        sheetPushedHash = location.hash
         sheetStack.push(sheetEntry)
         window.history.pushState({ ...(window.history.state || {}), ltSheet: true }, '')
       }
@@ -248,24 +265,18 @@ watch(visible, (v) => {
   if (!sheetMode.value || !props.historyClose) return
   if (v && !sheetPushed) {
     sheetPushed = true
+    sheetPushedHash = location.hash
     sheetStack.push(sheetEntry)
     window.history.pushState({ ...(window.history.state || {}), ltSheet: true }, '')
   } else if (!v && sheetPushed) {
-    // 界面内关闭（按钮/Esc）：回收注入的历史条目
-    sheetPushed = false
-    dropSheetEntry()
-    sheetPopping = true
-    window.history.back()
+    popSheetEntry()
   }
 })
 
 // 卸载兜底：面板未关闭即随页面卸载时回收历史条目
 onUnmounted(() => {
   if (!props.historyClose || !sheetPushed) return
-  sheetPushed = false
-  dropSheetEntry()
-  sheetPopping = true
-  window.history.back()
+  popSheetEntry()
 })
 </script>
 

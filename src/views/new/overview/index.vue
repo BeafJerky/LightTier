@@ -1,5 +1,5 @@
 <template>
-  <div class="nd">
+  <div class="nd" :class="{ 'nd-android': isAndroidPlatform }">
     <div v-if="isQueued" class="nd-queue-bar">
       <span class="nd-queue-icon">⟳</span>
       <span class="nd-queue-text">
@@ -780,8 +780,9 @@ const stopAction = async (item: RunningItem) => {
 const goConfigDetail = (item: RunningItem) => {
   router.push({ name: 'NewConfigDetailView', query: { name: item.configFileName } })
 }
-const goMonitorDetail = (item: RunningItem) => {
-  router.push({ name: 'NewMonitorDetailView', query: { name: item.configFileName } })
+const goMonitorDetail = (_item: RunningItem) => {
+  // Android 单实例：监控页自动跟随当前运行配置；桌面端在监控页选择实例
+  router.push({ name: 'NewMonitor' })
 }
 const toggleConfig = (item: RunningItem & { running: boolean }) => {
   if (item.running) void stopAction(item)
@@ -1200,6 +1201,30 @@ onUnmounted(() => {
 /* ===== Android：连接状态优先 ===== */
 .nd-android {
   padding-bottom: var(--theme-space-2);
+}
+
+/* 平板 / 折叠屏展开（宽且不矮）：主卡在左并吸顶，配置列表在右 */
+@media (width >= 900px) and (height >= 521px) {
+  .nd-android {
+    display: grid;
+    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--theme-space-4);
+  }
+
+  .nd-android .nda-hero {
+    position: sticky;
+    top: 0;
+    margin-bottom: 0;
+  }
+
+  .nd-android .nda-config-section {
+    margin-bottom: 0;
+  }
+
+  .nd-android > .nd-queue-bar {
+    grid-column: 1 / -1;
+  }
 }
 
 .nd-android .nd-queue-bar {

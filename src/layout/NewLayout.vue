@@ -1209,6 +1209,59 @@ onBeforeUnmount(() => {
   background: var(--theme-bg);
 }
 
+/* 平板 / 折叠屏展开：内容居中限宽，避免卡片被拉伸到整屏 */
+@media (width >= 768px) {
+  .nl-window.nl-android .nl-content-android:not(.nl-content-full) {
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+
+  /* 与内容卡片左边缘对齐（容器居中留白 + 内容内边距） */
+  .nl-window.nl-android .nl-toolbar-android {
+    padding-right: max(var(--theme-space-4), calc((100% - 860px) / 2 + var(--theme-space-4)));
+    padding-left: max(var(--theme-space-4), calc((100% - 860px) / 2 + var(--theme-space-4)));
+  }
+}
+
+/* 横屏矮窗口（手机横屏 / 折叠屏外屏）：压缩应用栏与底栏，给内容留出高度 */
+@media (orientation: landscape) and (height <= 520px) {
+  .nl-window.nl-android .nl-toolbar-android,
+  .nl-window.nl-android .nl-toolbar-android.is-sub {
+    height: 44px;
+  }
+
+  .nl-toolbar-android .nl-page-title {
+    font-size: 16px;
+  }
+
+  .nl-toolbar-android.is-sub .nl-page-title {
+    font-size: 14px;
+  }
+
+  .nl-toolbar-android .nl-page-subtitle {
+    display: none;
+  }
+
+  .nl-window.nl-android .nl-tabbar {
+    height: 48px;
+  }
+
+  .nl-window.nl-android .nl-tab-indicator {
+    height: 38px;
+  }
+
+  .nl-window.nl-android .nl-tab-label {
+    font-size: 9.5px;
+  }
+
+  .nl-window.nl-android .nl-content-android {
+    padding-top: var(--theme-space-2);
+    padding-bottom: var(--theme-space-2);
+  }
+}
+
 /* 全屏页（编辑器）：去掉壳层留白，页面内部自行滚动 */
 .nl-content-full {
   display: flex;

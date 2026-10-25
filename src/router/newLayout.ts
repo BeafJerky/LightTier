@@ -26,17 +26,6 @@ const routeChildren: AppRouteRecordRaw[] = [
     }
   },
   {
-    // Android 二级页面：节点监控详情（系统返回键回列表）
-    path: 'monitor/detail',
-    component: () => import('@/views/new/monitor/index.vue'),
-    name: 'NewMonitorDetailView',
-    meta: {
-      titleKey: 'newLayout.monitorDetail',
-      subtitleKey: 'newLayout.monitorDetailSub',
-      subPage: true
-    }
-  },
-  {
     path: 'config',
     component: () => import('@/views/new/config-view/index.vue'),
     name: 'NewConfigView',
@@ -71,6 +60,17 @@ const routeChildren: AppRouteRecordRaw[] = [
       subtitleKey: 'newLayout.webConfigSub',
       icon: 'mdi:web',
       tabRoot: true
+    }
+  },
+  {
+    // Android 二级页面：Web 配置详情（系统返回键回列表）
+    path: 'web-config/detail',
+    component: () => import('@/views/new/web-config-view/index.vue'),
+    name: 'NewWebConfigDetailView',
+    meta: {
+      titleKey: 'newLayout.webConfigDetail',
+      subtitleKey: 'newLayout.webConfigDetailSub',
+      subPage: true
     }
   },
   {

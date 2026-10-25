@@ -1,5 +1,11 @@
 <template>
-  <div class="nwc-root" :class="{ 'nwc-detail-open': !!selectedConfig }">
+  <div
+    class="nwc-root"
+    :class="{
+      'nwc-android': isAndroidPlatform,
+      'nwc-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedConfig
+    }"
+  >
     <!-- 左侧配置列表 -->
     <div class="nwc-left">
       <!-- 页面标题已由应用栏承担，列表顶部仅保留新增入口 -->
@@ -29,42 +35,97 @@
       </div>
       <div class="nwc-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.webConfigListLoading" />
-        <div
-          v-for="item in webConfigList"
-          :key="item.configFileName"
-          class="nwc-card"
-          :class="{ active: selectedConfig?.configFileName === item.configFileName }"
-          @click="selectConfig(item)"
-        >
-          <div v-if="!isAndroidPlatform" class="nwc-card-top">
-            <div class="nwc-card-status">
-              <span class="nwc-dot" :class="getStatusClass(item)"></span>
-              <span class="nwc-status-text">{{ mapCardStatus(item) }}</span>
+        <!-- Android：总览式分组行，触控目标整行可点 -->
+        <template v-if="isAndroidPlatform">
+          <div v-if="webConfigList.length > 0" class="nwc-card-list">
+            <div
+              v-for="item in webConfigList"
+              :key="item.configFileName"
+              class="nwc-row"
+              @click="selectConfig(item)"
+            >
+              <span class="nwc-row-icon">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+                </svg>
+              </span>
+              <span class="nwc-row-text">
+                <span class="nwc-row-name">{{ item.configFileName }}</span>
+                <span class="nwc-row-sub"
+                  >{{ item.protocol }}://{{ item.host }}:{{ item.port }}</span
+                >
+              </span>
+              <svg
+                class="nwc-row-chev"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
             </div>
-            <span v-if="item.pid && !isChecking(item)" class="nwc-card-pid"
-              >PID {{ item.pid }}</span
-            >
           </div>
-          <div class="nwc-card-name">{{ item.configFileName }}</div>
-          <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
-          <!-- Android 仅管理配置，不提供本机启动 -->
-          <div v-if="!isAndroidPlatform" class="nwc-card-actions" @click.stop>
-            <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
-            <LtButton
-              size="compact"
-              :variant="isRunning(item) ? 'soft' : 'success'"
-              :disabled="isChecking(item)"
-              @click="isRunning(item) ? stopWeb(item) : startWeb(item)"
-              >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
-            >
+        </template>
+        <!-- 桌面：保留原有卡片列表 -->
+        <template v-else>
+          <div
+            v-for="item in webConfigList"
+            :key="item.configFileName"
+            class="nwc-card"
+            :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+            @click="selectConfig(item)"
+          >
+            <div class="nwc-card-top">
+              <div class="nwc-card-status">
+                <span class="nwc-dot" :class="getStatusClass(item)"></span>
+                <span class="nwc-status-text">{{ mapCardStatus(item) }}</span>
+              </div>
+              <span v-if="item.pid && !isChecking(item)" class="nwc-card-pid"
+                >PID {{ item.pid }}</span
+              >
+            </div>
+            <div class="nwc-card-name">{{ item.configFileName }}</div>
+            <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
+            <div class="nwc-card-actions" @click.stop>
+              <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
+              <LtButton
+                size="compact"
+                :variant="isRunning(item) ? 'soft' : 'success'"
+                :disabled="isChecking(item)"
+                @click="isRunning(item) ? stopWeb(item) : startWeb(item)"
+                >{{ isRunning(item) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
+              >
+            </div>
           </div>
-        </div>
+        </template>
         <div
           v-if="webConfigList.length === 0 && !easyTierStore.webConfigListLoading"
           class="nwc-empty-cards"
         >
           <span class="nwc-empty-icon">✦</span>
-          <p>{{ t('newCommon.noWebConfig') }}</p>
+          <p class="nwc-empty-title">{{
+            isAndroidPlatform ? t('newWebConfig.emptyTitle') : t('newCommon.noWebConfig')
+          }}</p>
+          <template v-if="isAndroidPlatform">
+            <span class="nwc-empty-desc">{{ t('newWebConfig.emptyDesc') }}</span>
+            <LtButton variant="primary" size="md" class="nwc-empty-cta" @click="openAdd">
+              {{ t('newWebConfig.addConfig') }}
+            </LtButton>
+          </template>
         </div>
       </div>
     </div>
@@ -73,7 +134,13 @@
     <div class="nwc-right" v-if="selectedConfig">
       <div class="nwc-detail-header">
         <div class="nwc-detail-title-row">
-          <LtButton class="nwc-back-btn" variant="ghost" size="sm" @click="closeWebDetail">
+          <LtButton
+            v-if="!isAndroidPlatform"
+            class="nwc-back-btn"
+            variant="ghost"
+            size="sm"
+            @click="closeWebDetail"
+          >
             <svg
               width="14"
               height="14"
@@ -87,6 +154,12 @@
             {{ t('newCommon.back') }}
           </LtButton>
           <h3 class="nwc-detail-title">{{ selectedConfig.configFileName }}</h3>
+          <span
+            v-if="isAndroidPlatform && selectedConfig.protocol"
+            class="nwc-badge nwc-badge-proto"
+          >
+            {{ selectedConfig.protocol.toUpperCase() }}
+          </span>
           <span
             v-if="!isAndroidPlatform"
             class="nwc-badge"
@@ -104,19 +177,34 @@
           </span>
         </div>
         <div class="nwc-detail-actions">
-          <LtButton variant="secondary" @click="openEdit">{{ t('newCommon.edit') }}</LtButton>
+          <LtButton variant="secondary" class="nwc-detail-btn" @click="openEdit">{{
+            t('newCommon.edit')
+          }}</LtButton>
+          <LtButton
+            v-if="isAndroidPlatform"
+            variant="primary"
+            class="nwc-detail-btn"
+            :disabled="!selectedConfig.webUrl"
+            @click="openConsoleUrl"
+            >{{ t('newWebConfig.openConsole') }}</LtButton
+          >
           <!-- 窄屏列表不可见，详情保留唯一的上下文生命周期操作；宽屏由列表卡片承担 -->
           <LtButton
             v-if="!isAndroidPlatform"
-            class="nwc-detail-lifecycle"
+            class="nwc-detail-lifecycle nwc-detail-btn"
             :variant="isRunning(selectedConfig) ? 'soft' : 'success'"
             :disabled="isChecking(selectedConfig)"
             @click="isRunning(selectedConfig) ? stopWeb(selectedConfig) : startWeb(selectedConfig)"
             >{{ isRunning(selectedConfig) ? t('newCommon.stop') : t('newCommon.run') }}</LtButton
           >
-          <LtButton variant="danger" :disabled="isChecking(selectedConfig)" @click="deleteConfig">{{
-            t('newCommon.delete')
-          }}</LtButton>
+          <LtButton
+            v-if="!isAndroidPlatform"
+            variant="danger"
+            class="nwc-detail-btn"
+            :disabled="isChecking(selectedConfig)"
+            @click="deleteConfig"
+            >{{ t('newCommon.delete') }}</LtButton
+          >
         </div>
       </div>
 
@@ -199,12 +287,43 @@
           </div>
         </div>
       </div>
+
+      <!-- Android：破坏性操作独立成行，避免与常用操作挤在头部 -->
+      <div v-if="isAndroidPlatform" class="nwc-danger-zone">
+        <LtButton variant="danger" size="lg" block class="nwc-danger-btn" @click="deleteConfig">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+          </svg>
+          {{ t('newCommon.delete') }}
+        </LtButton>
+      </div>
     </div>
 
     <div class="nwc-right" v-else>
-      <div class="nwc-empty"
-        ><span class="nwc-empty-icon">✦</span><p>{{ t('newWebConfig.selectWebConfig') }}</p></div
+      <div
+        v-if="isAndroidPlatform && (loading || easyTierStore.webConfigListLoading)"
+        class="nwc-empty"
       >
+        <span class="nwc-state-spinner" aria-hidden="true"></span>
+        <p>{{ t('newCommon.checking') }}</p>
+      </div>
+      <div v-else-if="isAndroidPlatform" class="nwc-empty">
+        <span class="nwc-empty-icon">✦</span>
+        <p>{{ t('newWebConfig.emptyTitle') }}</p>
+      </div>
+      <div v-else class="nwc-empty">
+        <span class="nwc-empty-icon">✦</span>
+        <p>{{ t('newWebConfig.selectWebConfig') }}</p>
+      </div>
     </div>
   </div>
 
@@ -339,6 +458,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
 import { useCreamToast } from '@/hooks/useCreamToast'
@@ -355,7 +475,13 @@ defineOptions({ name: 'NewWebConfigView' })
 const { t } = useI18n()
 const easyTierStore = useEasyTierStore()
 const { show: toast } = useCreamToast()
+const route = useRoute()
+const router = useRouter()
 const isAndroidPlatform = isAndroid()
+// Android：详情为独立路由（系统返回键回列表）
+const isAndroidDetailRoute = computed(
+  () => isAndroidPlatform && route.name === 'NewWebConfigDetailView'
+)
 // Web 配置与服务操作统一从 useMockData 获取（Tauri 真实实现 / 浏览器 Mock 降级）
 const {
   readWebConfigList,
@@ -559,8 +685,8 @@ const refreshWebRuntimeState = async () => {
     }
     serviceStatusMap.value.set(item.configFileName, svcKey)
   }
-  // 未选中时自动选中首项（窄屏移动端默认展示清单，不自动进入详情）
-  if (!selectedConfig.value && window.innerWidth > 900 && list.length > 0) {
+  // 未选中时自动选中首项（桌面宽屏；Android 默认展示清单，由路由决定是否进入详情）
+  if (!isAndroidPlatform && !selectedConfig.value && window.innerWidth > 900 && list.length > 0) {
     selectedConfig.value = list[0]
   }
 }
@@ -578,15 +704,69 @@ const refreshWebList = async () => {
   }
 }
 
-// 选中配置卡片（宽屏同时展示右侧详情）
+// 选中配置卡片：Android 进入详情路由（由 syncDetailFromRoute 统一加载），宽屏同时展示右侧详情
 const selectConfig = (item: FormWebData) => {
+  if (isAndroidPlatform && !isAndroidDetailRoute.value) {
+    router.push({ name: 'NewWebConfigDetailView', query: { name: item.configFileName } })
+    return
+  }
   selectedConfig.value = item
 }
 
 // 移动端 master-detail：从详情返回清单
 const closeWebDetail = () => {
+  if (isAndroidPlatform) {
+    router.replace({ name: 'NewWebConfigView' })
+    return
+  }
   selectedConfig.value = null
 }
+
+// Android 详情路由 → 页面状态：进入时加载对应配置，返回列表时清空详情
+const syncDetailFromRoute = async () => {
+  if (!isAndroidPlatform) return
+  if (!easyTierStore.webConfigListLoaded) await easyTierStore.loadWebConfigFiles()
+  await refreshWebRuntimeState()
+  if (!isAndroidDetailRoute.value) {
+    selectedConfig.value = null
+    return
+  }
+  const name = typeof route.query.name === 'string' ? route.query.name : ''
+  if (!name) {
+    router.replace({ name: 'NewWebConfigView' })
+    return
+  }
+  const item = webConfigList.value.find((c) => c.configFileName === name)
+  if (!item) {
+    // 列表仍在加载时不做“配置不存在”判定，加载完成后由 webConfigListLoaded 监听重试
+    if (!easyTierStore.webConfigListLoaded) return
+    toast(t('newWebConfig.configNotFound'), 'warning')
+    router.replace({ name: 'NewWebConfigView' })
+    return
+  }
+  selectedConfig.value = item
+}
+
+// 路由切换（系统返回键 / 直接打开详情）时同步详情态
+watch(
+  () => [route.name, route.query.name],
+  (next, prev) => {
+    if (!isAndroidPlatform) return
+    const [name] = next
+    const [prevName] = prev
+    if (name !== 'NewWebConfigDetailView' && prevName !== 'NewWebConfigDetailView') return
+    void syncDetailFromRoute()
+  }
+)
+// 配置列表加载完成（深链打开详情时列表可能滞后）后重试同步
+watch(
+  () => easyTierStore.webConfigListLoaded,
+  (loaded) => {
+    if (loaded && isAndroidDetailRoute.value && !selectedConfig.value) {
+      void syncDetailFromRoute()
+    }
+  }
+)
 
 // ========== CRUD ==========
 // 打开新增弹窗（表单组件受控：mode 决定标题与初始值）
@@ -655,6 +835,7 @@ const deleteConfig = async () => {
     await writeWebConfigList(list)
     toast(t('newCommon.deleteSuccess'), 'success')
     selectedConfig.value = null
+    if (isAndroidDetailRoute.value) router.replace({ name: 'NewWebConfigView' })
     await refreshWebList()
   } catch {
     toast(t('newCommon.deleteFail'), 'error')
@@ -828,13 +1009,14 @@ const handleUninstallService = async () => {
 }
 
 // ===== 生命周期 =====
-onMounted(() => {
-  // 如果 store 尚未加载，先加载
-  if (!easyTierStore.webConfigListLoaded) {
-    easyTierStore.loadWebConfigFiles()
-  }
+onMounted(async () => {
   // 注册到全局刷新回调（悬浮菜单触发时同步）
   easyTierStore.registerPageRefresh(refreshWebRuntimeState)
+  if (isAndroidPlatform) {
+    // Android：详情由路由决定，加载后按 query 恢复选中项
+    await syncDetailFromRoute()
+    return
+  }
   refreshWebList()
 })
 
@@ -1220,6 +1402,324 @@ onUnmounted(() => {
 .nwc-empty-cards p {
   margin: 0;
   font-size: 14px;
+}
+
+/* ===== Android：总览式分组列表与详情 ===== */
+.nwc-root.nwc-android {
+  display: block;
+  height: auto;
+  min-height: auto;
+}
+
+.nwc-root.nwc-android .nwc-left {
+  display: flex;
+  width: 100%;
+  flex: none;
+  flex-direction: column;
+}
+
+.nwc-root.nwc-android .nwc-left-header {
+  padding: 0;
+}
+
+.nwc-root.nwc-android .nwc-left-scroll {
+  display: block;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  flex: none;
+}
+
+/* --- 分组列表 --- */
+.nwc-root.nwc-android .nwc-card-list {
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nwc-row {
+  display: flex;
+  min-height: 60px;
+  padding: 10px 14px 10px 12px;
+  cursor: pointer;
+  align-items: center;
+  gap: var(--theme-space-3);
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.nwc-row + .nwc-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nwc-row:active {
+  background: var(--theme-bg-hover);
+}
+
+.nwc-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nwc-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nwc-row-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nwc-row-sub {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nwc-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) {
+  .nwc-row:hover {
+    background: var(--theme-bg-hover);
+  }
+}
+
+/* --- 空状态 --- */
+.nwc-root.nwc-android .nwc-empty-cards {
+  padding: 34px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  gap: 6px;
+}
+
+.nwc-root.nwc-android .nwc-empty-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 24px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nwc-root.nwc-android .nwc-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nwc-root.nwc-android .nwc-empty-desc {
+  font-size: 11.5px;
+}
+
+.nwc-root.nwc-android .nwc-empty-cta {
+  margin-top: 8px;
+}
+
+/* --- 详情页（独立路由，列表与详情互斥） --- */
+.nwc-root.nwc-android .nwc-right {
+  display: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.nwc-root.nwc-android.nwc-detail-open .nwc-left {
+  display: none;
+}
+
+.nwc-root.nwc-android.nwc-detail-open .nwc-right {
+  display: block;
+}
+
+.nwc-root.nwc-android .nwc-detail-header {
+  display: flex;
+  padding: var(--theme-space-5);
+  margin: 0 0 var(--theme-space-4);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--theme-space-3);
+}
+
+.nwc-root.nwc-android .nwc-detail-title-row {
+  gap: 8px;
+}
+
+.nwc-root.nwc-android .nwc-detail-title {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.nwc-root.nwc-android .nwc-badge {
+  padding: 3px 9px;
+  font-size: 10.5px;
+}
+
+.nwc-root.nwc-android .nwc-badge-proto {
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent-primary) 18%, transparent);
+}
+
+.nwc-root.nwc-android .nwc-detail-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nwc-root.nwc-android .nwc-detail-actions .nwc-detail-btn {
+  height: 42px;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- 详情分组：标题在外，字段为分隔行 --- */
+.nwc-root.nwc-android .nwc-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nwc-root.nwc-android .nwc-section-title {
+  margin: 0 2px var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  gap: 0;
+}
+
+.nwc-root.nwc-android .nwc-section-title::after {
+  display: none;
+}
+
+.nwc-root.nwc-android .nwc-grid {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+.nwc-root.nwc-android .nwc-field {
+  display: flex;
+  padding: 12px 14px;
+  background: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nwc-root.nwc-android .nwc-grid > :first-child {
+  border-top: none;
+}
+
+.nwc-root.nwc-android .nwc-label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
+.nwc-root.nwc-android .nwc-val {
+  min-width: 0;
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.nwc-root.nwc-android .nwc-link {
+  max-width: 62%;
+  text-align: right;
+  align-self: center;
+  justify-content: flex-end;
+}
+
+.nwc-root.nwc-android .nwc-platform-hint {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nwc-danger-zone {
+  margin-top: var(--theme-space-5);
+}
+
+.nwc-danger-btn {
+  height: 48px;
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 详情加载态也使用卡片容器 */
+.nwc-root.nwc-android .nwc-empty {
+  height: auto;
+  padding: 44px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  opacity: 1;
+}
+
+.nwc-state-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--theme-border);
+  border-top-color: var(--theme-accent-primary);
+  border-radius: var(--theme-radius-round);
+  animation: nwc-spin 0.8s linear infinite;
+}
+
+@keyframes nwc-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 服务管理 */

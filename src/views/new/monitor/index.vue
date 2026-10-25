@@ -1,83 +1,30 @@
 <template>
   <div
     class="nm-root"
-    :class="{
-      'nm-android': isAndroidPlatform,
-      'nm-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedConfig
-    }"
+    :class="{ 'nm-android': isAndroidPlatform, 'nm-detail-open': !!selectedConfig }"
   >
-    <!-- 左侧配置列表：页面标题已由应用栏承担，列表直接从顶部开始 -->
-    <div class="nm-left">
+    <!-- 左侧配置列表（桌面 master-detail；Android 单实例直接展示详情） -->
+    <div v-if="!isAndroidPlatform" class="nm-left">
       <div class="nm-left-scroll lt-loading-host">
         <LoadingOverlay :show="easyTierStore.configListLoading" />
-        <!-- Android：与总览一致的分组行列表 -->
-        <template v-if="isAndroidPlatform">
-          <div v-if="displayList.length > 0" class="nm-list">
-            <div
-              v-for="item in displayList"
-              :key="item.configFileName"
-              class="nm-row"
-              :class="{ 'nm-row-on': item.running }"
-              @click="selectConfig(item)"
-            >
-              <span class="nm-row-icon" :class="{ on: item.running }">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 12h3l2.5-6 4 12 2.5-6h6" />
-                </svg>
-              </span>
-              <span class="nm-row-text">
-                <span class="nm-row-name">{{ item.configFileName }}</span>
-                <span class="nm-row-sub">
-                  <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
-                  {{ item.running ? t('newCommon.running') : t('newCommon.stopped') }}
-                  <span v-if="item.pid">· PID {{ item.pid }}</span>
-                </span>
-              </span>
-              <svg
-                class="nm-row-chev"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                aria-hidden="true"
-              >
-                <path d="M9 18l6-6-6-6" />
-              </svg>
+        <div
+          v-for="item in displayList"
+          :key="item.configFileName"
+          class="nm-card"
+          :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+          @click="selectConfig(item)"
+        >
+          <div class="nmc-top">
+            <div class="nmc-status">
+              <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
+              <span class="nmc-status-text">{{
+                item.running ? t('newCommon.running') : t('newCommon.stopped')
+              }}</span>
             </div>
+            <span v-if="item.pid" class="nmc-pid">PID {{ item.pid }}</span>
           </div>
-        </template>
-        <template v-else>
-          <div
-            v-for="item in displayList"
-            :key="item.configFileName"
-            class="nm-card"
-            :class="{ active: selectedConfig?.configFileName === item.configFileName }"
-            @click="selectConfig(item)"
-          >
-            <div class="nmc-top">
-              <div class="nmc-status">
-                <span class="nmc-dot" :class="item.running ? 'on' : 'off'"></span>
-                <span class="nmc-status-text">{{
-                  item.running ? t('newCommon.running') : t('newCommon.stopped')
-                }}</span>
-              </div>
-              <span v-if="item.pid" class="nmc-pid">PID {{ item.pid }}</span>
-            </div>
-            <div class="nmc-name">{{ item.configFileName }}</div>
-          </div>
-        </template>
+          <div class="nmc-name">{{ item.configFileName }}</div>
+        </div>
         <!-- 空态分流：无配置 / 有配置但无运行实例，避免同一句“暂无配置”误导 -->
         <div
           v-if="easyTierStore.configList.length === 0 && !easyTierStore.configListLoading"
@@ -110,15 +57,79 @@
 
     <!-- 右侧详情 -->
     <div class="nm-right" v-if="selectedData">
-      <div class="nm-detail-header" :class="{ 'nm-detail-hero-on': selectedRunning }">
-        <div class="nm-detail-title-row">
+      <!-- Android：单实例，直接以总览式主卡展示当前运行配置 -->
+      <div v-if="isAndroidPlatform" class="nm-hero" :class="{ 'nm-hero-on': selectedRunning }">
+        <div class="nm-hero-head">
+          <span class="nm-hero-state">
+            <span class="nm-hero-dot" :class="{ on: selectedRunning }"></span>
+            {{ selectedRunning ? t('newCommon.running') : t('newCommon.stopped') }}
+          </span>
+          <span v-if="selectedVirtualIp" class="nm-hero-chip">{{ selectedVirtualIp }}</span>
+        </div>
+
+        <div class="nm-hero-name">{{ selectedConfig?.configFileName }}</div>
+        <p class="nm-hero-desc">{{ heroDescription }}</p>
+
+        <div v-if="selectedRunning" class="nm-hero-metrics">
+          <div class="nm-hero-metric">
+            <span class="nm-hero-label">{{ t('newMonitor.peerNodes') }}</span>
+            <strong class="nm-hero-value">{{ selectedData.peerList.length }}</strong>
+          </div>
+          <span class="nm-hero-divider"></span>
+          <div class="nm-hero-metric">
+            <span class="nm-hero-label">{{ t('newMonitor.avgLatency') }}</span>
+            <strong class="nm-hero-value">{{ selectedData.avgLatency }}</strong>
+          </div>
+        </div>
+
+        <div class="nm-hero-actions">
           <LtButton
-            v-if="!isAndroidPlatform"
-            variant="ghost"
-            size="sm"
-            class="nm-back-btn"
-            @click="closeMonitorDetail"
+            variant="danger"
+            size="lg"
+            class="nm-hero-btn"
+            :disabled="stopping"
+            @click="stopSelected"
           >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            <span>{{ t('newOverview.disconnect') }}</span>
+          </LtButton>
+          <LtButton variant="soft" size="lg" class="nm-hero-btn" @click="openSelectedConfig">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              aria-hidden="true"
+            >
+              <path d="M6 3h9l4 4v14H6z" />
+              <path d="M14 3v5h5M9 13h6M9 17h5" />
+            </svg>
+            <span>{{ t('newOverview.configDetail') }}</span>
+          </LtButton>
+        </div>
+
+        <div class="nm-hero-foot">
+          <span>{{ t('newMonitor.lastUpdate') }} {{ formatTime(selectedData.lastUpdate) }}</span>
+          <span class="nm-hero-foot-sep"></span>
+          <span>{{ t('newMonitor.autoRefresh', { n: easyTierStore.refreshInterval || 3 }) }}</span>
+        </div>
+      </div>
+
+      <div v-else class="nm-detail-header" :class="{ 'nm-detail-hero-on': selectedRunning }">
+        <div class="nm-detail-title-row">
+          <LtButton variant="ghost" size="sm" class="nm-back-btn" @click="closeMonitorDetail">
             <svg
               width="14"
               height="14"
@@ -169,7 +180,21 @@
         </LtButton>
       </div>
 
-      <div v-if="selectedRunning && selectedData.peerList.length > 0" class="nm-peer-summary">
+      <div v-if="isAndroidPlatform && selectedRunning" class="nm-traffic">
+        <div class="nm-traffic-card">
+          <span class="nm-traffic-label">{{ t('newMonitor.totalUpload') }}</span>
+          <strong class="nm-traffic-value">{{ formatBytes(selectedData.txTotal) }}</strong>
+        </div>
+        <div class="nm-traffic-card">
+          <span class="nm-traffic-label">{{ t('newMonitor.totalDownload') }}</span>
+          <strong class="nm-traffic-value">{{ formatBytes(selectedData.rxTotal) }}</strong>
+        </div>
+      </div>
+
+      <div
+        v-if="!isAndroidPlatform && selectedRunning && selectedData.peerList.length > 0"
+        class="nm-peer-summary"
+      >
         <div class="nm-peer-stat">
           <span class="nm-ps-num">{{ formatBytes(selectedData.txTotal) }}</span>
           <span class="nm-ps-lbl">{{ t('newMonitor.totalUpload') }}</span>
@@ -380,10 +405,33 @@
     </div>
 
     <div class="nm-right" v-else>
-      <!-- Android 详情路由：列表/运行态尚未就绪时先展示加载态 -->
-      <div v-if="isAndroidDetailRoute" class="nm-empty" aria-live="polite">
-        <p>{{ t('newCommon.loading') }}</p>
-      </div>
+      <!-- Android：单实例，无运行配置时给出空态与去配置入口 -->
+      <template v-if="isAndroidPlatform">
+        <div v-if="loading || easyTierStore.configListLoading" class="nm-state" aria-live="polite">
+          <span class="nm-state-spinner" aria-hidden="true"></span>
+          <p class="nm-state-title">{{ t('newMonitor.loadingData') }}</p>
+        </div>
+        <div v-else class="nm-empty-cards">
+          <span class="nm-empty-icon">✦</span>
+          <p>{{
+            easyTierStore.configList.length === 0
+              ? t('newMonitor.emptyNoConfig')
+              : t('newMonitor.emptyNoRunning')
+          }}</p>
+          <span class="nm-empty-desc">{{
+            easyTierStore.configList.length === 0
+              ? t('newOverview.emptyNoConfigDesc')
+              : t('newMonitor.emptyNoRunningDesc')
+          }}</span>
+          <LtButton variant="primary" size="lg" class="nm-empty-cta" @click="goMonitoringCta">
+            {{
+              easyTierStore.configList.length === 0
+                ? t('newCommon.createConfig')
+                : t('newCommon.goConfig')
+            }}
+          </LtButton>
+        </div>
+      </template>
       <div v-else class="nm-empty">
         <span class="nm-empty-icon">✦</span>
         <p>{{ t('newMonitor.selectConfig') }}</p>
@@ -416,9 +464,10 @@ import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
 import { readFileContent } from '@/utils/fileUtil'
 import { CONFIG_PATH } from '@/constants/easytier'
+import { getErrorMessage } from '@/utils'
 import * as toml from 'smol-toml'
 import { useI18n } from 'vue-i18n'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import TrendChart from '@/components/TrendChart/index.vue'
 import { LtButton } from '@/components/ui'
@@ -431,7 +480,6 @@ defineOptions({ name: 'NewMonitor' })
 const easyTierStore = useEasyTierStore()
 const { t } = useI18n()
 const router = useRouter()
-const route = useRoute()
 const isAndroidPlatform = isAndroid()
 const { show: toast } = useCreamToast()
 
@@ -454,11 +502,6 @@ const visibilityHandler = () => {
 // 页面加载态 / 当前选中实例（列表卡片数据）
 const loading = ref(false)
 const selectedConfig = ref<RunningItem | null>(null)
-
-// Android 详情为独立路由（列表/详情共用本组件），视图切换以路由为准
-const isAndroidDetailRoute = computed(
-  () => isAndroidPlatform && route.name === 'NewMonitorDetailView'
-)
 
 // 监控快照：一次轮询的完整结果（nodeInfo 已合并 TOML 展示字段与 NAT 映射结果）
 interface MonitorSnapshot {
@@ -567,6 +610,22 @@ const selectedRunning = computed(() => {
 
 // 运行中配置名集合（O(1) 判断，多处复用）
 const runningSet = computed(() => new Set(easyTierStore.runningList.map((r) => r.configFileName)))
+
+// Android 总览式主卡：虚拟 IP 来自运行实例（桌面为 undefined）
+const selectedVirtualIp = computed(() =>
+  selectedConfig.value
+    ? easyTierStore.runningList.find(
+        (r) => r.configFileName === selectedConfig.value?.configFileName
+      )?.virtualIp
+    : undefined
+)
+const heroDescription = computed(() => {
+  if (selectedData.value) return t('newMonitor.androidLiveDesc')
+  if (pollFailed.value) return t('newMonitor.fetchFailedDesc')
+  return t('newMonitor.loadingData')
+})
+// 断开连接请求在飞时禁用按钮，避免连点重复停机
+const stopping = ref(false)
 
 // 左侧列表仅展示运行中的实例（与监控目标一致），并带出 pid / rpcPortal
 const displayList = computed(() => {
@@ -1047,12 +1106,6 @@ const handleSnapshotSuccess = (configName: string, snapshot: MonitorSnapshot) =>
 // --- 选中配置 ---
 // 切换选中实例：重置详情/失败计数与趋势，运行中则开始轮询，否则停轮询
 const selectConfig = (item: RunningItem) => {
-  // Android：先进入详情路由，由 syncDetailFromRoute 统一选中并启动轮询
-  if (isAndroidPlatform && !isAndroidDetailRoute.value) {
-    easyTierStore.setLastSelectedConfig(item)
-    router.push({ name: 'NewMonitorDetailView', query: { name: item.configFileName } })
-    return
-  }
   selectedConfig.value = item
   syncTrend()
   selectedData.value = null
@@ -1078,50 +1131,36 @@ const closeMonitorDetail = () => {
   consecutiveFailures.value = 0
 }
 
-// Android 详情路由 → 页面状态：进入时选中对应运行实例，返回列表时停止轮询并清空
-const syncDetailFromRoute = async () => {
+// Android 单实例：监控页始终跟随当前运行中的配置（无运行项则展示空态）
+const syncAndroidSelection = async () => {
   if (!isAndroidPlatform) return
-  if (!isAndroidDetailRoute.value) {
-    closeMonitorDetail()
-    return
-  }
-  const name = typeof route.query.name === 'string' ? route.query.name : ''
-  if (!name) {
-    router.replace({ name: 'NewMonitor' })
-    return
-  }
   if (!easyTierStore.configListLoaded) await easyTierStore.loadConfigFiles()
-  // 路由直达时运行态可能尚未刷新，补一次扫描再判定实例是否存在
-  if (!displayList.value.some((c) => c.configFileName === name)) await updateRunningList()
-  const item = displayList.value.find((c) => c.configFileName === name)
-  if (!item) {
-    // 列表仍在加载时不做“实例不存在”判定，加载完成后由 configListLoaded 监听重试
-    if (!easyTierStore.configListLoaded) return
-    toast(t('newMonitor.configNotFound'), 'warning')
-    router.replace({ name: 'NewMonitor' })
+  // 从其他页面切换过来时运行态可能尚未刷新，补一次扫描再判定
+  if (displayList.value.length === 0) await updateRunningList()
+  const running = displayList.value[0]
+  if (!running) {
+    if (selectedConfig.value) closeMonitorDetail()
     return
   }
-  selectConfig(item)
+  // 同一实例只同步 pid / 虚拟 IP 等运行态字段，不重置快照与轮询
+  if (selectedConfig.value?.configFileName === running.configFileName) {
+    selectedConfig.value = running
+    return
+  }
+  selectConfig(running)
 }
 
-// 路由切换（系统返回键 / 直接打开详情）时同步详情态
+// 运行实例集合变化（启动 / 停止 / 切换）时重新对齐选中项
 watch(
-  () => [route.name, route.query.name],
-  (next, prev) => {
-    if (!isAndroidPlatform) return
-    const [name] = next
-    const [prevName] = prev
-    if (name !== 'NewMonitorDetailView' && prevName !== 'NewMonitorDetailView') return
-    void syncDetailFromRoute()
+  () => easyTierStore.runningList.map((r) => r.configFileName).join('|'),
+  () => {
+    if (isAndroidPlatform) void syncAndroidSelection()
   }
 )
-// 配置列表加载完成（深链打开详情时列表可能滞后）后重试同步
 watch(
   () => easyTierStore.configListLoaded,
   (loaded) => {
-    if (loaded && isAndroidDetailRoute.value && !selectedConfig.value) {
-      void syncDetailFromRoute()
-    }
+    if (loaded && isAndroidPlatform) void syncAndroidSelection()
   }
 )
 
@@ -1132,12 +1171,49 @@ const consecutiveFailures = ref(0)
 const MAX_FAILURES = 3
 const pollFailed = computed(() => consecutiveFailures.value >= MAX_FAILURES)
 
-// 空态 CTA：新建配置（Android 走二级页，桌面打开配置页并自动拉起新增弹窗）
+// 空态 CTA：无配置时去新建，有配置无运行实例时去配置页
 const goCreateConfig = () => {
   router.push(isAndroidPlatform ? '/new/config-add' : '/new/config?create=1')
 }
 const goConfigPage = () => {
   router.push('/new/config')
+}
+const goMonitoringCta = () => {
+  if (easyTierStore.configList.length === 0) goCreateConfig()
+  else goConfigPage()
+}
+
+// Android 主卡：断开当前运行实例
+const stopSelected = async () => {
+  const running = selectedConfig.value
+    ? easyTierStore.runningList.find(
+        (r) => r.configFileName === selectedConfig.value?.configFileName
+      )
+    : undefined
+  if (!running || stopping.value) return
+  stopping.value = true
+  try {
+    const ok = await coreApi.stopConfig(running)
+    if (ok) {
+      easyTierStore.setStopLoop(true)
+      easyTierStore.removeRunningList(running.configFileName)
+      clearTrend(running.configFileName)
+      toast(t('newCommon.stoppedSuccess'), 'success')
+    } else {
+      toast(t('newCommon.stoppedFail'), 'error')
+    }
+  } catch (e) {
+    toast(`${t('newCommon.stoppedFail')}（${getErrorMessage(e)}）`, 'error')
+  } finally {
+    stopping.value = false
+  }
+}
+
+// 主卡：跳转到当前配置详情
+const openSelectedConfig = () => {
+  const name = selectedConfig.value?.configFileName
+  if (!name) return
+  router.push({ name: 'NewConfigDetailView', query: { name } })
 }
 
 // 手动重试：重置失败计数并立即重新开始轮询
@@ -1234,7 +1310,7 @@ onMounted(async () => {
   isMounted = true
   easyTierStore.registerPageRefresh(refreshRuntimeState)
   await loadConfigs()
-  if (isAndroidPlatform) await syncDetailFromRoute()
+  if (isAndroidPlatform) await syncAndroidSelection()
   document.addEventListener('visibilitychange', visibilityHandler)
 })
 
@@ -1482,119 +1558,6 @@ onUnmounted(() => {
   min-height: auto;
 }
 
-.nm-root.nm-android .nm-left {
-  display: flex;
-  width: 100%;
-  flex: none;
-  flex-direction: column;
-}
-
-.nm-root.nm-android .nm-left-scroll {
-  display: block;
-  padding: 0;
-  overflow: visible;
-  background: transparent;
-  border-radius: 0;
-  flex: none;
-}
-
-/* 列表分组 */
-.nm-list {
-  overflow: hidden;
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-xl);
-}
-
-.nm-row {
-  display: flex;
-  min-height: 60px;
-  padding: 10px 14px 10px 12px;
-  cursor: pointer;
-  box-sizing: border-box;
-  align-items: center;
-  gap: var(--theme-space-3);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.nm-row + .nm-row {
-  border-top: 1px solid var(--theme-border-light);
-}
-
-.nm-row:active {
-  background: var(--theme-bg-hover);
-}
-
-.nm-row-on {
-  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
-}
-
-.nm-row-icon {
-  display: flex;
-  width: 36px;
-  height: 36px;
-  color: var(--theme-text-muted);
-  background: var(--theme-bg-hover);
-  border-radius: 11px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-}
-
-.nm-row-icon.on {
-  color: var(--theme-color-success);
-  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
-}
-
-.nm-row-text {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.nm-row-name {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--theme-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nm-row-sub {
-  display: flex;
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--theme-text-muted);
-  white-space: nowrap;
-  align-items: center;
-  gap: 4px;
-}
-
-.nm-row-sub .nmc-dot {
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-}
-
-.nm-row-chev {
-  color: var(--theme-text-muted);
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-
-@media (hover: hover) {
-  .nm-row:hover {
-    background: var(--theme-bg-hover);
-  }
-
-  .nm-row-on:hover {
-    background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
-  }
-}
-
 /* 空状态 */
 .nm-root.nm-android .nm-empty-cards {
   padding: 34px var(--theme-space-5);
@@ -1631,23 +1594,217 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* 详情 */
+/* 详情：Android 无列表，详情/空态直接占据页面 */
 .nm-root.nm-android .nm-right {
-  display: none;
+  display: block;
   padding: 0;
   overflow: visible;
   background: transparent;
   border: none;
   border-radius: 0;
-}
-
-.nm-root.nm-android.nm-detail-open .nm-left {
-  display: none;
-}
-
-.nm-root.nm-android.nm-detail-open .nm-right {
-  display: block;
   flex: none;
+}
+
+/* --- 总览式主卡 --- */
+.nm-hero {
+  padding: var(--theme-space-5);
+  margin-bottom: var(--theme-space-4);
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 14%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+}
+
+.nm-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 17%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nm-hero-head {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-2);
+}
+
+.nm-hero-state {
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  align-items: center;
+  gap: 6px;
+}
+
+.nm-hero-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--theme-text-muted);
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+}
+
+.nm-hero-dot.on {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color-success) 14%, transparent);
+}
+
+.nm-hero-chip {
+  max-width: 55%;
+  padding: 3px 9px;
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 11px;
+  color: var(--theme-accent-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-pill);
+}
+
+.nm-hero-name {
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nm-hero-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.nm-hero-metrics {
+  display: flex;
+  padding: var(--theme-space-3) 0;
+  margin-top: var(--theme-space-4);
+  border-top: 1px solid var(--theme-border-light);
+  border-bottom: 1px solid var(--theme-border-light);
+  align-items: center;
+  gap: var(--theme-space-4);
+}
+
+.nm-hero-metric {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nm-hero-label {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.nm-hero-value {
+  font-family: var(--theme-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-hero-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--theme-border-light);
+}
+
+.nm-hero-actions {
+  display: flex;
+  margin-top: var(--theme-space-4);
+  gap: 10px;
+}
+
+.nm-hero-actions .nm-hero-btn {
+  height: 44px;
+  min-width: 0;
+  font-weight: 600;
+  flex: 1;
+}
+
+.nm-hero-btn :deep(.n-button__content) {
+  min-width: 0;
+  gap: 6px;
+}
+
+.nm-hero-btn :deep(.n-button__content > span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nm-hero-foot {
+  display: flex;
+  margin-top: var(--theme-space-3);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nm-hero-foot-sep {
+  width: 3px;
+  height: 3px;
+  background: currentcolor;
+  border-radius: var(--theme-radius-round);
+  opacity: 0.5;
+}
+
+/* --- 实时流量：主卡下方的两张统计卡 --- */
+.nm-traffic {
+  display: grid;
+  margin-bottom: var(--theme-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nm-traffic-card {
+  display: flex;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nm-traffic-label {
+  font-size: 10.5px;
+  letter-spacing: 0.2px;
+  color: var(--theme-text-muted);
+}
+
+.nm-traffic-value {
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nm-root.nm-android .nm-detail-header {
@@ -1702,32 +1859,6 @@ onUnmounted(() => {
   background: var(--theme-bg-tag);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-pill);
-}
-
-/* 指标 2×2 卡片 */
-.nm-root.nm-android .nm-peer-summary {
-  display: grid;
-  margin-bottom: var(--theme-space-4);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.nm-root.nm-android .nm-peer-stat {
-  padding: 12px 14px;
-  background: var(--theme-bg-card);
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-lg, 14px);
-  align-items: flex-start;
-  gap: 3px;
-}
-
-.nm-root.nm-android .nm-ps-num {
-  font-size: 17px;
-}
-
-.nm-root.nm-android .nm-ps-lbl {
-  font-size: 10.5px;
-  letter-spacing: 0.2px;
 }
 
 /* 分区与节点信息 */
