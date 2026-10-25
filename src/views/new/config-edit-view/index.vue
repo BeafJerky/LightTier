@@ -28,6 +28,7 @@ import { useEasyTierStore } from '@/store/modules/easytier'
 import { useMockData } from '@/hooks/useMockData'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { CONFIG_PATH } from '@/constants/easytier'
+import { getErrorMessage } from '@/utils/index'
 
 defineOptions({ name: 'NewConfigEditView' })
 
@@ -107,18 +108,30 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
       }
     }
     await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
-    toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
-    await easyTierStore.loadConfigFiles()
+    // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
+    await easyTierStore.reloadConfigFiles()
+    if (easyTierStore.configList.some((c) => c.configFileName === name)) {
+      toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
+    } else {
+      // 文件写入成功但列表没读到：单独提示，避免和写盘失败混淆
+      console.warn('[config] saved but missing from list:', `${CONFIG_PATH}/${name}.toml`)
+      toast(t('newCommon.savedButUnlisted'), 'warning')
+    }
     done(true)
-  } catch {
-    toast(
-      isAdd
-        ? t('newCommon.addFail')
-        : backupFailed
-          ? t('newConfig.backupFailed')
-          : t('newCommon.saveFail'),
-      'error'
-    )
+  } catch (e) {
+    console.error('[config] save failed:', `${CONFIG_PATH}/${name}.toml`, e)
+    const detail = getErrorMessage(e)
+    if (!isAdd && backupFailed) {
+      toast(t('newConfig.backupFailed'), 'error')
+    } else if (detail) {
+      toast(
+        t(isAdd ? 'newCommon.addFailDetail' : 'newCommon.saveFailDetail', { msg: detail }),
+        'error',
+        5000
+      )
+    } else {
+      toast(t(isAdd ? 'newCommon.addFail' : 'newCommon.saveFail'), 'error')
+    }
     done(false)
   }
 }

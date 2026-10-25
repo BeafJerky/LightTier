@@ -428,23 +428,37 @@ export const useEasyTierStore = defineStore(
       refreshInterval.value = val
     }
 
-    // ===== 配置列表加载（应用启动时调用一次，带并发保护与加载态） =====
-    const loadConfigFiles = async () => {
-      if (configListLoading.value) return
+    // ===== 配置列表加载（带并发保护与加载态） =====
+    // 并发调用共享同一任务：早退会让写盘后的调用方直接拿到写盘前启动的旧任务结果，
+    // 新配置在列表里“消失”，看起来像保存失败
+    let configLoadTask: Promise<void> | null = null
+    const loadConfigFiles = async (): Promise<void> => {
+      if (configLoadTask) return configLoadTask
       configListLoading.value = true
-      try {
-        const { listTomlFiles } = useMockData()
-        const files = await listTomlFiles()
-        configList.value = files.map((f: string) => ({
-          configFileName: f.replace('.toml', ''),
-          fileName: f
-        }))
-        configListLoaded.value = true
-      } catch {
-        /* 彻底失败，保持空列表 */
-      } finally {
-        configListLoading.value = false
-      }
+      configLoadTask = (async () => {
+        try {
+          const { listTomlFiles } = useMockData()
+          const files = await listTomlFiles()
+          configList.value = files.map((f: string) => ({
+            configFileName: f.replace('.toml', ''),
+            fileName: f
+          }))
+          configListLoaded.value = true
+        } catch {
+          /* 彻底失败，保持空列表 */
+        } finally {
+          configListLoading.value = false
+          configLoadTask = null
+        }
+      })()
+      return configLoadTask
+    }
+
+    // 写盘后刷新：等待写盘前启动的在途加载结束，再重新读取目录
+    const reloadConfigFiles = async (): Promise<void> => {
+      const pending = configLoadTask
+      if (pending) await pending
+      return loadConfigFiles()
     }
 
     // 加载 Web 配置服务列表（config-server 托管的连接信息）
@@ -541,6 +555,7 @@ export const useEasyTierStore = defineStore(
       setDefaultEnableAutostart,
       setRefreshInterval,
       loadConfigFiles,
+      reloadConfigFiles,
       loadWebConfigFiles,
       pageRefreshCallback,
       registerPageRefresh,

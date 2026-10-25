@@ -659,6 +659,7 @@ import { normalizeToml } from '@/utils/easyTierUtil'
 import { validateToml } from '@/utils/tomlValidationUtil'
 import { migrateLightTierConfig } from '@/utils/lighttierConfigUtil'
 import { isValidConfigName } from '@/utils/configNameUtil'
+import { getErrorMessage } from '@/utils/index'
 import {
   buildConfigFormModel,
   parseConfigFormModel,
@@ -1350,6 +1351,11 @@ const validateName = (): boolean => {
   return true
 }
 
+const saveErrorText = (e: unknown): string => {
+  const detail = getErrorMessage(e)
+  return detail ? t('newCommon.saveFailDetail', { msg: detail }) : t('newCommon.saveFail')
+}
+
 // 保存：按当前模式取内容 → 语法校验 → normalizeToml 清洗 → 等待父组件写盘结果后再关闭
 const handleSave = async () => {
   if (saving.value) return
@@ -1370,7 +1376,15 @@ const handleSave = async () => {
   }
   if (dialogMode.value === 'add' && !validateName()) return
 
-  const rawContent = editMode.value === 'code' ? tomlContent.value : buildFormToml()
+  // builtFormToml 可能因表单模型异常抛错：必须给出可见反馈，不能静默中止保存
+  let rawContent: string
+  try {
+    rawContent = editMode.value === 'code' ? tomlContent.value : buildFormToml()
+  } catch (e) {
+    console.error('[config] build toml from form failed:', e)
+    saveError.value = saveErrorText(e)
+    return
+  }
   // 表单构建结果再校验一次：任何非法 TOML 都不得进入写盘流程
   const check = validateToml(rawContent)
   if (!check.ok) {
@@ -1400,9 +1414,10 @@ const handleSave = async () => {
         Object.assign(normalized, formLockedTop.value)
       }
       content = toml.stringify(normalized)
-    } catch {
-      // 归一化失败：不写坏原文件，保留用户输入
-      saveError.value = t('newCommon.saveFail')
+    } catch (e) {
+      // 归一化失败：不写坏原文件，保留用户输入；错误详情随提示展示
+      console.error('[config] normalize toml failed:', e)
+      saveError.value = saveErrorText(e)
       return
     }
 
