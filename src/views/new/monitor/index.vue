@@ -314,6 +314,11 @@
       <div v-if="selectedData.lastUpdate" class="nm-update-time">
         {{ t('newMonitor.lastUpdate') }}: {{ formatTime(selectedData.lastUpdate) }}
       </div>
+
+      <!-- 性能埋点（临时诊断）：发布包内无 devtools，直接显示本轮各环节耗时 -->
+      <div v-if="perfText" class="nm-update-time nm-perf-line">
+        {{ perfText }}
+      </div>
     </div>
 
     <!-- 已选中但尚未拿到快照：明确区分加载中 / 未运行 / 从未成功，避免空白误导 -->
@@ -465,6 +470,62 @@ interface MonitorSnapshot {
   avgLatency: string
 }
 const selectedData = ref<MonitorSnapshot | null>(null)
+
+// --- 性能埋点（临时诊断：定位详情慢在 TOML 读取 / node / peer 哪一环） ---
+// 桌面发布包无 devtools，数值同时渲染在详情底部，便于直接读取
+interface QueryPerf {
+  ok: boolean
+  attempts: number
+  ms: number
+}
+interface MonitorPerf {
+  ok: boolean
+  tomlMs: number
+  node: QueryPerf
+  peer: QueryPerf
+  totalMs: number
+  at: number
+}
+const lastPerf = ref<MonitorPerf | null>(null)
+// 选中/恢复轮询后首个成功快照的耗时（每轮轮询会话只记录一次）
+const firstFrameMs = ref<number | null>(null)
+let pollStartedAt = 0
+let firstFrameRecorded = false
+
+const recordPerf = (sample: Omit<MonitorPerf, 'at'>) => {
+  if (sample.ok && !firstFrameRecorded) {
+    firstFrameRecorded = true
+    firstFrameMs.value = Math.round(performance.now() - pollStartedAt)
+  }
+  lastPerf.value = { ...sample, at: Date.now() }
+  console.debug(
+    `[monitor-perf] total=${sample.totalMs.toFixed(0)}ms toml=${sample.tomlMs.toFixed(0)}ms ` +
+      `node=${sample.node.ms.toFixed(0)}ms/${sample.node.attempts} ` +
+      `peer=${sample.peer.ms.toFixed(0)}ms/${sample.peer.attempts} ok=${sample.ok}`
+  )
+}
+
+const perfText = computed(() => {
+  const p = lastPerf.value
+  if (!p) return ''
+  const parts: string[] = []
+  if (!p.ok) parts.push(t('newMonitor.perfFailed'))
+  parts.push(
+    t('newMonitor.perfTiming', {
+      total: Math.round(p.totalMs),
+      toml: Math.round(p.tomlMs),
+      node: Math.round(p.node.ms),
+      peer: Math.round(p.peer.ms)
+    })
+  )
+  if (p.node.attempts > 1 || p.peer.attempts > 1) {
+    parts.push(t('newMonitor.perfRetries', { node: p.node.attempts, peer: p.peer.attempts }))
+  }
+  if (firstFrameMs.value != null) {
+    parts.push(t('newMonitor.perfFirstFrame', { ms: firstFrameMs.value }))
+  }
+  return parts.join(' · ')
+})
 
 // --- 5.16 趋势缓冲（每配置环形，随 refreshInterval 取样） ---
 const { getTrend, pushTrend, clearTrend } = useTrendBuffer()
@@ -829,24 +890,36 @@ const withQueryTimeout = (promise: Promise<any>, ms = 10000): Promise<any> =>
     )
   })
 
+interface QueryAttemptResult {
+  value: any
+  attempts: number
+  ms: number
+}
+
 const queryWithRetry = async (
   query: () => Promise<any>,
   isValid: (value: any) => boolean
-): Promise<any> => {
+): Promise<QueryAttemptResult> => {
+  const startedAt = performance.now()
+  let attempts = 0
   for (let attempt = 0; attempt < 2; attempt++) {
+    attempts++
     try {
       const result = await withQueryTimeout(query())
-      if (isValid(result)) return result
+      if (isValid(result)) {
+        return { value: result, attempts, ms: performance.now() - startedAt }
+      }
     } catch {
       // CLI 调用失败（RPC 超时/进程退出）按未命中处理，仍重试一次
     }
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 150))
   }
-  return null
+  return { value: null, attempts, ms: performance.now() - startedAt }
 }
 
 const fetchMonitorData = async (item: RunningItem) => {
   const isTauri = isTauriEnv()
+  const startedAt = performance.now()
   if (!isTauri) {
     // 非 Tauri 环境使用 mock
     const rawPeers = mockPeers[item.configFileName] || []
@@ -861,6 +934,14 @@ const fetchMonitorData = async (item: RunningItem) => {
       rxTotal,
       avgLatency: calcAvgLatency(processed)
     }
+    // Mock 无 TOML/RPC 调用，分项恒为 0，仅用于预览埋点行
+    recordPerf({
+      ok: true,
+      tomlMs: 0,
+      node: { ok: true, attempts: 1, ms: 0 },
+      peer: { ok: true, attempts: 1, ms: 0 },
+      totalMs: performance.now() - startedAt
+    })
     return snapshot
   }
 
@@ -872,6 +953,7 @@ const fetchMonitorData = async (item: RunningItem) => {
     let dhcp = false
     let exitNodes: any[] = []
     let portForward: any[] = []
+    const tomlStartedAt = performance.now()
     try {
       const content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
       if (content) {
@@ -885,8 +967,9 @@ const fetchMonitorData = async (item: RunningItem) => {
     } catch (e) {
       console.error('解析监控配置失败:', e)
     }
+    const tomlMs = performance.now() - tomlStartedAt
 
-    const [nodeInfo, peerList] = await Promise.all([
+    const [nodeResult, peerResult] = await Promise.all([
       queryWithRetry(
         () => coreApi.queryNode(item),
         (v) => !!v
@@ -896,7 +979,17 @@ const fetchMonitorData = async (item: RunningItem) => {
         (v) => Array.isArray(v)
       )
     ])
-    if (!nodeInfo || !peerList) {
+    const nodeInfo = nodeResult.value
+    const peerList = peerResult.value
+    const ok = !!nodeInfo && !!peerList
+    recordPerf({
+      ok,
+      tomlMs,
+      node: { ok: !!nodeInfo, attempts: nodeResult.attempts, ms: nodeResult.ms },
+      peer: { ok: !!peerList, attempts: peerResult.attempts, ms: peerResult.ms },
+      totalMs: performance.now() - startedAt
+    })
+    if (!ok) {
       // 任一查询失败：本次快照不完整，直接丢弃（调用方保留上一份数据并计失败次数）
       return null
     }
@@ -1065,6 +1158,10 @@ const startPolling = () => {
   const cfg = selectedConfig.value
   if (!cfg) return
   if (!runningSet.value.has(cfg.configFileName)) return
+  // 首帧计时：从本次轮询会话开始到第一个成功快照渲染
+  pollStartedAt = performance.now()
+  firstFrameRecorded = false
+  firstFrameMs.value = null
   const gen = pollGeneration
 
   const doPoll = async () => {
@@ -2169,6 +2266,14 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
   text-align: right;
   border-top: 1px solid var(--theme-border-light);
+}
+
+/* 性能埋点（临时诊断）：与更新时间同位置连续展示 */
+.nm-perf-line {
+  padding-top: 2px;
+  border-top: none;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 /* 空态 */
