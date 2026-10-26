@@ -160,8 +160,11 @@ watch(visible, (v) => {
     prevActive = document.activeElement as HTMLElement | null
     nextTick(() => overlayRef.value?.focus())
   } else if (prevActive) {
-    // 原元素可能已随页面卸载，仅对仍在文档中的元素还原焦点
-    if (prevActive.isConnected) prevActive.focus()
+    // 原元素可能已随页面卸载，仅对仍在文档中的元素还原焦点；指针关闭时不还原，
+    // 否则触发按钮会保留 Naive 的 focus 配色，看起来像一直按着（键盘关闭仍还原）
+    if (prevActive.isConnected && document.documentElement.dataset.input !== 'pointer') {
+      prevActive.focus()
+    }
     prevActive = null
   }
 })

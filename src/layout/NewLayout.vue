@@ -1307,8 +1307,11 @@ onBeforeUnmount(() => {
   gap: 2px;
 }
 
-.nl-tabbar .nl-tab:hover {
-  color: var(--theme-text-secondary);
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .nl-tabbar .nl-tab:hover {
+    color: var(--theme-text-secondary);
+  }
 }
 
 /* 触摸端按下反馈：WebView 没有鼠标悬停，按压反馈靠 :active */

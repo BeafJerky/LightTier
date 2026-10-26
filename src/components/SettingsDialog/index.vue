@@ -1293,7 +1293,10 @@ const openCoreVerDropdown = async (direction = 0) => {
 const closeCoreVerDropdown = (restoreFocus = false) => {
   if (!coreVerDropdownOpen.value) return
   coreVerDropdownOpen.value = false
-  if (restoreFocus) nextTick(() => coreVerTriggerEl()?.focus())
+  // 指针选择后不还原焦点，避免触发器陷入 Naive 的 focus 配色（键盘选择仍还原）
+  if (restoreFocus && document.documentElement.dataset.input !== 'pointer') {
+    nextTick(() => coreVerTriggerEl()?.focus())
+  }
 }
 
 const toggleCoreVerDropdown = () => {

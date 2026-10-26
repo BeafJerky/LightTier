@@ -39,16 +39,32 @@ import App from './App.vue'
 import { t } from './utils/i18nUtil'
 
 // 触摸 WebView 会把点按也判定为 focus-visible，导致按钮松手后残留焦点框；
-// 记录最近一次输入模态，仅键盘导航时绘制焦点环。
+// 记录最近一次输入模态：指针输入后关闭焦点环，任一按键（含 Esc）恢复键盘模态，
+// 这样 Esc 关闭弹窗后还原焦点的按钮仍能被识别为键盘聚焦。
 const rootEl = document.documentElement
 window.addEventListener('pointerdown', () => (rootEl.dataset.input = 'pointer'), true)
 window.addEventListener(
   'keydown',
   (e) => {
-    if (e.key === 'Tab' || e.key.startsWith('Arrow')) rootEl.dataset.input = 'keyboard'
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return
+    rootEl.dataset.input = 'keyboard'
   },
   true
 )
+
+// NButton 在 mousedown 时主动聚焦；指针手势若没有产生 click（拖拽滚动、按住后拖出控件再松手），
+// 焦点会一直留在按钮上，Naive 的 focus 配色会让按钮看起来始终处于按下状态。
+// 正常点按交给 LtButton 在 click 后失焦（此时弹窗已记录触发元素，键盘关闭仍能还原焦点）；
+// 这里只兜住被取消的指针手势，键盘焦点不受影响。
+const releaseButtonFocus = (e: PointerEvent) => {
+  const active = document.activeElement
+  if (!(active instanceof HTMLElement) || !active.classList.contains('lt-btn')) return
+  const clickedHere =
+    e.type === 'pointerup' && e.target instanceof Node && active.contains(e.target)
+  if (!clickedHere) active.blur()
+}
+window.addEventListener('pointerup', releaseButtonFocus, true)
+window.addEventListener('pointercancel', releaseButtonFocus, true)
 
 // 创建应用实例并完成全部装配
 const setupAll = async () => {

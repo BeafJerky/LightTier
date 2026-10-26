@@ -1518,12 +1518,19 @@ const handleImportToml = async () => {
   gap: 6px;
 }
 
-.ed-template-trigger:hover,
 .ed-template-trigger:focus-visible,
 .ed-template-trigger[aria-expanded='true'] {
   color: var(--theme-text-primary, #4a3728);
   border-color: var(--theme-accent-primary, #e8a0a0);
   outline: none;
+}
+
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .ed-template-trigger:hover {
+    color: var(--theme-text-primary, #4a3728);
+    border-color: var(--theme-accent-primary, #e8a0a0);
+  }
 }
 
 .ed-template-caret {
@@ -1568,10 +1575,15 @@ const handleImportToml = async () => {
   gap: 8px;
 }
 
-.ed-template-option:hover,
 .ed-template-option:focus-visible {
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
   outline: none;
+}
+
+@media (hover: hover) {
+  .ed-template-option:hover {
+    background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  }
 }
 
 .ed-template-option.active {
@@ -1723,8 +1735,11 @@ const handleImportToml = async () => {
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
-.ed-tab:hover {
-  color: var(--theme-text-primary, #4a3728);
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .ed-tab:hover {
+    color: var(--theme-text-primary, #4a3728);
+  }
 }
 
 .ed-body {

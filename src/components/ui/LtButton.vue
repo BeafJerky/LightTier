@@ -51,10 +51,30 @@ const classes = computed(() => [
     'lt-btn--block': props.block
   }
 ])
+
+/**
+ * 指针点击后 WebView 会把焦点留在按钮上，Naive 的 focus 状态会改写配色（透明底 + 强调色文字），
+ * 裸按钮还会覆盖页面自定义颜色，表现为“松手后仍是按下态”。
+ * 延后一拍失焦，让弹窗等副作用先记录触发元素；触屏合成的 mousedown 也在 click 之前完成。
+ * 被取消的指针手势（拖拽滚动）由 main.ts 的 pointerup / pointercancel 兜底。
+ * 键盘激活（detail === 0）不处理，保留焦点与 focus-visible 外环。
+ */
+const handleClick = (event: MouseEvent) => {
+  if (event.detail === 0) return
+  const el = event.currentTarget as HTMLElement | null
+  setTimeout(() => el?.blur(), 0)
+}
 </script>
 
 <template>
-  <NButton text :class="classes" :disabled="disabled" :loading="loading" :attr-type="type">
+  <NButton
+    text
+    :class="classes"
+    :disabled="disabled"
+    :loading="loading"
+    :attr-type="type"
+    @click="handleClick"
+  >
     <slot></slot>
   </NButton>
 </template>
@@ -66,6 +86,9 @@ const classes = computed(() => [
   --lt-btn-font-size: 13px;
   --lt-btn-gap: 6px;
   --lt-btn-radius: var(--theme-radius-pill, 100px);
+  --lt-btn-color: var(--theme-text-secondary, #7a6e5e);
+  --lt-btn-bg: transparent;
+  --lt-btn-border-color: transparent;
 
   display: inline-flex;
   height: var(--lt-btn-height);
@@ -75,11 +98,11 @@ const classes = computed(() => [
   font-size: var(--lt-btn-font-size);
   font-weight: 500;
   line-height: 1;
-  color: var(--theme-text-secondary, #7a6e5e);
+  color: var(--lt-btn-color);
   white-space: nowrap;
   cursor: pointer;
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--lt-btn-bg);
+  border: 1px solid var(--lt-btn-border-color);
   border-radius: var(--lt-btn-radius);
   box-sizing: border-box;
   transition: var(--theme-transition-interactive);
@@ -149,109 +172,122 @@ const classes = computed(() => [
 }
 
 .lt-btn--primary {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.lt-btn--primary:hover:not(:disabled) {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-accent-hover, #d49090);
-  border-color: var(--theme-accent-hover, #d49090);
+  --lt-btn-color: var(--theme-text-on-accent, #fff);
+  --lt-btn-bg: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-border-color: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-color-hover: var(--theme-text-on-accent, #fff);
+  --lt-btn-bg-hover: var(--theme-accent-hover, #d49090);
+  --lt-btn-border-color-hover: var(--theme-accent-hover, #d49090);
 }
 
 .lt-btn--secondary {
-  color: var(--theme-text-secondary, #7a6e5e);
-  background: var(--theme-bg-card, #fff);
-  border-color: var(--theme-border, #ede4db);
-}
-
-.lt-btn--secondary:hover:not(:disabled) {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-  border-color: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-color: var(--theme-text-secondary, #7a6e5e);
+  --lt-btn-bg: var(--theme-bg-card, #fff);
+  --lt-btn-border-color: var(--theme-border, #ede4db);
+  --lt-btn-color-hover: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-bg-hover: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  --lt-btn-border-color-hover: var(--theme-accent-primary, #e8a0a0);
 }
 
 .lt-btn--ghost {
-  color: var(--theme-text-secondary, #7a6e5e);
-  background: transparent;
-  border-color: var(--theme-border, #ede4db);
-}
-
-.lt-btn--ghost:hover:not(:disabled) {
-  color: var(--theme-text-primary, #4a3728);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-  border-color: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-color: var(--theme-text-secondary, #7a6e5e);
+  --lt-btn-bg: transparent;
+  --lt-btn-border-color: var(--theme-border, #ede4db);
+  --lt-btn-color-hover: var(--theme-text-primary, #4a3728);
+  --lt-btn-bg-hover: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  --lt-btn-border-color-hover: var(--theme-accent-primary, #e8a0a0);
 }
 
 .lt-btn--text {
-  color: var(--theme-text-secondary, #7a6e5e);
-  background: transparent;
-  border-color: transparent;
-}
-
-.lt-btn--text:hover:not(:disabled) {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  --lt-btn-color: var(--theme-text-secondary, #7a6e5e);
+  --lt-btn-bg: transparent;
+  --lt-btn-border-color: transparent;
+  --lt-btn-color-hover: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-bg-hover: var(--theme-bg-hover, rgb(232 160 160 / 6%));
 }
 
 .lt-btn--success {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-color-success, #7fba8a);
-  border-color: var(--theme-color-success, #7fba8a);
-}
-
-.lt-btn--success:hover:not(:disabled) {
-  color: var(--theme-text-on-accent, #fff);
-  background: var(--theme-color-success-dark, #6aaa78);
-  border-color: var(--theme-color-success-dark, #6aaa78);
+  --lt-btn-color: var(--theme-text-on-accent, #fff);
+  --lt-btn-bg: var(--theme-color-success, #7fba8a);
+  --lt-btn-border-color: var(--theme-color-success, #7fba8a);
+  --lt-btn-color-hover: var(--theme-text-on-accent, #fff);
+  --lt-btn-bg-hover: var(--theme-color-success-dark, #6aaa78);
+  --lt-btn-border-color-hover: var(--theme-color-success-dark, #6aaa78);
 }
 
 .lt-btn--soft {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-  border-color: transparent;
-}
-
-.lt-btn--soft:hover:not(:disabled) {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: var(--theme-bg-active, rgb(232 160 160 / 10%));
-  border-color: transparent;
+  --lt-btn-color: var(--theme-accent-primary, #e8a0a0);
+  --lt-btn-bg: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  --lt-btn-border-color: transparent;
+  --lt-btn-bg-hover: var(--theme-bg-active, rgb(232 160 160 / 10%));
 }
 
 .lt-btn--success-soft {
-  color: var(--theme-color-success-dark, #6aaa78);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
-  border-color: transparent;
-}
-
-.lt-btn--success-soft:hover:not(:disabled) {
-  color: var(--theme-color-success-dark, #6aaa78);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 20%, transparent);
-  border-color: transparent;
+  --lt-btn-color: var(--theme-color-success-dark, #6aaa78);
+  --lt-btn-bg: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  --lt-btn-border-color: transparent;
+  --lt-btn-bg-hover: color-mix(in srgb, var(--theme-color-success, #7fba8a) 20%, transparent);
 }
 
 .lt-btn--danger {
-  color: var(--theme-color-danger, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 8%, transparent);
-  border-color: transparent;
-}
-
-.lt-btn--danger:hover:not(:disabled) {
-  color: var(--theme-color-danger, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 14%, transparent);
-  border-color: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 55%, transparent);
+  --lt-btn-color: var(--theme-color-danger, #e8a0a0);
+  --lt-btn-bg: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 8%, transparent);
+  --lt-btn-border-color: transparent;
+  --lt-btn-bg-hover: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 14%, transparent);
+  --lt-btn-border-color-hover: color-mix(
+    in srgb,
+    var(--theme-color-danger, #e8a0a0) 55%,
+    transparent
+  );
 }
 
 .lt-btn--bare {
+  --lt-btn-color: inherit;
+  --lt-btn-bg: transparent;
+  --lt-btn-border-color: transparent;
+
   height: auto;
   min-height: 0;
   padding: 0;
   font: inherit;
-  color: inherit;
-  background: transparent;
   border: 0;
   border-radius: 0;
+}
+
+/*
+ * 指针点击后 WebView（桌面 WebView2 / 安卓 WebView）会把焦点留在按钮上，Naive 文本按钮
+ * 的 focus 规则会写入透明底色与强调色文字，看起来就像按钮一直没松开。指针交互结束时
+ * 由 main.ts 统一失焦；键盘聚焦时用 variant 配色托底，焦点仅由 focus-visible 外环表达。
+ */
+html[data-input='keyboard'] .lt-btn:not(.lt-btn--bare):focus-visible {
+  color: var(--lt-btn-color);
+  background: var(--lt-btn-bg);
+  border-color: var(--lt-btn-border-color);
+}
+
+/* 按下反馈（松开立即恢复），触屏与鼠标一致 */
+.lt-btn:not(.lt-btn--bare):active:not(:disabled) {
+  color: var(--lt-btn-color-hover, var(--lt-btn-color));
+  background: var(--lt-btn-bg-hover, var(--lt-btn-bg));
+  border-color: var(--lt-btn-border-color-hover, var(--lt-btn-border-color));
+}
+
+/* 触屏点按会残留 :hover，悬停反馈只在真正支持悬停的设备上生效 */
+@media (hover: hover) {
+  .lt-btn:not(.lt-btn--bare):hover:not(:disabled) {
+    color: var(--lt-btn-color-hover, var(--lt-btn-color));
+    background: var(--lt-btn-bg-hover, var(--lt-btn-bg));
+    border-color: var(--lt-btn-border-color-hover, var(--lt-btn-border-color));
+  }
+}
+
+/* 触屏残留的 :hover 仍需盖住 Naive 自身的 hover 配色（透明底 + 强调色文字） */
+@media (hover: none) {
+  .lt-btn:not(.lt-btn--bare):hover:not(:active, :disabled) {
+    color: var(--lt-btn-color);
+    background: var(--lt-btn-bg);
+    border-color: var(--lt-btn-border-color);
+  }
 }
 
 html[data-input='keyboard'] .lt-btn:focus-visible {
