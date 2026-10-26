@@ -674,6 +674,7 @@ export default {
     backupRestoreOpen: 'Manage backups',
     repo: 'Repository',
     easytierCore: 'EasyTier Kernel',
+    openLinkFail: 'Could not open the link. Make sure a browser is available.',
     clearCacheTitle: 'Clear Temporary Cache',
     clearCacheMsg:
       'Only STUN and public peer caches will be cleared. Configurations, theme, language, and lock password are kept. Continue?',

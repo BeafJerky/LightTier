@@ -190,6 +190,16 @@ fn check_port_available(port: u16) -> bool {
     std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
+/// 用系统默认浏览器打开外部链接。
+/// 不能直接用 plugin-shell 的 JS open：其 Android 侧仍走桌面实现，会失败；
+/// 走 Rust API 才会在移动端调用 Kotlin Intent。
+#[tauri::command]
+#[allow(deprecated)]
+fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+    app.shell().open(url, None).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn get_exe_directory(app: tauri::AppHandle) -> String {
     // 移动端：返回应用数据目录（配置、日志等均存放于此）
@@ -258,7 +268,8 @@ pub fn run() {
             run_cli,
             get_exe_directory,
             check_cold_start,
-            check_port_available
+            check_port_available,
+            open_external_url
         ]);
     }
 
@@ -271,6 +282,7 @@ pub fn run() {
             get_exe_directory,
             check_cold_start,
             check_port_available,
+            open_external_url,
             android::start_instance,
             android::stop_instance,
             android::list_instances,

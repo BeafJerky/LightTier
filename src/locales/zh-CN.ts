@@ -649,6 +649,7 @@ export default {
     backupRestoreOpen: '管理备份',
     repo: '项目仓库',
     easytierCore: 'EasyTier 内核',
+    openLinkFail: '无法打开链接，请确认设备上有可用的浏览器',
     clearCacheTitle: '清除临时缓存',
     clearCacheMsg: '仅清除 STUN 与公共对等节点缓存，配置、主题、语言与锁屏密码都会保留。是否继续？',
     clearLogsTitle: '清除日志',
