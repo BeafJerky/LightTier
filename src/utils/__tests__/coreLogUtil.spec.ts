@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_LOG_COUNT,
   DEFAULT_LOG_SIZE_MB,
+  formatLogLineTime,
   getKernelLogScope,
   getLogLineLevel,
   isActiveKernelLogFile,
@@ -165,5 +166,38 @@ describe('getLogLineLevel（行首级别识别）', () => {
     expect(getLogLineLevel('2026-10-21 12:00:00 INFO  [core]: error rate is 0')).toBe('')
     expect(getLogLineLevel('2026-10-21 12:00:00 DEBUG [core]: warning text')).toBe('')
     expect(getLogLineLevel('received ERROR from peer')).toBe('')
+  })
+})
+
+describe('formatLogLineTime（日志时间转本地时区）', () => {
+  const timestampOf = (formatted: string) =>
+    new Date(`${formatted.slice(0, 10)}T${formatted.slice(11, 23)}`).getTime()
+
+  it('UTC 时间戳转为本地时间并保留毫秒与正文', () => {
+    const out = formatLogLineTime('2026-10-26T06:49:57.778Z  INFO core: up')
+    expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.778 {2}INFO core: up$/)
+    expect(timestampOf(out)).toBe(Date.parse('2026-10-26T06:49:57.778Z'))
+  })
+
+  it('带 +08:00 偏移的时间戳同样换算到本地时区', () => {
+    const out = formatLogLineTime('2026-10-26T14:49:57.778+08:00 WARN core: slow')
+    expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.778 WARN core: slow$/)
+    expect(timestampOf(out)).toBe(Date.parse('2026-10-26T06:49:57.778Z'))
+    expect(getLogLineLevel(out)).toBe('warn')
+  })
+
+  it('无时区标记、非时间戳与 TOML 续行保持原样', () => {
+    const localLine = '2026-10-26 14:49:57 INFO local time'
+    expect(formatLogLineTime(localLine)).toBe(localLine)
+    expect(formatLogLineTime('############### TOML ###############')).toBe(
+      '############### TOML ###############'
+    )
+    expect(formatLogLineTime('hostname = "BJTianXuan"')).toBe('hostname = "BJTianXuan"')
+  })
+
+  it('纳秒精度截断为毫秒显示', () => {
+    const out = formatLogLineTime('2026-10-26T06:49:57.123456789Z INFO ns')
+    expect(out).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.123 INFO ns$/)
+    expect(timestampOf(out)).toBe(Date.parse('2026-10-26T06:49:57.123Z'))
   })
 })

@@ -52,7 +52,7 @@ import {
   readFileContent,
   resolveKernelLogFile
 } from '@/utils/fileUtil'
-import { getLogLineLevel } from '@/utils/coreLogUtil'
+import { formatLogLineTime, getLogLineLevel } from '@/utils/coreLogUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { readTextTail } from '@/utils/easyTierUtil'
 import { useEasyTierStore } from '@/store/modules/easytier'
@@ -87,7 +87,12 @@ const panelRef = ref<HTMLDivElement | null>(null)
 let userScrolledUp = false
 
 const lines = computed(() =>
-  content.value ? content.value.split('\n').filter((l) => l.trim() !== '') : []
+  content.value
+    ? content.value
+        .split('\n')
+        .filter((l) => l.trim() !== '')
+        .map(formatLogLineTime)
+    : []
 )
 
 // 按行首级别着色：error/fatal 标红、warn 标黄（不再匹配正文中的同名单词）

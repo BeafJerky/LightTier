@@ -170,6 +170,29 @@ const TIMESTAMP_LEVEL_RE =
   /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+(?:\[)?(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)(?:\])?\b/i
 const BRACKET_LEVEL_RE = /^\s*\[(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\]/i
 
+const LOG_TIMESTAMP_RE =
+  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:[.,](\d+))?(Z|[+-]\d{2}:?\d{2})(?=\s|$)/
+
+const pad2 = (value: number) => String(value).padStart(2, '0')
+
+/**
+ * 将行首带时区的 RFC3339 时间戳转换为本地时区显示，仅替换时间戳前缀，
+ * 正文保持不变；无时区标记或解析失败时原样返回（视为已经是本地时间）。
+ */
+export const formatLogLineTime = (line: string): string => {
+  const match = LOG_TIMESTAMP_RE.exec(line)
+  if (!match) return line
+  const [, datePart, timePart, fraction, zone] = match
+  const ms = fraction ? fraction.slice(0, 3).padEnd(3, '0') : ''
+  const parsed = new Date(`${datePart}T${timePart}${ms ? `.${ms}` : ''}${zone}`)
+  if (Number.isNaN(parsed.getTime())) return line
+  const local =
+    `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())} ` +
+    `${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}:${pad2(parsed.getSeconds())}` +
+    (ms ? `.${ms}` : '')
+  return `${local}${line.slice(match[0].length)}`
+}
+
 export const getLogLineLevel = (line: string): 'error' | 'warn' | '' => {
   const match = TIMESTAMP_LEVEL_RE.exec(line) || BRACKET_LEVEL_RE.exec(line)
   if (!match) return ''
