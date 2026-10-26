@@ -3,7 +3,9 @@
     class="nwc-root"
     :class="{
       'nwc-android': isAndroidPlatform,
-      'nwc-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedConfig
+      'nwc-detail-open': isAndroidPlatform
+        ? isAndroidDetailRoute || (isWideLandscape && !!selectedConfig)
+        : !!selectedConfig
     }"
   >
     <!-- 左侧配置列表 -->
@@ -42,6 +44,7 @@
               v-for="item in webConfigList"
               :key="item.configFileName"
               class="nwc-row"
+              :class="{ active: selectedConfig?.configFileName === item.configFileName }"
               @click="selectConfig(item)"
             >
               <span class="nwc-row-icon">
@@ -316,7 +319,7 @@
         <span class="nwc-state-spinner" aria-hidden="true"></span>
         <p>{{ t('newCommon.checking') }}</p>
       </div>
-      <div v-else-if="isAndroidPlatform" class="nwc-empty">
+      <div v-else-if="isAndroidPlatform && webConfigList.length === 0" class="nwc-empty">
         <span class="nwc-empty-icon">✦</span>
         <p>{{ t('newWebConfig.emptyTitle') }}</p>
       </div>
@@ -464,6 +467,7 @@ import { useMockData } from '@/hooks/useMockData'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { openPath } from '@/utils/fileUtil'
 import { isAndroid } from '@/utils/platformUtil'
+import { useWideLandscape } from '@/hooks/useWideLandscape'
 import CreamDialog from '@/components/CreamDialog/index.vue'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
 import { LtButton, LtInput } from '@/components/ui'
@@ -478,6 +482,8 @@ const { show: toast } = useCreamToast()
 const route = useRoute()
 const router = useRouter()
 const isAndroidPlatform = isAndroid()
+// 横屏宽屏：列表与详情左右分栏，选中走本地状态而非详情路由
+const isWideLandscape = useWideLandscape()
 // Android：详情为独立路由（系统返回键回列表）
 const isAndroidDetailRoute = computed(
   () => isAndroidPlatform && route.name === 'NewWebConfigDetailView'
@@ -706,6 +712,11 @@ const refreshWebList = async () => {
 
 // 选中配置卡片：Android 进入详情路由（由 syncDetailFromRoute 统一加载），宽屏同时展示右侧详情
 const selectConfig = (item: FormWebData) => {
+  // Android 横屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
+  if (isAndroidPlatform && isWideLandscape.value) {
+    selectedConfig.value = item
+    return
+  }
   if (isAndroidPlatform && !isAndroidDetailRoute.value) {
     router.push({ name: 'NewWebConfigDetailView', query: { name: item.configFileName } })
     return
@@ -1365,8 +1376,11 @@ onUnmounted(() => {
   justify-content: flex-start;
 }
 
-.nwc-link:hover {
-  filter: brightness(1.2);
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .nwc-link:hover {
+    filter: brightness(1.2);
+  }
 }
 
 .nwc-empty {
@@ -1456,6 +1470,12 @@ onUnmounted(() => {
 
 .nwc-row:active {
   background: var(--theme-bg-hover);
+}
+
+/* 横屏分栏：标出右侧详情对应的列表行 */
+.nwc-row.active {
+  background: var(--theme-bg-active);
+  box-shadow: inset 3px 0 0 var(--theme-accent-primary);
 }
 
 .nwc-row-icon {
@@ -1891,5 +1911,51 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: var(--theme-space-3);
   margin-top: var(--theme-space-4);
+}
+
+/* Android 横屏宽屏：列表与详情常驻左右分栏，两栏各自滚动 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nwc-root.nwc-android {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    align-items: stretch;
+    gap: var(--theme-space-4);
+  }
+
+  .nwc-root.nwc-android .nwc-left,
+  .nwc-root.nwc-android.nwc-detail-open .nwc-left {
+    display: flex;
+    width: auto;
+    min-height: 0;
+  }
+
+  .nwc-root.nwc-android .nwc-left-scroll {
+    display: block;
+    min-height: 0;
+    padding-right: 2px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .nwc-root.nwc-android .nwc-right {
+    display: block;
+    min-height: 0;
+    padding: var(--theme-space-4);
+    overflow-y: auto;
+    background: var(--theme-bg-card);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius-xl);
+  }
+
+  /* 右栏本身已是卡片，内部占位/加载态不再套一层卡片 */
+  .nwc-root.nwc-android .nwc-right > .nwc-empty {
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
 }
 </style>

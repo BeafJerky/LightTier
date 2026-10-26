@@ -3,7 +3,9 @@
     class="nw-root"
     :class="{
       'nw-android': isAndroidPlatform,
-      'nw-detail-open': isAndroidPlatform ? isAndroidDetailRoute : !!selectedDetail
+      'nw-detail-open': isAndroidPlatform
+        ? isAndroidDetailRoute || (isWideLandscape && !!selectedConfig)
+        : !!selectedDetail
     }"
   >
     <!-- 左侧配置列表 -->
@@ -58,7 +60,10 @@
               v-for="item in filteredConfigList"
               :key="item.configFileName"
               class="nw-row"
-              :class="{ 'nw-row-on': getRunning(item) }"
+              :class="{
+                'nw-row-on': getRunning(item),
+                active: selectedConfig?.configFileName === item.configFileName
+              }"
               @click="selectConfig(item)"
             >
               <span class="nw-row-icon" :class="{ on: getRunning(item) }">
@@ -592,6 +597,7 @@ import * as toml from 'smol-toml'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useCreamToast } from '@/hooks/useCreamToast'
 import { useMockData } from '@/hooks/useMockData'
+import { useWideLandscape } from '@/hooks/useWideLandscape'
 import * as coreApi from '@/utils/coreApi'
 import { isAndroid } from '@/utils/platformUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
@@ -628,6 +634,8 @@ defineOptions({ name: 'NewConfigView' })
 const easyTierStore = useEasyTierStore()
 // Android 平台：无 Windows 服务/系统路由工具，内核进程内运行（无 pid）
 const isAndroidPlatform = isAndroid()
+// 横屏宽屏：列表与详情左右分栏，选中走本地状态而非详情路由
+const isWideLandscape = useWideLandscape()
 // 启动进行中标志：避免连点造成重复启动/路由重复下发
 const isStarting = ref(false)
 // 当前选中配置（列表卡片数据）与其 TOML 解析后的详情
@@ -783,6 +791,15 @@ const refreshRuntimeState = async () => {
 
 // 选中配置卡片：加载详情、重置路由筛选，并记录选择（供下次进入页面恢复）
 const selectConfig = async (item: RunningItem) => {
+  // Android 横屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
+  if (isAndroidPlatform && isWideLandscape.value) {
+    selectedConfig.value = item
+    routeFilter.value = ''
+    selectedDetail.value = null
+    await loadConfigDetail(item)
+    easyTierStore.setLastSelectedConfig(item)
+    return
+  }
   // Android：先进入详情路由，由 syncDetailFromRoute 统一加载，避免重复请求
   if (isAndroidPlatform && !isAndroidDetailRoute.value) {
     easyTierStore.setLastSelectedConfig(item)
@@ -1844,6 +1861,17 @@ const handleUninstallService = async () => {
   background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
 }
 
+/* 横屏分栏：标出右侧详情对应的列表行 */
+.nw-row.active {
+  background: var(--theme-bg-active);
+  box-shadow: inset 3px 0 0 var(--theme-accent-primary);
+}
+
+.nw-row-on.active {
+  background: color-mix(in srgb, var(--theme-color-success) 10%, var(--theme-bg-active));
+  box-shadow: inset 3px 0 0 var(--theme-color-success);
+}
+
 .nw-row-icon {
   display: flex;
   width: 36px;
@@ -2542,5 +2570,51 @@ const handleUninstallService = async () => {
   justify-content: flex-end;
   gap: var(--theme-space-3);
   margin-top: var(--theme-space-4);
+}
+
+/* Android 横屏宽屏：列表与详情常驻左右分栏，两栏各自滚动 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nw-root.nw-android {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    align-items: stretch;
+    gap: var(--theme-space-4);
+  }
+
+  .nw-root.nw-android .nw-left,
+  .nw-root.nw-android.nw-detail-open .nw-left {
+    display: flex;
+    width: auto;
+    min-height: 0;
+  }
+
+  .nw-root.nw-android .nw-left-scroll {
+    display: block;
+    min-height: 0;
+    padding-right: 2px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .nw-root.nw-android .nw-right {
+    display: block;
+    min-height: 0;
+    padding: var(--theme-space-4);
+    overflow-y: auto;
+    background: var(--theme-bg-card);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius-xl);
+  }
+
+  /* 右栏本身已是卡片，内部占位/加载态不再套一层卡片 */
+  .nw-root.nw-android .nw-right > .nw-empty {
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
 }
 </style>

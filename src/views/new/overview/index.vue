@@ -1203,18 +1203,16 @@ onUnmounted(() => {
   padding-bottom: var(--theme-space-2);
 }
 
-/* 平板 / 折叠屏展开（宽且不矮）：主卡在左并吸顶，配置列表在右 */
-@media (width >= 900px) and (height >= 521px) {
+/* 横屏且够宽（手机横屏 / 平板）：主卡在左，配置列表在右 */
+@media (width >= 700px) and (orientation: landscape) {
   .nd-android {
     display: grid;
-    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
     align-items: start;
     gap: var(--theme-space-4);
   }
 
   .nd-android .nda-hero {
-    position: sticky;
-    top: 0;
     margin-bottom: 0;
   }
 
@@ -1224,6 +1222,14 @@ onUnmounted(() => {
 
   .nd-android > .nd-queue-bar {
     grid-column: 1 / -1;
+  }
+}
+
+/* 平板 / 折叠屏展开（宽且不矮）：主卡吸附在左侧，滚动配置列表时保持可见 */
+@media (width >= 900px) and (height >= 521px) {
+  .nd-android .nda-hero {
+    position: sticky;
+    top: 0;
   }
 }
 

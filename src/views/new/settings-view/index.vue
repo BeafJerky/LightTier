@@ -1,5 +1,5 @@
 <template>
-  <div class="ssv-page">
+  <div class="ssv-page" :class="{ 'ssv-android': isAndroidPlatform }">
     <section v-for="group in groups" :key="group.key" class="ssv-group-wrap">
       <div v-if="group.label" class="ssv-group-label">{{ group.label }}</div>
       <div class="ssv-group">
@@ -88,7 +88,9 @@ import { useEasyTierStore } from '@/store/modules/easytier'
 import { useLocaleStore } from '@/store/modules/locale'
 import { useLocale } from '@/hooks/web/useLocale'
 import { useThemeLoader } from '@/hooks/useThemeLoader'
+import { useWideLandscape } from '@/hooks/useWideLandscape'
 import { getAppVersion } from '@/utils/sysUtil'
+import { isAndroid } from '@/utils/platformUtil'
 
 defineOptions({ name: 'NewSettingsView' })
 
@@ -113,6 +115,9 @@ interface SettingsRow {
 }
 
 const router = useRouter()
+const isAndroidPlatform = isAndroid()
+// 横屏三列时第一组补上分组标题，三列卡片顶部对齐
+const isWideLandscape = useWideLandscape()
 const { t } = useI18n()
 const store = useEasyTierStore()
 const localeStore = useLocaleStore()
@@ -179,7 +184,11 @@ const groups = computed(() => {
   }
 
   return [
-    { key: 'primary', label: '', rows: [rows.core, rows.theme] },
+    {
+      key: 'primary',
+      label: isAndroidPlatform && isWideLandscape.value ? t('newSettings.groupPrimary') : '',
+      rows: [rows.core, rows.theme]
+    },
     {
       key: 'runtime',
       label: t('newSettings.groupRuntime'),
@@ -346,5 +355,15 @@ onMounted(async () => {
 .ssv-lang-list .ssv-lang-option.active {
   color: var(--theme-accent-primary);
   background: var(--theme-bg-active);
+}
+
+/* Android 横屏宽屏：三组设置并排展示 */
+@media (width >= 700px) and (orientation: landscape) {
+  .ssv-page.ssv-android {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--theme-space-4);
+  }
 }
 </style>

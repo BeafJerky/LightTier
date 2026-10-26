@@ -1,7 +1,11 @@
 <template>
   <div
     class="nm-root"
-    :class="{ 'nm-android': isAndroidPlatform, 'nm-detail-open': !!selectedConfig }"
+    :class="{
+      'nm-android': isAndroidPlatform,
+      'nm-detail-open': !!selectedConfig,
+      'nm-ls-split': isAndroidPlatform && isWideLandscape && !!selectedData
+    }"
   >
     <!-- 左侧配置列表（桌面 master-detail；Android 单实例直接展示详情） -->
     <div v-if="!isAndroidPlatform" class="nm-left">
@@ -57,292 +61,293 @@
 
     <!-- 右侧详情 -->
     <div class="nm-right" v-if="selectedData">
-      <!-- Android：单实例，直接以总览式主卡展示当前运行配置 -->
-      <div v-if="isAndroidPlatform" class="nm-hero" :class="{ 'nm-hero-on': selectedRunning }">
-        <div class="nm-hero-head">
-          <span class="nm-hero-state">
-            <span class="nm-hero-dot" :class="{ on: selectedRunning }"></span>
-            {{ selectedRunning ? t('newCommon.running') : t('newCommon.stopped') }}
+      <div class="nm-main-col">
+        <!-- Android：单实例，直接以总览式主卡展示当前运行配置 -->
+        <div v-if="isAndroidPlatform" class="nm-hero" :class="{ 'nm-hero-on': selectedRunning }">
+          <div class="nm-hero-head">
+            <span class="nm-hero-state">
+              <span class="nm-hero-dot" :class="{ on: selectedRunning }"></span>
+              {{ selectedRunning ? t('newCommon.running') : t('newCommon.stopped') }}
+            </span>
+            <span v-if="selectedVirtualIp" class="nm-hero-chip">{{ selectedVirtualIp }}</span>
+          </div>
+
+          <div class="nm-hero-name">{{ selectedConfig?.configFileName }}</div>
+          <p class="nm-hero-desc">{{ heroDescription }}</p>
+
+          <div v-if="selectedRunning" class="nm-hero-metrics">
+            <div class="nm-hero-metric">
+              <span class="nm-hero-label">{{ t('newMonitor.peerNodes') }}</span>
+              <strong class="nm-hero-value">{{ selectedData.peerList.length }}</strong>
+            </div>
+            <span class="nm-hero-divider"></span>
+            <div class="nm-hero-metric">
+              <span class="nm-hero-label">{{ t('newMonitor.avgLatency') }}</span>
+              <strong class="nm-hero-value">{{ selectedData.avgLatency }}</strong>
+            </div>
+          </div>
+
+          <div class="nm-hero-actions">
+            <LtButton
+              variant="danger"
+              size="lg"
+              class="nm-hero-btn"
+              :disabled="stopping"
+              @click="stopSelected"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <span>{{ t('newOverview.disconnect') }}</span>
+            </LtButton>
+            <LtButton variant="soft" size="lg" class="nm-hero-btn" @click="openSelectedConfig">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                aria-hidden="true"
+              >
+                <path d="M6 3h9l4 4v14H6z" />
+                <path d="M14 3v5h5M9 13h6M9 17h5" />
+              </svg>
+              <span>{{ t('newOverview.configDetail') }}</span>
+            </LtButton>
+          </div>
+
+          <div class="nm-hero-foot">
+            <span>{{ t('newMonitor.lastUpdate') }} {{ formatTime(selectedData.lastUpdate) }}</span>
+            <span class="nm-hero-foot-sep"></span>
+            <span>{{
+              t('newMonitor.autoRefresh', { n: easyTierStore.refreshInterval || 3 })
+            }}</span>
+          </div>
+        </div>
+
+        <div v-else class="nm-detail-header" :class="{ 'nm-detail-hero-on': selectedRunning }">
+          <div class="nm-detail-title-row">
+            <LtButton variant="ghost" size="sm" class="nm-back-btn" @click="closeMonitorDetail">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              {{ t('newCommon.back') }}
+            </LtButton>
+            <h3 class="nm-detail-title">{{ selectedConfig?.configFileName }}</h3>
+            <span class="nm-badge" :class="selectedRunning ? 'on' : 'off'">
+              {{ selectedRunning ? '● ' + t('newCommon.running') : '○ ' + t('newCommon.stopped') }}
+            </span>
+            <span v-if="selectedConfig?.rpcPortal" class="nm-detail-rpc">
+              RPC {{ selectedConfig.rpcPortal.replace('127.0.0.1', 'localhost') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- UX-108：失败时保留最后一次快照，明确提示数据可能过期，可手动重试 -->
+        <div
+          v-if="consecutiveFailures > 0"
+          class="nm-stale-banner"
+          :class="{ warn: pollFailed }"
+          role="alert"
+        >
+          <span class="nm-stale-text">
+            {{
+              pollFailed
+                ? t('newMonitor.staleBanner', { count: consecutiveFailures })
+                : t('newMonitor.retrying')
+            }}
           </span>
-          <span v-if="selectedVirtualIp" class="nm-hero-chip">{{ selectedVirtualIp }}</span>
-        </div>
-
-        <div class="nm-hero-name">{{ selectedConfig?.configFileName }}</div>
-        <p class="nm-hero-desc">{{ heroDescription }}</p>
-
-        <div v-if="selectedRunning" class="nm-hero-metrics">
-          <div class="nm-hero-metric">
-            <span class="nm-hero-label">{{ t('newMonitor.peerNodes') }}</span>
-            <strong class="nm-hero-value">{{ selectedData.peerList.length }}</strong>
-          </div>
-          <span class="nm-hero-divider"></span>
-          <div class="nm-hero-metric">
-            <span class="nm-hero-label">{{ t('newMonitor.avgLatency') }}</span>
-            <strong class="nm-hero-value">{{ selectedData.avgLatency }}</strong>
-          </div>
-        </div>
-
-        <div class="nm-hero-actions">
+          <span class="nm-stale-time">{{
+            t('newCommon.lastUpdated', { time: formatTime(selectedData.lastUpdate) })
+          }}</span>
           <LtButton
-            variant="danger"
-            size="lg"
-            class="nm-hero-btn"
-            :disabled="stopping"
-            @click="stopSelected"
+            v-if="pollFailed"
+            variant="primary"
+            size="xs"
+            class="nm-stale-retry"
+            @click="retryPolling"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-            <span>{{ t('newOverview.disconnect') }}</span>
-          </LtButton>
-          <LtButton variant="soft" size="lg" class="nm-hero-btn" @click="openSelectedConfig">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.9"
-              aria-hidden="true"
-            >
-              <path d="M6 3h9l4 4v14H6z" />
-              <path d="M14 3v5h5M9 13h6M9 17h5" />
-            </svg>
-            <span>{{ t('newOverview.configDetail') }}</span>
+            {{ t('newCommon.retry') }}
           </LtButton>
         </div>
 
-        <div class="nm-hero-foot">
-          <span>{{ t('newMonitor.lastUpdate') }} {{ formatTime(selectedData.lastUpdate) }}</span>
-          <span class="nm-hero-foot-sep"></span>
-          <span>{{ t('newMonitor.autoRefresh', { n: easyTierStore.refreshInterval || 3 }) }}</span>
+        <div v-if="isAndroidPlatform && selectedRunning" class="nm-traffic">
+          <div class="nm-traffic-card">
+            <span class="nm-traffic-label">{{ t('newMonitor.totalUpload') }}</span>
+            <strong class="nm-traffic-value">{{ formatBytes(selectedData.txTotal) }}</strong>
+          </div>
+          <div class="nm-traffic-card">
+            <span class="nm-traffic-label">{{ t('newMonitor.totalDownload') }}</span>
+            <strong class="nm-traffic-value">{{ formatBytes(selectedData.rxTotal) }}</strong>
+          </div>
         </div>
-      </div>
 
-      <div v-else class="nm-detail-header" :class="{ 'nm-detail-hero-on': selectedRunning }">
-        <div class="nm-detail-title-row">
-          <LtButton variant="ghost" size="sm" class="nm-back-btn" @click="closeMonitorDetail">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            {{ t('newCommon.back') }}
-          </LtButton>
-          <h3 class="nm-detail-title">{{ selectedConfig?.configFileName }}</h3>
-          <span class="nm-badge" :class="selectedRunning ? 'on' : 'off'">
-            {{ selectedRunning ? '● ' + t('newCommon.running') : '○ ' + t('newCommon.stopped') }}
-          </span>
-          <span v-if="selectedConfig?.rpcPortal" class="nm-detail-rpc">
-            RPC {{ selectedConfig.rpcPortal.replace('127.0.0.1', 'localhost') }}
-          </span>
-        </div>
-      </div>
-
-      <!-- UX-108：失败时保留最后一次快照，明确提示数据可能过期，可手动重试 -->
-      <div
-        v-if="consecutiveFailures > 0"
-        class="nm-stale-banner"
-        :class="{ warn: pollFailed }"
-        role="alert"
-      >
-        <span class="nm-stale-text">
-          {{
-            pollFailed
-              ? t('newMonitor.staleBanner', { count: consecutiveFailures })
-              : t('newMonitor.retrying')
-          }}
-        </span>
-        <span class="nm-stale-time">{{
-          t('newCommon.lastUpdated', { time: formatTime(selectedData.lastUpdate) })
-        }}</span>
-        <LtButton
-          v-if="pollFailed"
-          variant="primary"
-          size="xs"
-          class="nm-stale-retry"
-          @click="retryPolling"
+        <div
+          v-if="!isAndroidPlatform && selectedRunning && selectedData.peerList.length > 0"
+          class="nm-peer-summary"
         >
-          {{ t('newCommon.retry') }}
-        </LtButton>
-      </div>
+          <div class="nm-peer-stat">
+            <span class="nm-ps-num">{{ formatBytes(selectedData.txTotal) }}</span>
+            <span class="nm-ps-lbl">{{ t('newMonitor.totalUpload') }}</span>
+          </div>
+          <div class="nm-peer-stat">
+            <span class="nm-ps-num">{{ formatBytes(selectedData.rxTotal) }}</span>
+            <span class="nm-ps-lbl">{{ t('newMonitor.totalDownload') }}</span>
+          </div>
+          <div class="nm-peer-stat">
+            <span class="nm-ps-num">{{ selectedData.avgLatency }}</span>
+            <span class="nm-ps-lbl">{{ t('newMonitor.avgLatency') }}</span>
+          </div>
+          <div class="nm-peer-stat">
+            <span class="nm-ps-num">{{ selectedData.peerList.length }}</span>
+            <span class="nm-ps-lbl">{{ t('newMonitor.peerNodes') }}</span>
+          </div>
+        </div>
 
-      <div v-if="isAndroidPlatform && selectedRunning" class="nm-traffic">
-        <div class="nm-traffic-card">
-          <span class="nm-traffic-label">{{ t('newMonitor.totalUpload') }}</span>
-          <strong class="nm-traffic-value">{{ formatBytes(selectedData.txTotal) }}</strong>
-        </div>
-        <div class="nm-traffic-card">
-          <span class="nm-traffic-label">{{ t('newMonitor.totalDownload') }}</span>
-          <strong class="nm-traffic-value">{{ formatBytes(selectedData.rxTotal) }}</strong>
-        </div>
-      </div>
-
-      <div
-        v-if="!isAndroidPlatform && selectedRunning && selectedData.peerList.length > 0"
-        class="nm-peer-summary"
-      >
-        <div class="nm-peer-stat">
-          <span class="nm-ps-num">{{ formatBytes(selectedData.txTotal) }}</span>
-          <span class="nm-ps-lbl">{{ t('newMonitor.totalUpload') }}</span>
-        </div>
-        <div class="nm-peer-stat">
-          <span class="nm-ps-num">{{ formatBytes(selectedData.rxTotal) }}</span>
-          <span class="nm-ps-lbl">{{ t('newMonitor.totalDownload') }}</span>
-        </div>
-        <div class="nm-peer-stat">
-          <span class="nm-ps-num">{{ selectedData.avgLatency }}</span>
-          <span class="nm-ps-lbl">{{ t('newMonitor.avgLatency') }}</span>
-        </div>
-        <div class="nm-peer-stat">
-          <span class="nm-ps-num">{{ selectedData.peerList.length }}</span>
-          <span class="nm-ps-lbl">{{ t('newMonitor.peerNodes') }}</span>
-        </div>
-      </div>
-
-      <div class="nm-section">
-        <div class="nm-section-title">{{ t('newMonitor.nodeInfo') }}</div>
-        <div class="nm-grid">
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.hostname') }}</span
-            ><span class="nm-val">{{ selectedData.nodeInfo?.hostname || '—' }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.instanceName') }}</span
-            ><span class="nm-val">{{
-              selectedData.nodeInfo?._instance_name || selectedData.nodeInfo?.inst_id || '—'
-            }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">IPv4</span
-            ><span class="nm-val">{{ selectedData.nodeInfo?.ipv4_addr || '—' }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newCommon.version') }}</span
-            ><span class="nm-val">{{ selectedData.nodeInfo?.version || '—' }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.networkName') }}</span
-            ><span class="nm-val">{{ selectedData.nodeInfo?._network_name || '—' }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.natType') }}</span
-            ><span class="nm-val">{{
-              selectedData.nodeInfo?.stun_info?._udp_nat_type ||
-              selectedData.nodeInfo?.stun_info?.udp_nat_type ||
-              '—'
-            }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">DHCP</span
-            ><span class="nm-val">{{
-              selectedData.nodeInfo?._dhcp ? t('newMonitor.dhcpOn') : t('newMonitor.dhcpOff')
-            }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.exitNodes') }}</span
-            ><span class="nm-val">{{
-              (selectedData.nodeInfo?._exit_nodes?.length || 0) > 0
-                ? selectedData.nodeInfo._exit_nodes.join(', ')
-                : t('newMonitor.none')
-            }}</span></div
-          >
-          <div class="nm-field"
-            ><span class="nm-label">{{ t('newMonitor.portForward') }}</span
-            ><span class="nm-val">{{
-              (selectedData.nodeInfo?._port_forward?.length || 0) > 0
-                ? selectedData.nodeInfo._port_forward.join(', ')
-                : t('newMonitor.none')
-            }}</span></div
-          >
-        </div>
-      </div>
-
-      <!-- 5.16：趋势（固定点距的速率/延迟曲线，折叠） -->
-      <details class="nm-trend-collapse" open>
-        <summary class="nm-trend-summary">
-          <span class="nm-trend-label">{{ t('newMonitor.trend') }}</span>
-        </summary>
-        <div class="nm-trend-body">
-          <TrendChart :points="trendPoints" />
-        </div>
-      </details>
-
-      <div class="nm-section" v-if="selectedData.peerList.length > 0">
-        <div class="nm-section-title"
-          >{{ t('newMonitor.peerSection') }}
-          <span class="nm-section-count">({{ selectedData.peerList.length }})</span></div
-        >
-        <div class="nm-peer-grid">
-          <div
-            v-for="(peer, idx) in selectedData.peerList"
-            :key="peer.id || idx"
-            class="nm-peer-card"
-          >
-            <div class="nmp-top">
-              <span class="nmp-hostname">{{ peer.hostname || '—' }}</span>
-              <span class="nmp-lat" :style="{ color: peer.delayColor }">{{
-                formatMetric(peer.lat_ms, 'ms')
-              }}</span>
-            </div>
-            <div class="nmp-detail">
-              <div class="nmp-row"
-                ><span class="nmp-key">IPv4</span
-                ><span class="nmp-val">{{ peer.ipv4 || '—' }}</span></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">{{ t('newMonitor.connection') }}</span
-                ><span class="nmp-val">{{ peer.cost || '—' }}</span></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">NAT</span
-                ><span class="nmp-val">{{ peer.nat_type || '—' }}</span></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">{{ t('newMonitor.protocol') }}</span
-                ><span class="nmp-val">{{ peer.tunnel_proto || '—' }}</span></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">{{ t('newMonitor.packetLoss') }}</span
-                ><span
-                  class="nmp-val"
-                  :class="peer.loss_rate && parseFloat(peer.loss_rate) > 5 ? 'warn' : ''"
-                  >{{ formatMetric(peer.loss_rate, '%') }}</span
-                ></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">{{ t('newMonitor.upload') }}</span
-                ><span class="nmp-val">{{ formatBytes(peer.tx_bytes) }}</span></div
-              >
-              <div class="nmp-row"
-                ><span class="nmp-key">{{ t('newMonitor.download') }}</span
-                ><span class="nmp-val">{{ formatBytes(peer.rx_bytes) }}</span></div
-              >
-            </div>
+        <div class="nm-section">
+          <div class="nm-section-title">{{ t('newMonitor.nodeInfo') }}</div>
+          <div class="nm-grid">
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.hostname') }}</span
+              ><span class="nm-val">{{ selectedData.nodeInfo?.hostname || '—' }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.instanceName') }}</span
+              ><span class="nm-val">{{
+                selectedData.nodeInfo?._instance_name || selectedData.nodeInfo?.inst_id || '—'
+              }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">IPv4</span
+              ><span class="nm-val">{{ selectedData.nodeInfo?.ipv4_addr || '—' }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newCommon.version') }}</span
+              ><span class="nm-val">{{ selectedData.nodeInfo?.version || '—' }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.networkName') }}</span
+              ><span class="nm-val">{{ selectedData.nodeInfo?._network_name || '—' }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.natType') }}</span
+              ><span class="nm-val">{{
+                selectedData.nodeInfo?.stun_info?._udp_nat_type ||
+                selectedData.nodeInfo?.stun_info?.udp_nat_type ||
+                '—'
+              }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">DHCP</span
+              ><span class="nm-val">{{
+                selectedData.nodeInfo?._dhcp ? t('newMonitor.dhcpOn') : t('newMonitor.dhcpOff')
+              }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.exitNodes') }}</span
+              ><span class="nm-val">{{
+                (selectedData.nodeInfo?._exit_nodes?.length || 0) > 0
+                  ? selectedData.nodeInfo._exit_nodes.join(', ')
+                  : t('newMonitor.none')
+              }}</span></div
+            >
+            <div class="nm-field"
+              ><span class="nm-label">{{ t('newMonitor.portForward') }}</span
+              ><span class="nm-val">{{
+                (selectedData.nodeInfo?._port_forward?.length || 0) > 0
+                  ? selectedData.nodeInfo._port_forward.join(', ')
+                  : t('newMonitor.none')
+              }}</span></div
+            >
           </div>
         </div>
       </div>
 
-      <div v-if="selectedData.lastUpdate" class="nm-update-time">
-        {{ t('newMonitor.lastUpdate') }}: {{ formatTime(selectedData.lastUpdate) }}
-      </div>
+      <div class="nm-side-col">
+        <!-- 5.16：趋势（固定点距的速率/延迟曲线，折叠） -->
+        <details class="nm-trend-collapse" open>
+          <summary class="nm-trend-summary">
+            <span class="nm-trend-label">{{ t('newMonitor.trend') }}</span>
+          </summary>
+          <div class="nm-trend-body">
+            <TrendChart :points="trendPoints" />
+          </div>
+        </details>
 
-      <!-- 性能埋点（临时诊断）：发布包内无 devtools，直接显示本轮各环节耗时 -->
-      <div v-if="perfText" class="nm-update-time nm-perf-line">
-        {{ perfText }}
+        <div class="nm-section" v-if="selectedData.peerList.length > 0">
+          <div class="nm-section-title"
+            >{{ t('newMonitor.peerSection') }}
+            <span class="nm-section-count">({{ selectedData.peerList.length }})</span></div
+          >
+          <div class="nm-peer-grid">
+            <div
+              v-for="(peer, idx) in selectedData.peerList"
+              :key="peer.id || idx"
+              class="nm-peer-card"
+            >
+              <div class="nmp-top">
+                <span class="nmp-hostname">{{ peer.hostname || '—' }}</span>
+                <span class="nmp-lat" :style="{ color: peer.delayColor }">{{
+                  formatMetric(peer.lat_ms, 'ms')
+                }}</span>
+              </div>
+              <div class="nmp-detail">
+                <div class="nmp-row"
+                  ><span class="nmp-key">IPv4</span
+                  ><span class="nmp-val">{{ peer.ipv4 || '—' }}</span></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">{{ t('newMonitor.connection') }}</span
+                  ><span class="nmp-val">{{ peer.cost || '—' }}</span></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">NAT</span
+                  ><span class="nmp-val">{{ peer.nat_type || '—' }}</span></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">{{ t('newMonitor.protocol') }}</span
+                  ><span class="nmp-val">{{ peer.tunnel_proto || '—' }}</span></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">{{ t('newMonitor.packetLoss') }}</span
+                  ><span
+                    class="nmp-val"
+                    :class="peer.loss_rate && parseFloat(peer.loss_rate) > 5 ? 'warn' : ''"
+                    >{{ formatMetric(peer.loss_rate, '%') }}</span
+                  ></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">{{ t('newMonitor.upload') }}</span
+                  ><span class="nmp-val">{{ formatBytes(peer.tx_bytes) }}</span></div
+                >
+                <div class="nmp-row"
+                  ><span class="nmp-key">{{ t('newMonitor.download') }}</span
+                  ><span class="nmp-val">{{ formatBytes(peer.rx_bytes) }}</span></div
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedData.lastUpdate" class="nm-update-time">
+          {{ t('newMonitor.lastUpdate') }}: {{ formatTime(selectedData.lastUpdate) }}
+        </div>
       </div>
     </div>
 
@@ -469,6 +474,7 @@ import * as toml from 'smol-toml'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useCreamToast } from '@/hooks/useCreamToast'
+import { useWideLandscape } from '@/hooks/useWideLandscape'
 import TrendChart from '@/components/TrendChart/index.vue'
 import { LtButton } from '@/components/ui'
 import LoadingOverlay from '@/components/LoadingOverlay/index.vue'
@@ -481,6 +487,8 @@ const easyTierStore = useEasyTierStore()
 const { t } = useI18n()
 const router = useRouter()
 const isAndroidPlatform = isAndroid()
+// 横屏宽屏：运行态仪表盘左右分栏（左：主卡/流量/节点信息，右：趋势/对等节点）
+const isWideLandscape = useWideLandscape()
 const { show: toast } = useCreamToast()
 
 let isMounted = false
@@ -513,62 +521,6 @@ interface MonitorSnapshot {
   avgLatency: string
 }
 const selectedData = ref<MonitorSnapshot | null>(null)
-
-// --- 性能埋点（临时诊断：定位详情慢在 TOML 读取 / node / peer 哪一环） ---
-// 桌面发布包无 devtools，数值同时渲染在详情底部，便于直接读取
-interface QueryPerf {
-  ok: boolean
-  attempts: number
-  ms: number
-}
-interface MonitorPerf {
-  ok: boolean
-  tomlMs: number
-  node: QueryPerf
-  peer: QueryPerf
-  totalMs: number
-  at: number
-}
-const lastPerf = ref<MonitorPerf | null>(null)
-// 选中/恢复轮询后首个成功快照的耗时（每轮轮询会话只记录一次）
-const firstFrameMs = ref<number | null>(null)
-let pollStartedAt = 0
-let firstFrameRecorded = false
-
-const recordPerf = (sample: Omit<MonitorPerf, 'at'>) => {
-  if (sample.ok && !firstFrameRecorded) {
-    firstFrameRecorded = true
-    firstFrameMs.value = Math.round(performance.now() - pollStartedAt)
-  }
-  lastPerf.value = { ...sample, at: Date.now() }
-  console.debug(
-    `[monitor-perf] total=${sample.totalMs.toFixed(0)}ms toml=${sample.tomlMs.toFixed(0)}ms ` +
-      `node=${sample.node.ms.toFixed(0)}ms/${sample.node.attempts} ` +
-      `peer=${sample.peer.ms.toFixed(0)}ms/${sample.peer.attempts} ok=${sample.ok}`
-  )
-}
-
-const perfText = computed(() => {
-  const p = lastPerf.value
-  if (!p) return ''
-  const parts: string[] = []
-  if (!p.ok) parts.push(t('newMonitor.perfFailed'))
-  parts.push(
-    t('newMonitor.perfTiming', {
-      total: Math.round(p.totalMs),
-      toml: Math.round(p.tomlMs),
-      node: Math.round(p.node.ms),
-      peer: Math.round(p.peer.ms)
-    })
-  )
-  if (p.node.attempts > 1 || p.peer.attempts > 1) {
-    parts.push(t('newMonitor.perfRetries', { node: p.node.attempts, peer: p.peer.attempts }))
-  }
-  if (firstFrameMs.value != null) {
-    parts.push(t('newMonitor.perfFirstFrame', { ms: firstFrameMs.value }))
-  }
-  return parts.join(' · ')
-})
 
 // --- 5.16 趋势缓冲（每配置环形，随 refreshInterval 取样） ---
 const { getTrend, pushTrend, clearTrend } = useTrendBuffer()
@@ -949,36 +901,24 @@ const withQueryTimeout = (promise: Promise<any>, ms = 10000): Promise<any> =>
     )
   })
 
-interface QueryAttemptResult {
-  value: any
-  attempts: number
-  ms: number
-}
-
 const queryWithRetry = async (
   query: () => Promise<any>,
   isValid: (value: any) => boolean
-): Promise<QueryAttemptResult> => {
-  const startedAt = performance.now()
-  let attempts = 0
+): Promise<any> => {
   for (let attempt = 0; attempt < 2; attempt++) {
-    attempts++
     try {
       const result = await withQueryTimeout(query())
-      if (isValid(result)) {
-        return { value: result, attempts, ms: performance.now() - startedAt }
-      }
+      if (isValid(result)) return result
     } catch {
       // CLI 调用失败（RPC 超时/进程退出）按未命中处理，仍重试一次
     }
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 150))
   }
-  return { value: null, attempts, ms: performance.now() - startedAt }
+  return null
 }
 
 const fetchMonitorData = async (item: RunningItem) => {
   const isTauri = isTauriEnv()
-  const startedAt = performance.now()
   if (!isTauri) {
     // 非 Tauri 环境使用 mock
     const rawPeers = mockPeers[item.configFileName] || []
@@ -993,14 +933,6 @@ const fetchMonitorData = async (item: RunningItem) => {
       rxTotal,
       avgLatency: calcAvgLatency(processed)
     }
-    // Mock 无 TOML/RPC 调用，分项恒为 0，仅用于预览埋点行
-    recordPerf({
-      ok: true,
-      tomlMs: 0,
-      node: { ok: true, attempts: 1, ms: 0 },
-      peer: { ok: true, attempts: 1, ms: 0 },
-      totalMs: performance.now() - startedAt
-    })
     return snapshot
   }
 
@@ -1012,7 +944,6 @@ const fetchMonitorData = async (item: RunningItem) => {
     let dhcp = false
     let exitNodes: any[] = []
     let portForward: any[] = []
-    const tomlStartedAt = performance.now()
     try {
       const content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
       if (content) {
@@ -1026,9 +957,8 @@ const fetchMonitorData = async (item: RunningItem) => {
     } catch (e) {
       console.error('解析监控配置失败:', e)
     }
-    const tomlMs = performance.now() - tomlStartedAt
 
-    const [nodeResult, peerResult] = await Promise.all([
+    const [nodeInfo, peerList] = await Promise.all([
       queryWithRetry(
         () => coreApi.queryNode(item),
         (v) => !!v
@@ -1038,17 +968,7 @@ const fetchMonitorData = async (item: RunningItem) => {
         (v) => Array.isArray(v)
       )
     ])
-    const nodeInfo = nodeResult.value
-    const peerList = peerResult.value
-    const ok = !!nodeInfo && !!peerList
-    recordPerf({
-      ok,
-      tomlMs,
-      node: { ok: !!nodeInfo, attempts: nodeResult.attempts, ms: nodeResult.ms },
-      peer: { ok: !!peerList, attempts: peerResult.attempts, ms: peerResult.ms },
-      totalMs: performance.now() - startedAt
-    })
-    if (!ok) {
+    if (!nodeInfo || !peerList) {
       // 任一查询失败：本次快照不完整，直接丢弃（调用方保留上一份数据并计失败次数）
       return null
     }
@@ -1234,10 +1154,6 @@ const startPolling = () => {
   const cfg = selectedConfig.value
   if (!cfg) return
   if (!runningSet.value.has(cfg.configFileName)) return
-  // 首帧计时：从本次轮询会话开始到第一个成功快照渲染
-  pollStartedAt = performance.now()
-  firstFrameRecorded = false
-  firstFrameMs.value = null
   const gen = pollGeneration
 
   const doPoll = async () => {
@@ -1977,13 +1893,6 @@ onUnmounted(() => {
   border-top: 1px solid var(--theme-border-light);
 }
 
-@media (hover: hover) {
-  .nm-root.nm-android .nm-peer-card:hover {
-    border-color: transparent;
-    box-shadow: none;
-  }
-}
-
 .nm-root.nm-android .nmp-top {
   padding-bottom: 8px;
   margin-bottom: 8px;
@@ -2334,9 +2243,12 @@ onUnmounted(() => {
   transition: var(--theme-transition-surface);
 }
 
-.nm-peer-card:hover {
-  border-color: var(--theme-accent-primary);
-  box-shadow: var(--theme-shadow-sm);
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .nm-peer-card:hover {
+    border-color: var(--theme-accent-primary);
+    box-shadow: var(--theme-shadow-sm);
+  }
 }
 
 .nmp-top {
@@ -2397,14 +2309,6 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
   text-align: right;
   border-top: 1px solid var(--theme-border-light);
-}
-
-/* 性能埋点（临时诊断）：与更新时间同位置连续展示 */
-.nm-perf-line {
-  padding-top: 2px;
-  border-top: none;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
 }
 
 /* 空态 */
@@ -2527,5 +2431,54 @@ onUnmounted(() => {
 
 .nm-stale-retry {
   flex-shrink: 0;
+}
+
+/* 分栏容器：默认透明包裹，桌面与竖屏保持原有纵向排列 */
+.nm-main-col,
+.nm-side-col {
+  display: contents;
+}
+
+/* Android 横屏宽屏：运行态仪表盘左右分栏，两栏各自滚动 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nm-root.nm-android.nm-ls-split {
+    display: block;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-right {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    align-items: stretch;
+    gap: var(--theme-space-4);
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-main-col,
+  .nm-root.nm-android.nm-ls-split .nm-side-col {
+    display: flex;
+    min-height: 0;
+    padding-right: 2px;
+    overflow-y: auto;
+    flex-direction: column;
+  }
+
+  /* 分栏内保持卡片原始高度，超出部分交给栏内滚动 */
+  .nm-root.nm-android.nm-ls-split .nm-main-col > *,
+  .nm-root.nm-android.nm-ls-split .nm-side-col > * {
+    flex-shrink: 0;
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-main-col > :last-child,
+  .nm-root.nm-android.nm-ls-split .nm-side-col > :last-child {
+    margin-bottom: 0;
+  }
 }
 </style>
