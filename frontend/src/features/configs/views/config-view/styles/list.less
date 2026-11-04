@@ -71,9 +71,15 @@
   box-shadow: var(--theme-shadow-sm);
 }
 
+/* 选中不占用边框语义：边框留给状态，选中靠左竖条 + 淡强调底色 */
 .nw-card.active {
-  border-color: var(--theme-accent-primary);
-  box-shadow: 0 0 0 2px var(--theme-bg-active);
+  border-color: var(--theme-border);
+  box-shadow: inset 3px 0 0 var(--theme-accent-primary);
+  background: linear-gradient(var(--theme-bg-active), var(--theme-bg-active)), var(--theme-bg-card);
+}
+
+.nw-card.active:hover {
+  box-shadow: inset 3px 0 0 var(--theme-accent-primary), var(--theme-shadow-sm);
 }
 
 /* 列表重排：Vue TransitionGroup 的 FLIP 只动 transform，避免布局重算 */
