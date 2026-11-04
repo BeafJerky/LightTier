@@ -520,12 +520,12 @@ const handleVisibilityChange = () => {
   hiddenAt = 0
 }
 
-// 底部导航：对应桌面侧边栏一级入口
+// 底部导航：对应桌面侧边栏一级入口，顺序与命名保持两端一致
 const androidTabs = [
   { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
-  { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
-  { path: '/new/web-config', labelKey: 'newLayout.webConfigTab', icon: 'web' },
   { path: '/new/monitor', labelKey: 'newLayout.monitor', icon: 'monitor' },
+  { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
+  { path: '/new/web-config', labelKey: 'newLayout.webConfig', icon: 'web' },
   { path: '/new/settings', labelKey: 'newSettings.settings', icon: 'settings' }
 ]
 const isTabActive = (path: string) =>

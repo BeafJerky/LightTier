@@ -8,7 +8,6 @@ export default {
     configSub: 'Manage all network config files',
     webConfig: 'Web Config',
     webConfigSub: 'Manage web config server connections',
-    webConfigTab: 'Web',
     theme: 'Theme Settings',
     themeShort: 'Theme',
     configDetail: 'Config Details',

@@ -8,7 +8,6 @@ export default {
     configSub: '管理所有组网配置文件',
     webConfig: 'Web 配置',
     webConfigSub: '管理 Web 配置服务器连接',
-    webConfigTab: 'Web',
     theme: '主题设置',
     themeShort: '主题',
     configDetail: '配置详情',
