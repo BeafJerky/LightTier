@@ -1180,16 +1180,15 @@ onBeforeUnmount(() => {
   --lt-fab-clearance: 0px;
 }
 
-/* 一级页：大标题应用栏；二级页：返回 + 小标题 + 说明 */
+/* 一级页：大标题应用栏；二级页：返回 + 小标题 + 说明
+   各级页面统一用 --theme-bg-toolbar，避免标题栏与内容区同色导致层级不清 */
 .nl-toolbar-android {
   height: 56px;
   padding: 0 var(--theme-space-4);
-  background: var(--theme-bg);
 }
 
 .nl-toolbar-android.is-sub {
   height: 56px;
-  background: var(--theme-bg-toolbar);
 }
 
 .nl-toolbar-android .nl-page-header {
