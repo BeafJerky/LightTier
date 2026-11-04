@@ -500,7 +500,7 @@ defineExpose({
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   text-transform: uppercase;
 }
 
@@ -623,7 +623,7 @@ defineExpose({
 .ed-template-option-desc {
   font-size: 11px;
   line-height: 1.45;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   white-space: normal;
 }
 
@@ -669,7 +669,7 @@ defineExpose({
   margin-left: auto;
   font-family: var(--theme-font-body, 'Sora', monospace);
   font-size: 11px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
   border-radius: var(--theme-radius-pill, 100px);
 }
@@ -809,7 +809,7 @@ defineExpose({
 
 .ed-footer-info {
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .ed-footer-btns {

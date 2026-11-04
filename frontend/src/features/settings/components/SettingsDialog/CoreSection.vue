@@ -327,7 +327,7 @@ const {
 .sd-mirror-open-value {
   max-width: 190px;
   overflow: hidden;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -341,7 +341,7 @@ const {
 .sd-core-install-hint {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 /* 所选版本安装包状态：已下载/内置为绿色，未下载提示先下载 */

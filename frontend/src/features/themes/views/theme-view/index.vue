@@ -65,7 +65,7 @@ watch(visible, (v) => {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.4px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   text-transform: uppercase;
 }
 

@@ -502,7 +502,7 @@ watch(locale, () => {
   padding: 1px var(--theme-space-2);
   margin-left: auto;
   font-size: 11px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   background: var(--theme-bg-tag, #f5ede6);
   border-radius: 4px;
 }

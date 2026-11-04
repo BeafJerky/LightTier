@@ -197,7 +197,7 @@ const {
 .sd-lock-status {
   padding: 2px var(--theme-space-2);
   font-size: 11px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   white-space: nowrap;
   background: var(--theme-bg-tag, #f5ede6);
   border-radius: var(--theme-radius-pill, 100px);
@@ -232,7 +232,7 @@ const {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .sd-lock-actions {

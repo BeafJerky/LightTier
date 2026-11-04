@@ -251,7 +251,7 @@ onUnmounted(() => {
 
 .lv-toolbar-info {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .lv-toolbar-actions {
@@ -289,7 +289,7 @@ onUnmounted(() => {
   height: 100%;
   font-family: var(--theme-font-body);
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   align-items: center;
   justify-content: center;
 }

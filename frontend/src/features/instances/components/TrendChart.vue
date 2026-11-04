@@ -810,7 +810,7 @@ const summary = computed(() =>
   font-family: var(--theme-font-body);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .tc-tooltip-row {
@@ -845,7 +845,7 @@ const summary = computed(() =>
   padding: var(--theme-space-4);
   font-family: var(--theme-font-body);
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   text-align: center;
   background: var(--theme-bg-card, #fff);
   border: 1px dashed var(--theme-border, #ede4db);

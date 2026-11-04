@@ -678,7 +678,7 @@ const {
   margin: 0;
   font-size: 12px;
   line-height: 1.55;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .bk-section-head,
@@ -797,7 +797,7 @@ const {
 .bk-cat-desc {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   overflow-wrap: anywhere;
 }
 
@@ -831,7 +831,7 @@ const {
 .bk-mode-desc {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 /* 差量基准 */
@@ -889,7 +889,7 @@ const {
 .bk-hint {
   font-size: 11px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .bk-error {
@@ -1079,7 +1079,7 @@ const {
 }
 
 .bk-status.status-same {
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   background: var(--theme-bg-tag, #f5ede6);
 }
 
@@ -1092,7 +1092,7 @@ const {
   padding-left: 2px;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   overflow-wrap: anywhere;
 }
 
@@ -1224,7 +1224,7 @@ const {
   min-width: 0;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   flex: 1;
 }
 

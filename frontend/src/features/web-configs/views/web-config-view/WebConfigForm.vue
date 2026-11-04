@@ -366,7 +366,7 @@ const handleSave = async () => {
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   text-transform: uppercase;
 }
 
@@ -391,7 +391,7 @@ const handleSave = async () => {
 
 .wcf-footer-hint {
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .wcf-footer-btns {

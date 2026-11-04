@@ -247,7 +247,7 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.4px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   text-transform: uppercase;
 }
 
@@ -312,7 +312,7 @@ onMounted(async () => {
 .ssv-desc {
   overflow: hidden;
   font-size: 11px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

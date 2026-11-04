@@ -553,7 +553,7 @@ onBeforeUnmount(() => {
 .og-sub {
   margin: 0 0 22px;
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .og-feature-grid {
@@ -643,7 +643,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 11px;
   line-height: 1.6;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .og-core-error {
@@ -681,7 +681,7 @@ onBeforeUnmount(() => {
 .og-download-text {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 /* 第 4 步：完成 */

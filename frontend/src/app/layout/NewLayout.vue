@@ -788,7 +788,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 2px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   text-transform: uppercase;
 }
 
@@ -1070,7 +1070,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 13px;
   line-height: 1.2;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .nl-toolbar-right {
@@ -1211,7 +1211,7 @@ onBeforeUnmount(() => {
   display: block;
   font-size: 11px;
   line-height: 1.3;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .nl-toolbar-android .nl-back-btn {
@@ -1331,7 +1331,7 @@ onBeforeUnmount(() => {
   position: relative;
   height: 100%;
   padding: 0;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
   flex: 1;
   flex-direction: column;
   justify-content: center;
@@ -1345,13 +1345,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-}
-
-/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
-@media (hover: hover) {
-  .nl-tabbar .nl-tab:hover {
-    color: var(--theme-text-secondary);
-  }
 }
 
 /* 触摸端按下反馈：WebView 没有鼠标悬停，按压反馈靠 :active */

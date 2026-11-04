@@ -319,7 +319,7 @@ body {
 .lock-sub {
   margin: 0 0 20px;
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .lock-input.error :deep(.n-input__border),

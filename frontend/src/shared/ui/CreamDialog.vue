@@ -347,7 +347,7 @@ onUnmounted(() => {
   font-family: var(--theme-font-body);
   font-size: 12px;
   line-height: 1.3;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .cd-close {

@@ -756,7 +756,7 @@ watch(visible, async (v) => {
 }
 
 .sd-mirror-lat.lat-unknown {
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .sd-mirror-inuse {
@@ -785,7 +785,7 @@ watch(visible, async (v) => {
   min-width: 200px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   flex: 1;
 }
 
@@ -810,7 +810,7 @@ watch(visible, async (v) => {
 .sd-mirror-footer-hint {
   font-size: 11px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .sd-mirror-footer-hint {

@@ -193,7 +193,7 @@ const handleInstall = async () => {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.5px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   text-transform: uppercase;
 }
 
@@ -240,7 +240,7 @@ const handleInstall = async () => {
   margin: 0;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
   background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.04);
   border-radius: var(--theme-radius-sm, 6px);
 }
@@ -254,7 +254,7 @@ const handleInstall = async () => {
 
 .svc-footer-hint {
   font-size: 12px;
-  color: var(--theme-text-muted, #c8bdb2);
+  color: var(--theme-text-secondary, #7a6e5e);
 }
 
 .svc-footer-actions {
