@@ -135,6 +135,11 @@ export function useConfigList(options: UseConfigListOptions) {
   // 配置名列表（用于新增时查重）
   const configNameList = computed(() => easyTierStore.configList.map((c) => c.configFileName))
 
+  // 空列表（加载完成且无配置）：横屏分栏下无内容可展示，详情占位需隐藏
+  const isListEmpty = computed(
+    () => easyTierStore.configList.length === 0 && !easyTierStore.configListLoading
+  )
+
   // ===== 列表与详情加载 =====
   const getRunning = (item: RunningItem) =>
     easyTierStore.runningList.some((i) => i.configFileName === item.configFileName)
@@ -871,6 +876,7 @@ export function useConfigList(options: UseConfigListOptions) {
     isAndroidPlatform,
     isWideLandscape,
     isAndroidDetailRoute,
+    isListEmpty,
     isTauri,
     selectedConfig,
     selectedDetail,

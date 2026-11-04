@@ -274,6 +274,15 @@
     gap: var(--theme-space-4);
   }
 
+  /* 空列表：右栏没有可展示内容，空态卡片独占整行 */
+  .nwc-root.nwc-android.nwc-list-empty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nwc-root.nwc-android.nwc-list-empty .nwc-right {
+    display: none;
+  }
+
   .nwc-root.nwc-android .nwc-left,
   .nwc-root.nwc-android.nwc-detail-open .nwc-left {
     display: flex;

@@ -53,7 +53,6 @@ export default {
     delete: '删除',
     cancel: '取消',
     confirm: '确定',
-    noWebConfig: '暂无 Web 配置',
     startSuccess: '启动成功',
     startFail: '启动失败',
     stoppedSuccess: '已停止',

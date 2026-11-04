@@ -53,7 +53,6 @@ export default {
     delete: 'Delete',
     cancel: 'Cancel',
     confirm: 'OK',
-    noWebConfig: 'No Web configurations',
     startSuccess: 'Started successfully',
     startFail: 'Start failed',
     stoppedSuccess: 'Stopped',

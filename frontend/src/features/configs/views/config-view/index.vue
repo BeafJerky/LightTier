@@ -3,6 +3,7 @@
     class="nw-root"
     :class="{
       'nw-android': isAndroidPlatform,
+      'nw-list-empty': isListEmpty,
       'nw-detail-open': isAndroidPlatform
         ? isAndroidDetailRoute || (isWideLandscape && !!selectedConfig)
         : !!selectedDetail
@@ -101,6 +102,7 @@ const {
   isAndroidPlatform,
   isWideLandscape,
   isAndroidDetailRoute,
+  isListEmpty,
   selectedConfig,
   selectedDetail,
   editVisible,
@@ -500,6 +502,15 @@ onMounted(() => {
     min-height: 0;
     align-items: stretch;
     gap: var(--theme-space-4);
+  }
+
+  /* 空列表：详情区没有可展示内容，空态卡片独占整行 */
+  .nw-root.nw-android.nw-list-empty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nw-root.nw-android.nw-list-empty .nw-right {
+    display: none;
   }
 
   .nw-root.nw-android .nw-left,

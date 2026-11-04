@@ -1,7 +1,7 @@
 <template>
   <div class="nwc-left">
     <!-- 页面标题已由应用栏承担，列表顶部为「计数 + 新增」工具行，与总览页同构 -->
-    <div class="nwc-left-header">
+    <div v-if="items.length > 0" class="nwc-left-header">
       <span class="nwc-left-count">{{ t('newWebConfig.configsTotal', { n: items.length }) }}</span>
       <LtButton
         variant="secondary"
@@ -105,15 +105,11 @@
       </template>
       <div v-if="items.length === 0 && !loading" class="nwc-empty-cards">
         <span class="nwc-empty-icon">✦</span>
-        <p class="nwc-empty-title">{{
-          isAndroid ? t('newWebConfig.emptyTitle') : t('newCommon.noWebConfig')
-        }}</p>
-        <template v-if="isAndroid">
-          <span class="nwc-empty-desc">{{ t('newWebConfig.emptyDesc') }}</span>
-          <LtButton variant="primary" size="md" class="nwc-empty-cta" @click="emit('add')">
-            {{ t('newWebConfig.addConfig') }}
-          </LtButton>
-        </template>
+        <p class="nwc-empty-title">{{ t('newWebConfig.emptyTitle') }}</p>
+        <span class="nwc-empty-desc">{{ t('newWebConfig.emptyDesc') }}</span>
+        <LtButton variant="primary" size="md" class="nwc-empty-cta" @click="emit('add')">
+          {{ t('newWebConfig.addConfig') }}
+        </LtButton>
       </div>
     </div>
   </div>

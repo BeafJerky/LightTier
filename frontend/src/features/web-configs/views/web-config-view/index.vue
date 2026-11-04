@@ -3,6 +3,7 @@
     class="nwc-root"
     :class="{
       'nwc-android': isAndroidPlatform,
+      'nwc-list-empty': isListEmpty,
       'nwc-detail-open': isAndroidPlatform
         ? isAndroidDetailRoute || (isWideLandscape && !!selectedConfig)
         : !!selectedConfig
@@ -43,10 +44,6 @@
       >
         <span class="nwc-state-spinner" aria-hidden="true"></span>
         <p>{{ t('newCommon.checking') }}</p>
-      </div>
-      <div v-else-if="isAndroidPlatform && webConfigList.length === 0" class="nwc-empty">
-        <span class="nwc-empty-icon">✦</span>
-        <p>{{ t('newWebConfig.emptyTitle') }}</p>
       </div>
       <div v-else class="nwc-empty">
         <span class="nwc-empty-icon">✦</span>
@@ -237,6 +234,15 @@ const selectedConfig = ref<FormWebData | null>(null)
 
 // 类型化的 Web 配置列表
 const webConfigList = computed(() => easyTierStore.configWebList as unknown as FormWebData[])
+
+// 空列表（加载完成且无配置）：横屏分栏下右栏没有可展示内容，避免与左侧空态重复
+const isListEmpty = computed(
+  () =>
+    isAndroidPlatform &&
+    webConfigList.value.length === 0 &&
+    !loading.value &&
+    !easyTierStore.webConfigListLoading
+)
 
 // 首帧即丢弃缓存/文件中的运行态快照：status/pid 必须由本次进程与服务扫描重新判定。
 // 否则会先渲染上次会话的“运行中”，扫描完成后才跳回真实状态。

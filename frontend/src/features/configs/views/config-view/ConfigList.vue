@@ -1,8 +1,8 @@
 <template>
   <div class="nw-left">
-    <div class="nw-left-header">
-      <!-- 搜索与新增同排；页面标题已由应用栏承担，列表不再重复 -->
-      <div v-if="easyTierStore.configList.length > 0" class="nw-left-tools">
+    <!-- 搜索与新增同排；页面标题已由应用栏承担，列表不再重复 -->
+    <div v-if="easyTierStore.configList.length > 0" class="nw-left-header">
+      <div class="nw-left-tools">
         <div class="nw-search">
           <LtInput
             v-model="configSearch"
