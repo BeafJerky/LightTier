@@ -130,27 +130,12 @@
           rx="8"
           class="tc-lat-bg"
         />
-        <line
-          :x1="PLOT_LEFT"
-          :x2="plotRight"
-          :y1="(LAT_TOP + LAT_BOTTOM) / 2"
-          :y2="(LAT_TOP + LAT_BOTTOM) / 2"
-          class="tc-grid tc-grid-lat"
-        />
         <template v-for="(seg, index) in segmentPaths" :key="`lat-${index}`">
           <path v-if="seg.latArea" :d="seg.latArea" class="tc-area" fill="url(#tc-grad-lat)" />
           <path v-if="hasLatency && seg.latLine" :d="seg.latLine" class="tc-line tc-line-lat" />
         </template>
         <text :x="PLOT_LEFT - 7" :y="LAT_TOP + 3.5" class="tc-axis-text" text-anchor="end">
           {{ Math.round(maxLatency) }} ms
-        </text>
-        <text
-          :x="PLOT_LEFT - 7"
-          :y="(LAT_TOP + LAT_BOTTOM) / 2 + 3.5"
-          class="tc-axis-text"
-          text-anchor="end"
-        >
-          {{ Math.round(maxLatency / 2) }} ms
         </text>
         <text :x="PLOT_LEFT - 7" :y="LAT_BOTTOM + 3.5" class="tc-axis-text" text-anchor="end">
           0 ms
@@ -710,11 +695,6 @@ const summary = computed(() =>
 .tc-grid-v {
   stroke-dasharray: 3 5;
   stroke-opacity: 0.4;
-}
-
-.tc-grid-lat {
-  stroke-dasharray: 3 5;
-  stroke-opacity: 0.45;
 }
 
 .tc-axis-text {
