@@ -297,13 +297,9 @@ onMounted(() => {
   display: flex;
   padding: var(--theme-space-5);
   margin: 0 0 var(--theme-space-4);
-  background:
-    radial-gradient(
-      120% 90% at 100% 0%,
-      rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12),
-      transparent 62%
-    ),
-    var(--theme-bg-card);
+
+  /* 停用态不铺强调色光晕：奶油主题 accent 与 danger 同值，光晕留给运行态 */
+  background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-xxl);
   flex-direction: column;
