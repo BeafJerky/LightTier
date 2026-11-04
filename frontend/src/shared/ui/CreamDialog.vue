@@ -27,7 +27,10 @@
         >
           <!-- 标题栏（内联模式由所在页面承载标题与返回，不渲染） -->
           <div v-if="!inline" class="cd-header">
-            <span class="cd-title">{{ title }}</span>
+            <div class="cd-head-text">
+              <span class="cd-title">{{ title }}</span>
+              <span v-if="subtitle" class="cd-subtitle">{{ subtitle }}</span>
+            </div>
             <LtButton
               variant="text"
               size="sm"
@@ -112,6 +115,8 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     title?: string
+    // 标题下的补充说明：仅桌面标题栏渲染，内联形态由页面标题承载
+    subtitle?: string
     width?: string | number
     // 桌面弹窗高度：短窗口由 .cd-dialog 的 max-height 兜底收缩
     height?: string | number
@@ -128,6 +133,7 @@ const props = withDefaults(
   }>(),
   {
     title: '',
+    subtitle: '',
     width: 600,
     height: undefined,
     bodyScroll: true,
@@ -322,11 +328,26 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.cd-head-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .cd-title {
   font-family: var(--theme-font-display, 'Quicksand', sans-serif);
   font-size: 17px;
   font-weight: 600;
   color: var(--theme-text-primary, #4a3728);
+}
+
+.cd-subtitle {
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--theme-text-muted, #c8bdb2);
 }
 
 .cd-close {

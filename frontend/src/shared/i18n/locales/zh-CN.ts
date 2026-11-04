@@ -530,6 +530,7 @@ export default {
   },
   newSettings: {
     settings: '设置',
+    settingsDesc: '管理应用偏好、内核与本地数据',
     general: '通用设置',
     coreMgmt: '内核管理',
     dataMgmt: '数据管理',

@@ -551,6 +551,7 @@ export default {
   },
   newSettings: {
     settings: 'Settings',
+    settingsDesc: 'Manage app preferences, kernel and local data',
     general: 'General',
     coreMgmt: 'Kernel',
     dataMgmt: 'Data',

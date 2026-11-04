@@ -2,6 +2,7 @@
   <CreamDialog
     v-model="visible"
     :title="t('newSettings.settings')"
+    :subtitle="t('newSettings.settingsDesc')"
     width="700px"
     height="720px"
     :inline="inline"
