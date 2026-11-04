@@ -1,0 +1,16 @@
+{
+  // 指定 schema 文件路径，用于验证配置文件格式
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  // 应用程序唯一标识符（与桌面端保持一致）
+  "identifier": "com.lighttier.app",
+  // 打包配置（Android 平台专用，与 tauri.conf.json5 合并）
+  "bundle": {
+    "android": {
+      // 最低支持的 Android API 级别
+      "minSdkVersion": 24
+    },
+    // Android 端内核以库形式内嵌运行，不需要打包桌面版内核压缩包等资源；
+    // 内置外部主题已在构建期由前端打包（useExternalThemes），不依赖 APK 资源目录
+    "resources": []
+  }
+}

@@ -1,0 +1,57 @@
+/* @theme-label: 奶油炫彩 */
+:root {
+  /* 奶油炫彩主题 — 暖底 + 高饱和点缀色 */
+  --theme-bg: #fdf6f0;
+  --theme-bg-card: #ffffff;
+  --theme-bg-sidebar: linear-gradient(180deg, #faf0e8, #f5e8dc);
+  --theme-bg-toolbar: #ffffff;
+  --theme-bg-hover: rgba(230, 126, 138, 0.07);
+  --theme-bg-active: rgba(230, 126, 138, 0.11);
+  --theme-bg-tag: #f8ece2;
+
+  --theme-text-primary: #4a3525;
+  --theme-text-secondary: #7a6858;
+  --theme-text-muted: #c4b5a5;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #e67e8a;
+  --theme-accent-secondary: #7ecdc0;
+  --theme-accent-hover: #d46a76;
+  --theme-color-success: #5ec49e;
+  --theme-color-success-dark: #4ab88a;
+  --theme-color-danger: #e67e8a;
+  --theme-color-warning: #f0a848;
+  --theme-color-info: #68b8e0;
+
+  --theme-border: #ede0d4;
+  --theme-border-light: #f5ebe0;
+  --theme-color-scrollbar: #e4d2c0;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #f5ebe0;
+  --theme-surface-hover: #efe0d2;
+  --theme-text-on-accent: #ffffff;
+
+  /* 阴影 — 暖色调 rgba */
+  --theme-shadow-sm: 0 8px 28px rgba(74, 53, 37, 0.07);
+  --theme-shadow-md: 0 12px 36px rgba(74, 53, 37, 0.08);
+  --theme-shadow-toast: 0 6px 24px rgba(74, 53, 37, 0.11);
+
+  /* 圆角 — 与奶油主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 字体 — 与奶油主题一致 */
+  --theme-font-display: 'Quicksand', sans-serif;
+  --theme-font-body: 'Sora', sans-serif;
+
+  /* 动效 — 与奶油主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

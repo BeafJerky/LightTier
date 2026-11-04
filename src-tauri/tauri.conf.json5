@@ -1,0 +1,64 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "LightTier",
+  "version": "2.0.0",
+  "identifier": "com.lighttier.app",
+  "build": {
+    "frontendDist": "../frontend/dist",
+    "devUrl": "http://localhost:4000",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "LightTier",
+        "width": 1000,
+        "height": 650,
+        // 详情头部与工具栏在更窄的宽度下会挤压变形
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        // 先隐藏，前端首屏就绪后再显示，避免白屏闪烁
+        "visible": false,
+        // 使用应用自绘标题栏
+        "decorations": false,
+        "transparent": false,
+        "devtools": false
+      }
+    ],
+    "security": {
+      // 脚本只允许来自应用自身；Vue 动态样式需要 style-src 的 unsafe-inline；
+      // connect-src 放开 https 用于内核/更新/镜像测速，并放行开发服务器 HMR
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost http://localhost:4000 ws://localhost:4000 https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'"
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "LightTier",
+    "longDescription": "LightTier",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    // glob 命中目录时不会递归展开，themes 子目录需单独列出；
+    // resource/core 不入包：内核由应用运行时下载安装
+    "resources": [
+      "resource/*",
+      "resource/themes/*"
+    ]
+  },
+  "plugins": {
+    "shell": {
+      "open": "*"
+    }
+  }
+}

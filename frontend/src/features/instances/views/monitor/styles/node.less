@@ -1,0 +1,41 @@
+@import url('./section.less');
+
+/* 节点信息网格 */
+.nm-grid {
+  display: grid;
+  overflow: hidden;
+  background: var(--theme-border-light);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-md);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+}
+
+.nm-field {
+  display: flex;
+  padding: var(--theme-space-3) var(--theme-space-4);
+  background: var(--theme-bg-card);
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nm-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+}
+
+.nm-val {
+  font-size: 13px;
+  color: var(--theme-text-primary);
+  word-break: break-all;
+}
+
+/* 手机尺寸：字段网格降为单列，避免长值被挤成两行 */
+@media (width <= 480px) {
+  .nm-grid {
+    grid-template-columns: 1fr;
+  }
+}

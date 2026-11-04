@@ -1,0 +1,151 @@
+:root {
+  /* ===== 背景色 ===== */
+  --theme-bg: #fdf8f4;
+  --theme-bg-card: #ffffff;
+  --theme-bg-sidebar: linear-gradient(180deg, #faf5f0, #f5efe8);
+  --theme-bg-toolbar: #ffffff;
+  --theme-bg-hover: rgba(232, 160, 160, 0.06);
+  --theme-bg-active: rgba(232, 160, 160, 0.1);
+  --theme-bg-tag: #f5ede6;
+
+  /* ===== 文字色 ===== */
+  --theme-text-primary: #4a3728;
+  --theme-text-secondary: #7a6e5e;
+  --theme-text-muted: #c8bdb2;
+  --theme-text-white: #ffffff;
+
+  /* ===== 点缀色 ===== */
+  --theme-accent-primary: #e8a0a0;
+  --theme-accent-secondary: #b8a9c9;
+  --theme-accent-hover: #d49090;
+  --theme-color-success: #7fba8a;
+  --theme-color-success-dark: #6aaa78;
+  --theme-color-danger: #e8a0a0;
+  --theme-color-warning: #e6a23c;
+  --theme-color-info: #e8a0a0;
+
+  /* ===== 表面色（弹窗/卡片内部） ===== */
+  --theme-surface-secondary: #f5ede6;
+  --theme-surface-hover: #efe5d9;
+  --theme-text-on-accent: #ffffff;
+
+  /* ===== 边框 ===== */
+  --theme-border: #ede4db;
+  --theme-border-light: #f5ede6;
+  --theme-color-scrollbar: #e8d5c4;
+
+  /* ===== 阴影 ===== */
+  --theme-shadow-sm: 0 8px 28px rgba(74, 55, 40, 0.06);
+  --theme-shadow-md: 0 12px 36px rgba(74, 55, 40, 0.07);
+  --theme-shadow-toast: 0 6px 24px rgba(74, 55, 40, 0.1);
+
+  /* ===== 圆角 ===== */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* ===== 间距（4/8dp 栅格）=====
+     命名以 4px 为 1 单位：space-1=4px、space-2=8px … space-6=24px。
+     高频界面（布局壳、列表卡片、详情头、设置面板）的 padding / gap / margin
+     统一取值于此，避免 5 / 6 / 10 / 14 / 18 / 22px 之类零散值破坏视觉节奏。
+     1px / 2px 的发丝分隔线与描边不属于间距体系，仍按原值书写。 */
+  --theme-space-1: 4px;
+  --theme-space-2: 8px;
+  --theme-space-3: 12px;
+  --theme-space-4: 16px;
+  --theme-space-5: 20px;
+  --theme-space-6: 24px;
+  --theme-space-8: 32px;
+  --theme-space-10: 40px;
+  --theme-space-12: 48px;
+
+  /* ===== 字体 ===== */
+  /* Sora / Quicksand 经 Google Fonts 外链加载；离线或受限网络下按栈内顺序降级，
+     故显式补齐各平台 CJK 字体（否则中英混排时中文回退结果不可控） */
+  --theme-font-display:
+    'Quicksand', ui-rounded, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', sans-serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'PingFang SC', 'HarmonyOS Sans SC',
+    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  /* 等宽字体（监控页 RPC 地址等等宽展示场景） */
+  --theme-font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* ===== 动效 =====
+     统一节奏：悬停/按压 150ms，浮层/提示 200ms，弹窗/抽屉 280ms。
+     入场用 ease-out（响应快、收尾稳），离场用 ease-in；
+     过渡只声明实际变化的属性，避免 all 隐式触发布局与绘制。 */
+  --theme-duration-fast: 0.15s;
+  --theme-duration: 0.2s;
+  --theme-duration-slow: 0.28s;
+  --theme-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --theme-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 常用过渡集合：只列出会变化的属性，避免 all 把布局/绘制属性一起卷入 */
+  --theme-transition-colors:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out);
+  --theme-transition-surface:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
+  --theme-transition-interactive:
+    color var(--theme-duration-fast) var(--theme-ease-out),
+    background-color var(--theme-duration-fast) var(--theme-ease-out),
+    border-color var(--theme-duration-fast) var(--theme-ease-out),
+    box-shadow var(--theme-duration) var(--theme-ease-out),
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration) var(--theme-ease-out);
+
+  /* ===== 遮罩（弹窗/抽屉，外部主题也复用） ===== */
+  --theme-overlay: rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== 暗色主题 ==================== */
+[data-theme='dark'] {
+  --theme-bg: #0d1b2a;
+  --theme-bg-card: #1b2838;
+  --theme-bg-sidebar: linear-gradient(180deg, #0f1923, #0f1923);
+  --theme-bg-toolbar: #1b2838;
+  --theme-bg-hover: rgba(100, 180, 255, 0.08);
+  --theme-bg-active: rgba(100, 180, 255, 0.12);
+  --theme-bg-tag: #1e3040;
+  --theme-text-primary: #e0e8f0;
+  --theme-text-secondary: #8a9bb0;
+  --theme-text-muted: #5a6b80;
+  --theme-accent-primary: #6ba8e0;
+  --theme-accent-secondary: #5a8ab0;
+  --theme-accent-hover: #7db8f0;
+  --theme-color-success: #5ab08a;
+  --theme-color-success-dark: #4a9a78;
+  --theme-color-danger: #d48080;
+  --theme-color-warning: #e6a23c;
+  --theme-color-info: #6ba8e0;
+
+  /* ===== 表面色（弹窗/卡片内部） ===== */
+  --theme-surface-secondary: #243848;
+  --theme-surface-hover: #2a4055;
+  --theme-text-on-accent: #ffffff;
+
+  /* ===== 边框 ===== */
+  --theme-border: #2a4055;
+  --theme-border-light: #243848;
+  --theme-color-scrollbar: #2a4050;
+
+  /* ===== 阴影 ===== */
+  --theme-shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.25);
+  --theme-shadow-md: 0 12px 36px rgba(0, 0, 0, 0.3);
+  --theme-shadow-toast: 0 6px 24px rgba(0, 0, 0, 0.3);
+
+  /* ===== 遮罩 ===== */
+  --theme-overlay: rgba(0, 0, 0, 0.4);
+}

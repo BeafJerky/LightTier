@@ -1,0 +1,5 @@
+/node_modules/
+/frontend/dist*/
+/frontend/public/
+/frontend/src/types/env.d.ts
+CHANGELOG

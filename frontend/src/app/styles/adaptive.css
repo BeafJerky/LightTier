@@ -1,0 +1,162 @@
+/**
+ * 自适应层 — 按「设备能力 / 系统偏好」分支的差异化样式
+ *
+ * 与组件 scoped 样式的分工：
+ * - 组件内保留桌面（鼠标 + 宽屏）的默认视觉与交互语言，不做任何改动
+ * - 本文件仅在触屏能力（hover: none）或系统减少动效偏好下追加覆盖
+ *
+ * PC / 移动端分流口径：
+ * - 触控相关（命中区、按压态）→ @media (hover: none)，桌面鼠标用户完全不受影响，
+ *   触屏笔记本同样受益；平台无关，无需 JS 判端
+ * - 字号可读性 → @media (hover: none) and (width <= 900px)，只作用于触屏设备
+ *   （Android 手机与平板），窄窗口桌面端保持原字号
+ * - 结构性平台差异（底部导航、安全区、二级页面）仍由 isAndroid() 在组件内处理
+ *
+ * 覆盖手段说明（scoped 选择器带 data-v 属性，优先级高于本文件的类选择器）：
+ * - min-height / min-width：与 scoped 的 height / width 是不同属性，可直接生效
+ * - font-size：scoped 已声明，故必须用 !important 才能覆盖
+ * - ::after 透明扩展：用于视觉尺寸不宜放大的控件（开关）
+ */
+
+/* ==================== 系统「减少动态效果」偏好 ==================== */
+/* 尊重 prefers-reduced-motion：收敛动画/过渡时长，保留状态变化本身（不隐藏内容） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==================== 触屏：按压态反馈 + 命中区 ==================== */
+@media (hover: none) {
+  /* 触屏无 hover，点按过程需要即时视觉反馈（桌面端由 :hover 承担） */
+  button:active,
+  a:active,
+  [role='button']:active,
+  .nl-lang-option:active,
+  .nw-card:active,
+  .nwc-card:active,
+  .nm-card:active,
+  .td-item:active,
+  .sd-nav-item:active,
+  .sd-select-option:active,
+  .sd-mirror-item:active {
+    filter: brightness(0.96);
+    transform: scale(0.97);
+  }
+
+  /* 消除触屏双击缩放延迟，点按响应更跟手 */
+  button,
+  a,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  /* 命中区基线由 LtButton 按尺寸统一处理：
+     文字按钮在触屏下提升到 40dp，图标按钮保持正方形并用透明热区扩展命中范围。
+     不再对全量 button 写 min-height，避免定宽图标按钮被拉成椭圆。 */
+
+  /* 主导航菜单项：按 Android 48dp 标准（抽屉为纵向列表，空间充足） */
+  .nl-menu-item {
+    min-height: 48px;
+  }
+
+  /* 列表行 / 下拉选项 / 主题项：44dp（介于 40 与 48 之间的折中，避免行高失控） */
+  .nl-lang-option,
+  .sd-nav-item,
+  .sd-select-option,
+  .sd-mirror-item,
+  .td-item,
+  .fab-menu-item {
+    min-height: 44px;
+  }
+
+  /* 开关类：视觉尺寸保持不变（放大滑块会破坏行内比例），
+     用透明 ::after 把命中区上下各扩 12px（20px + 24px = 44dp） */
+  .sd-switch,
+  .lv-switch,
+  .ed-form-switch {
+    position: relative;
+  }
+
+  .sd-switch::after,
+  .lv-switch::after,
+  .ed-form-switch::after {
+    position: absolute;
+    inset: -12px -4px;
+    content: '';
+  }
+}
+
+/* ==================== 触屏窄屏：辅助文字可读性 ==================== */
+/* 原 9~10px 的徽标/微标签提升至 11px，11px 的说明/正文类提升至 12px；
+   桌面端（hover: hover）不受影响，保持原有紧凑排版 */
+@media (hover: none) and (width <= 900px) {
+  /* 徽标 / 微标签：9~10px → 11px */
+  .nl-section-label,
+  .nw-label,
+  .nwc-label,
+  .nm-label,
+  .nw-badge,
+  .nwc-badge,
+  .nm-badge,
+  .nw-card-pid,
+  .nwc-card-pid,
+  .nmc-pid,
+  .nmc-rpc,
+  .nw-route-gw,
+  .nm-detail-rpc,
+  .nm-ps-lbl,
+  .nm-section-count,
+  .nm-update-time,
+  .td-item-badge,
+  .sd-mirror-inuse {
+    font-size: 11px !important;
+  }
+
+  /* 说明文字 / 表单标签 / 按钮文案：11px → 12px */
+  .lock-error,
+  .lv-auto,
+  .lv-btn,
+  .og-feature-desc,
+  .sd-row-desc,
+  .sd-row-desc-mono,
+  .sd-mirror-lat,
+  .sd-core-install-hint,
+  .sd-lock-status,
+  .tc-legend,
+  .ed-name-error,
+  .ed-form-label,
+  .ed-btn-sm,
+  .nw-status-text,
+  .nw-card-sub,
+  .nw-btn,
+  .nw-btn-sm,
+  .nw-section-title,
+  .nw-tag,
+  .nwc-status-text,
+  .nwc-card-sub,
+  .nwc-btn,
+  .nwc-btn-sm,
+  .nwc-section-title,
+  .nmc-status-text,
+  .nmc-btn,
+  .nm-section-title,
+  .nm-trend-label,
+  .nmp-row,
+  .ndc-conflict-badge,
+  .ndc-pid,
+  .ndc-vip,
+  .ndc-summary,
+  .svc-label,
+  .svc-hint,
+  .wcf-label,
+  .wcf-error,
+  .wcf-footer-hint {
+    font-size: 12px !important;
+  }
+}

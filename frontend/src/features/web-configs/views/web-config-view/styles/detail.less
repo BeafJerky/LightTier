@@ -1,0 +1,364 @@
+/* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示；提高选择器优先级覆盖 LtButton 默认 display） */
+.nwc-detail-title-row .nwc-back-btn {
+  display: none;
+}
+
+/* 移动端适配：窄屏时显示返回按钮与详情内的生命周期操作 */
+@media (width <= 900px) {
+  .nwc-detail-title-row .nwc-back-btn {
+    display: inline-flex;
+  }
+
+  .nwc-detail-actions .nwc-detail-lifecycle {
+    display: inline-flex;
+  }
+}
+
+/* 手机尺寸：字段网格降为单列，避免长值被挤成两行 */
+@media (width <= 480px) {
+  .nwc-root .nwc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nwc-detail-header {
+  display: flex;
+  padding-bottom: var(--theme-space-4);
+  margin-bottom: var(--theme-space-4);
+  border-bottom: 2px solid var(--theme-border-light);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--theme-space-3);
+}
+
+.nwc-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.nwc-detail-title {
+  margin: 0;
+  font-family: var(--theme-font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  overflow-wrap: break-word;
+}
+
+.nwc-badge {
+  padding: 2px var(--theme-space-3);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  white-space: nowrap;
+  border-radius: var(--theme-radius-pill);
+}
+
+.nwc-badge.on {
+  color: var(--theme-color-success-dark);
+  background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-color-success) 18%, transparent);
+}
+
+.nwc-badge.off {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
+}
+
+.nwc-badge.checking {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-text-muted) 24%, transparent);
+}
+
+.nwc-detail-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+  flex-wrap: wrap;
+}
+
+/* 宽屏列表卡片已提供生命周期操作，详情不再重复；窄屏列表隐藏时才显示。
+   用宽度条件而非基础 display:none，避免与上方窄屏媒体查询同优先级时被后续规则覆盖 */
+@media (width > 900px) {
+  .nwc-detail-actions .nwc-detail-lifecycle {
+    display: none;
+  }
+}
+
+/* Android：说明本机能力边界，避免误以为配置不可用 */
+.nwc-platform-hint {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin: 0 0 var(--theme-space-4);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-accent-primary) 6%, transparent);
+  border-radius: var(--theme-radius-md);
+}
+
+.nwc-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nwc-section-title {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  font-family: var(--theme-font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary);
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nwc-section-title::after {
+  height: 2px;
+  background: linear-gradient(90deg, var(--theme-border-light), transparent);
+  content: '';
+  flex: 1;
+}
+
+.nwc-grid {
+  display: grid;
+  overflow: hidden;
+  background: var(--theme-border-light);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-md);
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+}
+
+.nwc-field {
+  display: flex;
+  padding: var(--theme-space-3) var(--theme-space-4);
+  background: var(--theme-bg-card);
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nwc-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+}
+
+.nwc-val {
+  font-size: 13px;
+  color: var(--theme-text-primary);
+  word-break: break-all;
+}
+
+/* 裸按钮默认 stretch + 内容居中，会在值单元格里把链接顶到中间；
+   改为按内容收缩并左对齐，长地址在窄屏下仍可换行 */
+.nwc-link {
+  max-width: 100%;
+  color: var(--theme-accent-primary);
+  text-align: left;
+  text-decoration: underline;
+  word-break: break-all;
+  white-space: normal;
+  cursor: pointer;
+  align-self: flex-start;
+  justify-content: flex-start;
+}
+
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .nwc-link:hover {
+    filter: brightness(1.2);
+  }
+}
+
+/* --- 详情页（独立路由，列表与详情互斥） --- */
+.nwc-root.nwc-android .nwc-detail-header {
+  display: flex;
+  padding: var(--theme-space-5);
+  margin: 0 0 var(--theme-space-4);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--theme-space-3);
+}
+
+.nwc-root.nwc-android .nwc-detail-title-row {
+  gap: 8px;
+}
+
+.nwc-root.nwc-android .nwc-detail-title {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.nwc-root.nwc-android .nwc-badge {
+  padding: 3px 9px;
+  font-size: 10.5px;
+}
+
+.nwc-root.nwc-android .nwc-badge-proto {
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent-primary) 18%, transparent);
+}
+
+.nwc-root.nwc-android .nwc-detail-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nwc-root.nwc-android .nwc-detail-actions .nwc-detail-btn {
+  height: 42px;
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- 详情分组：标题在外，字段为分隔行 --- */
+.nwc-root.nwc-android .nwc-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nwc-root.nwc-android .nwc-section-title {
+  margin: 0 2px var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  gap: 0;
+}
+
+.nwc-root.nwc-android .nwc-section-title::after {
+  display: none;
+}
+
+.nwc-root.nwc-android .nwc-grid {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+.nwc-root.nwc-android .nwc-field {
+  display: flex;
+  padding: 12px 14px;
+  background: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nwc-root.nwc-android .nwc-grid > :first-child {
+  border-top: none;
+}
+
+.nwc-root.nwc-android .nwc-label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
+.nwc-root.nwc-android .nwc-val {
+  min-width: 0;
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.nwc-root.nwc-android .nwc-link {
+  max-width: 62%;
+  text-align: right;
+  align-self: center;
+  justify-content: flex-end;
+}
+
+.nwc-root.nwc-android .nwc-platform-hint {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nwc-danger-zone {
+  margin-top: var(--theme-space-5);
+}
+
+.nwc-danger-btn {
+  height: 48px;
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 服务管理 */
+.nwc-svc-bar {
+  display: flex;
+  padding: var(--theme-space-3) var(--theme-space-4);
+  background: var(--theme-bg-tag);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-md);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nwc-svc-status {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nwc-svc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--theme-radius-round);
+}
+
+.nwc-svc-dot.svc-running {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+}
+
+.nwc-svc-dot.svc-stopped {
+  background: var(--theme-text-muted);
+}
+
+.nwc-svc-dot.svc-uninstalled {
+  background: var(--theme-border);
+}
+
+.nwc-svc-dot.svc-checking {
+  background: var(--theme-border);
+  animation: nwc-pulse 1s infinite;
+}
+
+.nwc-svc-text {
+  font-size: 13px;
+  color: var(--theme-text-primary);
+}
+
+.nwc-svc-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}

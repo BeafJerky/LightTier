@@ -1,0 +1,11 @@
+# 生产构建使用相对路径，兼容 Tauri 自定义协议与子目录部署
+VITE_BASE_PATH=./
+
+VITE_DROP_DEBUGGER=true
+VITE_DROP_CONSOLE=false
+
+VITE_SOURCEMAP=false
+VITE_OUT_DIR=dist
+VITE_APP_TITLE="LightTier"
+VITE_USE_BUNDLE_ANALYZER=false
+VITE_USE_CSS_SPLIT=true

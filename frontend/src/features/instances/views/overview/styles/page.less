@@ -1,0 +1,295 @@
+.nd {
+  font-family: var(--theme-font-body);
+}
+
+/* 桌面端：整页不滚动，统计区固定，只有下方配置卡片区内部滚动。
+   底部避让沿用外层 .nl-content 的 --lt-fab-clearance，与其他页面一致。 */
+.nd:not(.nd-android) {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.nd:not(.nd-android) > .nd-queue-bar {
+  flex-shrink: 0;
+}
+
+.nd:not(.nd-android) > .nd-block-stats {
+  flex-shrink: 0;
+}
+
+.nd:not(.nd-android) > .nd-block-configs {
+  display: flex;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  flex: 1;
+  flex-direction: column;
+}
+
+.nd:not(.nd-android) .nd-grid-head {
+  flex-shrink: 0;
+}
+
+.nd:not(.nd-android) .nd-grid {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.nd-queue-bar {
+  display: flex;
+  padding: var(--theme-space-3) var(--theme-space-4);
+  margin-bottom: var(--theme-space-4);
+  background: color-mix(in srgb, var(--theme-accent-primary) 8%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--theme-accent-primary) 35%, transparent);
+  border-radius: var(--theme-radius-lg);
+  animation: ndQueueIn var(--theme-duration) var(--theme-ease-out);
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nd-queue-icon {
+  display: inline-block;
+  font-size: 14px;
+  color: var(--theme-accent-primary);
+  animation: ndQueueSpin 1.2s linear infinite;
+}
+
+.nd-queue-text {
+  font-size: 12px;
+  color: var(--theme-text-primary);
+}
+
+@keyframes ndQueueIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ndQueueSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.nd-block {
+  padding: var(--theme-space-5);
+  margin-bottom: var(--theme-space-4);
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nd-grid-head {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nd-grid-count {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nd-add-btn {
+  flex-shrink: 0;
+}
+
+.nd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--theme-space-3);
+  min-height: 100px;
+}
+
+.nd-empty {
+  display: flex;
+  padding: var(--theme-space-10) 0;
+  font-size: 14px;
+  color: var(--theme-text-muted);
+  grid-column-start: 1;
+  grid-column-end: -1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--theme-space-2);
+  text-align: center;
+}
+
+.nd-empty-icon {
+  font-size: 40px;
+  color: var(--theme-color-scrollbar);
+}
+
+.nd-empty-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-text-muted);
+}
+
+.nd-empty-desc {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.nd-empty-cta {
+  margin-top: var(--theme-space-2);
+}
+
+/* ===== Android：连接状态优先 ===== */
+.nd-android {
+  padding-bottom: var(--theme-space-2);
+}
+
+/* 横屏且够宽（手机横屏 / 平板）：主卡在左，配置列表在右 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nd-android {
+    display: grid;
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--theme-space-4);
+  }
+
+  .nd-android .nda-hero {
+    margin-bottom: 0;
+  }
+
+  .nd-android .nda-config-section {
+    margin-bottom: 0;
+  }
+
+  .nd-android > .nd-queue-bar {
+    grid-column-start: 1;
+    grid-column-end: -1;
+  }
+}
+
+/* 平板 / 折叠屏展开（宽且不矮）：主卡吸附在左侧，滚动配置列表时保持可见 */
+@media (width >= 900px) and (height >= 521px) {
+  .nd-android .nda-hero {
+    position: sticky;
+    top: 0;
+  }
+}
+
+.nd-android .nd-queue-bar {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin-bottom: var(--theme-space-3);
+  border-width: 1px;
+  border-radius: var(--theme-radius-md);
+}
+
+.nda-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.nda-section-head {
+  display: flex;
+  padding: 0 2px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nda-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--theme-text-primary);
+}
+
+.nda-new-btn {
+  margin: -8px -8px -8px 0;
+  color: var(--theme-accent-primary);
+}
+
+.nda-list {
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+}
+
+.nda-empty {
+  display: flex;
+  padding: 36px var(--theme-space-5);
+  flex-direction: column;
+  text-align: center;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nda-empty-icon {
+  display: flex;
+  width: 58px;
+  height: 58px;
+  margin-bottom: var(--theme-space-1);
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nda-empty-desc {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--theme-text-muted);
+}
+
+.nda-empty-cta {
+  margin-top: 6px;
+}
+
+@media (hover: hover) {
+  .nda-new-btn:hover {
+    background: var(--theme-bg-hover);
+  }
+}
+
+/* 移动端适配：配置卡片单列排布 */
+@media (width <= 900px) {
+  .nd-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+/* 自定义确认弹窗 */
+.nd-cfm-msg {
+  max-height: 260px;
+  padding: var(--theme-space-1) 0 0;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+  white-space: pre-line;
+}
+
+.nd-cfm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--theme-space-3);
+  margin-top: var(--theme-space-4);
+}

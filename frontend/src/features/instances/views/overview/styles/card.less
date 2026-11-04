@@ -1,0 +1,164 @@
+.nd-config-card {
+  display: flex;
+  padding: var(--theme-space-4);
+  background: var(--theme-bg);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-lg);
+  transition: var(--theme-transition-surface);
+  flex-direction: column;
+}
+
+.nd-config-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+.ndc-on {
+  background: color-mix(in srgb, var(--theme-color-success) 4%, var(--theme-bg));
+  border-color: color-mix(in srgb, var(--theme-color-success) 22%, var(--theme-border-light));
+}
+
+/* 卡片主体即进入配置详情的入口：整块可点，操作按钮留在主体之外 */
+.ndc-main {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.ndc-main :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ndc-main-inner {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+}
+
+.ndc-top {
+  display: flex;
+  margin-bottom: var(--theme-space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ndc-top-right {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.ndc-conflict-badge {
+  max-width: 55%;
+  padding: 2px var(--theme-space-2);
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-color-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
+  border-radius: var(--theme-radius-pill);
+}
+
+.ndc-conflict {
+  animation: ndcConflictFlash var(--theme-duration-slow) var(--theme-ease-out) 2;
+}
+
+@keyframes ndcConflictFlash {
+  0%,
+  100% {
+    border-color: var(--theme-border-light);
+  }
+
+  50% {
+    border-color: var(--theme-color-danger);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--theme-color-danger) 35%, transparent);
+  }
+}
+
+.ndc-status {
+  display: inline-flex;
+  padding: 2px 8px 2px 7px;
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
+  border-radius: var(--theme-radius-pill);
+  align-items: center;
+  gap: 6px;
+}
+
+.ndc-status.on {
+  color: var(--theme-color-success-dark);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.ndc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--theme-radius-round);
+}
+
+.ndc-dot.on {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+}
+
+.ndc-dot.off {
+  background: var(--theme-text-muted);
+}
+
+.ndc-status-text {
+  font-size: 11px;
+  color: inherit;
+}
+
+.ndc-pid {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+}
+
+.ndc-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.4;
+  flex-shrink: 0;
+  transition: opacity var(--theme-duration) var(--theme-ease-out);
+}
+
+.nd-config-card:hover .ndc-chev {
+  opacity: 0.8;
+}
+
+.ndc-name {
+  display: block;
+  margin-bottom: 4px;
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ndc-summary {
+  display: flex;
+  min-height: 16px;
+  margin-bottom: var(--theme-space-3);
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  align-items: center;
+}
+
+.ndc-summary.on {
+  color: var(--theme-text-secondary);
+}
+
+.ndc-actions {
+  display: flex;
+  margin-top: auto;
+  gap: var(--theme-space-2);
+  flex-wrap: wrap;
+}

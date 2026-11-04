@@ -1,0 +1,29 @@
+/* Section */
+.nm-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-section-title {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  font-family: var(--theme-font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary);
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nm-section-title::after {
+  height: 2px;
+  background: linear-gradient(90deg, var(--theme-border-light), transparent);
+  content: '';
+  flex: 1;
+}
+
+.nm-section-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--theme-text-muted);
+}

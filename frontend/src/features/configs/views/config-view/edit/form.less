@@ -1,0 +1,212 @@
+/* 编辑表单（基础字段 / 高级选项 / 安全模式 / 未兼容项）：由 BasicForm 与 AdvancedForm
+   的 scoped 样式共同引入；壳组件只保留名称栏、tab、编辑区容器与底部操作栏样式。 */
+
+.ed-compat-note {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.ed-field-warn {
+  margin-left: 4px;
+  color: var(--theme-color-warning, #d9a441);
+  cursor: help;
+}
+
+.ed-field-unsupported .ed-form-label {
+  color: var(--theme-color-warning, #d9a441);
+}
+
+.ed-input-unsupported :deep(.n-input__border),
+.ed-input-unsupported :deep(.n-input__state-border) {
+  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 45%, transparent);
+}
+
+.ed-form-section {
+  margin-bottom: 20px;
+}
+
+.ed-form-section-title {
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  font-family: var(--theme-font-display, 'Quicksand', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary, #e8a0a0);
+  border-bottom: 1px solid var(--theme-border-light, #f5ede6);
+}
+
+.ed-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ed-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ed-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-muted, #c8bdb2);
+  text-transform: uppercase;
+}
+
+.ed-form-switch-wrap {
+  padding: 4px 0;
+}
+
+.ed-tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ed-tag-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ed-tag-input {
+  flex: 1;
+}
+
+.ed-tag-input-short {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.ed-tag-add {
+  align-self: flex-start;
+}
+
+/* 5.6：折叠分组 + 安全字段 */
+.ed-adv-collapse {
+  margin-bottom: 20px;
+}
+
+.ed-adv-collapse summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ed-adv-collapse summary::-webkit-details-marker {
+  display: none;
+}
+
+.ed-adv-collapse[open] .ed-adv-summary::before {
+  content: '▾ ';
+}
+
+.ed-adv-collapse:not([open]) .ed-adv-summary::before {
+  content: '▸ ';
+}
+
+/* 当前内核未兼容：表单最后方，默认收起，只读展示 */
+.ed-locked-collapse {
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 5%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--theme-color-warning, #d9a441) 35%, transparent);
+  border-radius: var(--theme-radius-md, 10px);
+}
+
+.ed-locked-collapse .ed-form-section-title {
+  margin-bottom: 8px;
+  color: var(--theme-color-warning, #d9a441);
+  border-bottom-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 25%, transparent);
+}
+
+.ed-locked-hint {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+}
+
+.ed-locked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ed-locked-row {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--theme-bg-card, #fff) 55%, transparent);
+  border-radius: var(--theme-radius-sm, 6px);
+  align-items: baseline;
+}
+
+.ed-locked-key {
+  color: var(--theme-color-warning, #d9a441);
+  word-break: break-all;
+  flex-shrink: 0;
+}
+
+.ed-locked-value {
+  color: var(--theme-text-secondary, #7a6e5e);
+  word-break: break-all;
+}
+
+/* 安全模式：表单最底部，开关常显、字段按需展开 */
+.ed-secure-section {
+  padding-top: 4px;
+  border-top: 1px dashed var(--theme-border-light, #f5ede6);
+}
+
+.ed-secure-head {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--theme-border-light, #f5ede6);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ed-secure-title {
+  font-family: var(--theme-font-display, 'Quicksand', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.ed-form-field-wide {
+  grid-column-start: 1;
+  grid-column-end: -1;
+}
+
+.ed-secret-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ed-secret-row .lt-input {
+  flex: 1;
+}
+
+.ed-secret-input :deep(.n-input__input-el) {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  letter-spacing: 2px;
+}
+
+/* 移动端窄屏：表单单列 */
+@media (width <= 640px) {
+  .ed-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

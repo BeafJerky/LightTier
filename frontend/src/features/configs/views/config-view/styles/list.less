@@ -1,0 +1,310 @@
+/* 配置列表（左侧栏）样式：由 ConfigList.vue 的 scoped 样式引入；
+   Android 作用域覆盖（.nw-root.nw-android ...）保留在 index.vue 以便统一平台分支。 */
+
+.nw-left-header {
+  display: flex;
+  padding: 0 var(--theme-space-1);
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+/* 搜索框固定于列表顶部，列表滚动时保持可见 */
+.nw-left-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nw-search {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.nw-search-input {
+  width: 100%;
+}
+
+.nw-add-btn {
+  color: var(--theme-accent-primary);
+}
+
+.nw-add-btn:active {
+  background: var(--theme-bg-active);
+  transform: scale(0.94);
+}
+
+.nw-left-scroll {
+  display: flex;
+  min-height: 0;
+  padding: var(--theme-space-3);
+  overflow-y: auto;
+  background: var(--theme-bg-tag);
+  border-radius: var(--theme-radius-md);
+  flex: 1;
+  flex-direction: column;
+  gap: var(--theme-space-3);
+}
+
+.nw-card-list {
+  /* 保持块级流：离场卡片绝对定位时仍停在原槽位 */
+  display: block;
+}
+
+.nw-card-list .nw-card + .nw-card {
+  margin-top: var(--theme-space-3);
+}
+
+.nw-card {
+  padding: var(--theme-space-4);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  transition: var(--theme-transition-surface);
+  flex-shrink: 0;
+}
+
+.nw-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+.nw-card.active {
+  border-color: var(--theme-accent-primary);
+  box-shadow: 0 0 0 2px var(--theme-bg-active);
+}
+
+/* 列表重排：Vue TransitionGroup 的 FLIP 只动 transform，避免布局重算 */
+.nw-card-move {
+  transition: transform var(--theme-duration) var(--theme-ease-out);
+}
+
+.nw-card-enter-active {
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-out),
+    transform var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+/* 离场脱离文档流，让其余卡片立即开始补位 */
+.nw-card-leave-active {
+  position: absolute;
+  right: var(--theme-space-3);
+  left: var(--theme-space-3);
+  pointer-events: none;
+  transition:
+    opacity var(--theme-duration-fast) var(--theme-ease-in),
+    transform var(--theme-duration-fast) var(--theme-ease-in);
+}
+
+.nw-card-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.nw-card-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.nw-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--theme-space-1);
+}
+
+.nw-card-status {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-1);
+}
+
+.nw-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--theme-radius-round);
+}
+
+.nw-dot.on {
+  background: var(--theme-color-success);
+}
+
+.nw-dot.off {
+  background: var(--theme-text-muted);
+}
+
+.nw-status-text {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nw-card-pid {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.nw-card-name {
+  margin-bottom: 2px;
+  font-family: var(--theme-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nw-card-sub {
+  margin-bottom: var(--theme-space-3);
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nw-card-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}
+
+.nw-row {
+  display: flex;
+  min-height: 60px;
+  padding: 10px 14px 10px 12px;
+  cursor: pointer;
+  align-items: center;
+  gap: var(--theme-space-3);
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.nw-row + .nw-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nw-row:active {
+  background: var(--theme-bg-hover);
+}
+
+.nw-row-on {
+  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+}
+
+/* 横屏分栏：标出右侧详情对应的列表行 */
+.nw-row.active {
+  background: var(--theme-bg-active);
+  box-shadow: inset 3px 0 0 var(--theme-accent-primary);
+}
+
+.nw-row-on.active {
+  background: color-mix(in srgb, var(--theme-color-success) 10%, var(--theme-bg-active));
+  box-shadow: inset 3px 0 0 var(--theme-color-success);
+}
+
+.nw-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-hover);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nw-row-icon.on {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nw-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nw-row-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nw-row-sub {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.nw-row-sub .nw-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+
+.nw-row-state {
+  flex-shrink: 0;
+}
+
+.nw-row-extra {
+  flex-shrink: 0;
+}
+
+.nw-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+@media (hover: hover) {
+  .nw-row:hover {
+    background: var(--theme-bg-hover);
+  }
+
+  .nw-row-on:hover {
+    background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+  }
+
+  .nw-add-btn:hover {
+    background: var(--theme-bg-hover);
+  }
+}
+
+/* --- 空状态 --- */
+.nw-empty-icon {
+  font-size: 40px;
+  color: var(--theme-color-scrollbar);
+}
+
+.nw-empty-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--theme-space-10) 0;
+  gap: var(--theme-space-2);
+  color: var(--theme-text-muted);
+}
+
+.nw-empty-cards p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.nw-empty-desc {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+.nw-empty-cta {
+  margin-top: var(--theme-space-2);
+}

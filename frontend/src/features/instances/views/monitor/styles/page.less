@@ -1,0 +1,858 @@
+.nm-root {
+  display: flex;
+  gap: var(--theme-space-4);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--theme-font-body);
+}
+
+/* 左侧列表 */
+.nm-left {
+  display: flex;
+  width: 240px;
+  min-height: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.nm-left-scroll {
+  display: flex;
+  min-height: 0;
+  padding: var(--theme-space-3);
+  overflow-y: auto;
+  background: var(--theme-bg-tag);
+  border-radius: var(--theme-radius-md);
+  flex: 1;
+  flex-direction: column;
+  gap: var(--theme-space-3);
+}
+
+.nm-card {
+  position: relative;
+  padding: var(--theme-space-4);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  transition: var(--theme-transition-surface);
+  flex-shrink: 0;
+}
+
+.nm-card:active {
+  border-color: var(--theme-accent-primary);
+}
+
+.nm-android .nm-card {
+  padding-right: 42px;
+}
+
+.nmc-chev {
+  position: absolute;
+  top: 50%;
+  right: var(--theme-space-4);
+  color: var(--theme-text-muted);
+  transform: translateY(-50%);
+}
+
+.nm-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+.nm-card.active {
+  border-color: var(--theme-accent-primary);
+  box-shadow: 0 0 0 2px var(--theme-bg-active);
+}
+
+.nmc-top {
+  display: flex;
+  margin-bottom: var(--theme-space-1);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nmc-status {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-1);
+}
+
+.nmc-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--theme-radius-round);
+}
+
+.nmc-dot.on {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+}
+
+.nmc-dot.off {
+  background: var(--theme-text-muted);
+}
+
+.nmc-status-text {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nmc-pid {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.nmc-rpc {
+  margin-top: 2px;
+  font-family: var(--theme-font-mono, monospace);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  opacity: 0.8;
+}
+
+.nmc-name {
+  margin-bottom: 2px;
+  font-family: var(--theme-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nmc-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}
+
+.nmc-btn {
+  padding: var(--theme-space-1) var(--theme-space-4);
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--theme-radius-pill);
+  transition: var(--theme-transition-interactive);
+}
+
+.nmc-btn-run {
+  color: var(--theme-text-white);
+  background: var(--theme-color-success);
+}
+
+.nmc-btn-run:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.nmc-btn-stop {
+  color: var(--theme-accent-primary);
+  background: var(--theme-bg-hover);
+}
+
+.nmc-btn-stop:hover:not(:disabled) {
+  background: var(--theme-bg-active);
+}
+
+.nmc-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+  transform: none !important;
+}
+
+/* 右侧详情 */
+.nm-right {
+  min-height: 0;
+  padding: var(--theme-space-5) var(--theme-space-6);
+  overflow-y: auto;
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  flex: 1;
+}
+
+/* 移动端适配：master-detail 互斥，列表与详情单独展示 */
+@media (width <= 900px) {
+  .nm-root {
+    flex-direction: column;
+  }
+
+  .nm-left {
+    width: 100%;
+    flex: 1;
+  }
+
+  /* 选中详情后隐藏列表，仅展示详情 */
+  .nm-detail-open .nm-left {
+    display: none;
+  }
+
+  /* 清单态隐藏空占位面板 */
+  .nm-root:not(.nm-detail-open) .nm-right {
+    display: none;
+  }
+
+  .nm-right {
+    flex: 1;
+    padding: var(--theme-space-4);
+  }
+
+  .nm-detail-actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* ===== Android：与总览/设置一致的分组卡片语言 ===== */
+.nm-root.nm-android {
+  display: block;
+  height: auto;
+  min-height: auto;
+}
+
+/* 空状态 */
+.nm-root.nm-android .nm-empty-cards {
+  padding: 34px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  gap: 6px;
+}
+
+.nm-root.nm-android .nm-empty-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 24px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-root.nm-android .nm-empty-cards p {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-root.nm-android .nm-empty-desc {
+  font-size: 11.5px;
+}
+
+.nm-root.nm-android .nm-empty-cta {
+  margin-top: 8px;
+}
+
+/* 详情：Android 无列表，详情/空态直接占据页面 */
+.nm-root.nm-android .nm-right {
+  display: block;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  flex: none;
+}
+
+/* --- 实时流量：主卡下方的两张统计卡 --- */
+.nm-traffic {
+  display: grid;
+  margin-bottom: var(--theme-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nm-traffic-card {
+  display: flex;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nm-traffic-label {
+  font-size: 10.5px;
+  letter-spacing: 0.2px;
+  color: var(--theme-text-muted);
+}
+
+.nm-traffic-value {
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nm-root.nm-android .nm-detail-header {
+  display: flex;
+  padding: var(--theme-space-5);
+  margin: 0 0 var(--theme-space-4);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--theme-space-3);
+}
+
+.nm-root.nm-android .nm-detail-header.nm-detail-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 15%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nm-root.nm-android :deep(.nm-detail-title-row) {
+  gap: 8px;
+}
+
+.nm-root.nm-android :deep(.nm-detail-title) {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.nm-root.nm-android :deep(.nm-badge) {
+  padding: 3px 9px;
+  font-size: 10.5px;
+}
+
+.nm-root.nm-android :deep(.nm-detail-rpc) {
+  padding: 3px 9px;
+  margin-left: auto;
+  font-size: 10.5px;
+  background: var(--theme-bg-tag);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-pill);
+}
+
+/* 分区与节点信息 */
+.nm-root.nm-android .nm-section {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-root.nm-android :deep(.nm-section-title) {
+  margin: 0 2px var(--theme-space-2);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  gap: 4px;
+}
+
+.nm-root.nm-android :deep(.nm-section-title)::after {
+  display: none;
+}
+
+.nm-root.nm-android :deep(.nm-grid) {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+.nm-root.nm-android :deep(.nm-field) {
+  display: flex;
+  padding: 12px 14px;
+  background: transparent;
+  border-top: 1px solid var(--theme-border-light);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+}
+
+.nm-root.nm-android :deep(.nm-field:first-child) {
+  border-top: none;
+}
+
+.nm-root.nm-android :deep(.nm-label) {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
+.nm-root.nm-android :deep(.nm-val) {
+  min-width: 0;
+  font-size: 12.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* 趋势卡 */
+.nm-root.nm-android .nm-trend-collapse {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-root.nm-android .nm-trend-summary {
+  padding: 0 2px var(--theme-space-2);
+  align-items: center;
+}
+
+.nm-root.nm-android .nm-trend-summary::after {
+  display: none;
+}
+
+.nm-root.nm-android .nm-trend-summary::before {
+  order: 1;
+  margin: 0 2px 0 auto;
+}
+
+.nm-root.nm-android .nm-trend-label {
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+}
+
+.nm-root.nm-android .nm-trend-body {
+  padding: 10px 8px 8px;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 对等节点分组卡 */
+.nm-root.nm-android :deep(.nm-peer-grid) {
+  display: block;
+  overflow: hidden;
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg, 14px);
+  gap: 0;
+}
+
+.nm-root.nm-android :deep(.nm-peer-card) {
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.nm-root.nm-android :deep(.nm-peer-card + .nm-peer-card) {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nm-root.nm-android :deep(.nmp-top) {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.nm-root.nm-android :deep(.nmp-hostname) {
+  font-family: var(--theme-font-body);
+  font-size: 13.5px;
+}
+
+.nm-root.nm-android :deep(.nmp-lat) {
+  font-family: var(--theme-font-body);
+  font-size: 12.5px;
+}
+
+.nm-root.nm-android :deep(.nmp-row) {
+  font-size: 12px;
+}
+
+.nm-root.nm-android :deep(.nmp-key) {
+  color: var(--theme-text-muted);
+}
+
+.nm-root.nm-android :deep(.nmp-val) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nm-root.nm-android .nm-update-time {
+  padding: var(--theme-space-2) 0 4px;
+  font-size: 10.5px;
+  text-align: center;
+  border-top: none;
+}
+
+/* 加载 / 未运行 / 失败状态 */
+.nm-root.nm-android .nm-state,
+.nm-root.nm-android .nm-empty {
+  height: auto;
+  padding: 44px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  opacity: 1;
+}
+
+.nm-root.nm-android .nm-state-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 26px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nm-root.nm-android .nm-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-root.nm-android .nm-stale-banner {
+  border-radius: var(--theme-radius-lg, 14px);
+}
+
+/* 手机尺寸：统计卡改为 2×2，避免四项横排把数值挤成两行 */
+@media (width <= 480px) {
+  .nm-root .nm-peer-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nm-root .nm-peer-stat {
+    min-width: 0;
+  }
+}
+
+.nm-detail-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}
+
+.nm-btn-lg {
+  padding: var(--theme-space-2) var(--theme-space-5);
+  font-family: var(--theme-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--theme-radius-pill);
+  transition: var(--theme-transition-interactive);
+}
+
+.nm-btn-start {
+  color: var(--theme-text-white);
+  background: var(--theme-color-success);
+}
+
+.nm-btn-start:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.nm-btn-kill {
+  color: var(--theme-accent-primary);
+  background: var(--theme-bg-hover);
+}
+
+.nm-btn-kill:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.nm-btn-lg:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+  transform: none !important;
+}
+
+/* Peer 摘要统计 */
+.nm-peer-summary {
+  display: flex;
+  gap: var(--theme-space-3);
+  margin-bottom: var(--theme-space-4);
+  flex-wrap: wrap;
+}
+
+.nm-peer-stat {
+  display: flex;
+  padding: var(--theme-space-3);
+  background: var(--theme-bg-tag);
+  border-radius: var(--theme-radius-lg);
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.nm-ps-num {
+  font-family: var(--theme-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  white-space: nowrap;
+}
+
+.nm-ps-lbl {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-muted);
+}
+
+/* 5.16：趋势折叠区块（标题沿用区块标题样式，折叠内容自成一卡） */
+.nm-trend-collapse {
+  margin-bottom: var(--theme-space-4);
+}
+
+.nm-trend-summary {
+  display: flex;
+  padding: 0 0 var(--theme-space-3);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  align-items: center;
+}
+
+.nm-trend-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 折叠指示放右端：标题起点与「节点信息/对等节点」对齐 */
+.nm-trend-summary::before {
+  order: 2;
+  width: 7px;
+  height: 7px;
+  margin: 0 2px 4px var(--theme-space-2);
+  border-right: 1.5px solid var(--theme-text-secondary);
+  border-bottom: 1.5px solid var(--theme-text-secondary);
+  content: '';
+  transform: rotate(45deg);
+  transition: transform var(--theme-duration-fast) var(--theme-ease-out);
+}
+
+.nm-trend-collapse[open] .nm-trend-summary::before {
+  transform: rotate(225deg);
+}
+
+/* 与节点信息/对等节点同款尾线，宽屏下标题不孤悬 */
+.nm-trend-summary::after {
+  order: 1;
+  flex: 1;
+  height: 2px;
+  margin-left: var(--theme-space-2);
+  background: linear-gradient(90deg, var(--theme-border-light), transparent);
+  content: '';
+}
+
+.nm-trend-label {
+  display: inline-flex;
+  font-family: var(--theme-font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--theme-accent-primary);
+  align-items: center;
+}
+
+.nm-trend-body {
+  padding: var(--theme-space-2) var(--theme-space-4) var(--theme-space-4);
+  background: var(--theme-bg-tag);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-md);
+}
+
+/* 更新时间 */
+.nm-update-time {
+  padding-top: var(--theme-space-2);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  text-align: right;
+  border-top: 1px solid var(--theme-border-light);
+}
+
+/* 空态 */
+.nm-empty {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--theme-space-2);
+  opacity: 0.5;
+}
+
+.nm-empty-icon {
+  font-size: 40px;
+  color: var(--theme-color-scrollbar);
+}
+
+.nm-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-text-muted);
+}
+
+.nm-empty-cards {
+  display: flex;
+  padding: var(--theme-space-10) 0;
+  color: var(--theme-text-muted);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nm-empty-cards p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.nm-empty-desc {
+  max-width: 260px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+.nm-empty-cta {
+  margin-top: var(--theme-space-2);
+}
+
+/* 选中实例但无快照时的居中状态（加载 / 未运行 / 从未成功） */
+.nm-state {
+  display: flex;
+  height: calc(100% - 80px);
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--theme-space-2);
+  text-align: center;
+}
+
+.nm-state-icon {
+  font-size: 32px;
+  color: var(--theme-text-muted);
+}
+
+.nm-state-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-text-secondary);
+}
+
+.nm-state-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--theme-border);
+  border-top-color: var(--theme-accent-primary);
+  border-radius: var(--theme-radius-round);
+  animation: nm-spin 0.8s linear infinite;
+}
+
+@keyframes nm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 轮询失败横幅：前两次为轻提示，达到上限转为警示色并给出重试 */
+.nm-stale-banner {
+  display: flex;
+  padding: var(--theme-space-2) var(--theme-space-4);
+  margin-bottom: var(--theme-space-4);
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  background: var(--theme-bg-hover);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-3);
+}
+
+.nm-stale-banner.warn {
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--theme-accent-primary) 25%, transparent);
+}
+
+.nm-stale-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.nm-stale-time {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.nm-stale-retry {
+  flex-shrink: 0;
+}
+
+/* 分栏容器：默认透明包裹，桌面与竖屏保持原有纵向排列 */
+.nm-main-col,
+.nm-side-col {
+  display: contents;
+}
+
+/* Android 横屏宽屏：运行态仪表盘左右分栏，两栏各自滚动 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nm-root.nm-android.nm-ls-split {
+    display: block;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-right {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    align-items: stretch;
+    gap: var(--theme-space-4);
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-main-col,
+  .nm-root.nm-android.nm-ls-split .nm-side-col {
+    display: flex;
+    min-height: 0;
+    padding-right: 2px;
+    overflow-y: auto;
+    flex-direction: column;
+  }
+
+  /* 分栏内保持卡片原始高度，超出部分交给栏内滚动 */
+  .nm-root.nm-android.nm-ls-split .nm-main-col > *,
+  .nm-root.nm-android.nm-ls-split .nm-side-col > * {
+    flex-shrink: 0;
+  }
+
+  .nm-root.nm-android.nm-ls-split .nm-main-col > :last-child,
+  .nm-root.nm-android.nm-ls-split .nm-side-col > :last-child {
+    margin-bottom: 0;
+  }
+}

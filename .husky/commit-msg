@@ -1,0 +1,6 @@
+cd "$(dirname "$0")/.." || exit 1
+case "$1" in
+  /*) msg="$1" ;;
+  *) msg="$(git rev-parse --show-toplevel)/$1" ;;
+esac
+pnpm exec commitlint --edit "$msg"

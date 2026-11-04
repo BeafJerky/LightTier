@@ -1,0 +1,61 @@
+/* @theme-label: 丹青水墨 */
+:root {
+  /* 丹青水墨主题 — 宣纸暖白底 + 墨色文字 + 石青/朱砂点缀 */
+  --theme-bg: #f3f0e7;
+  --theme-bg-card: #fbf9f2;
+  --theme-bg-sidebar: linear-gradient(180deg, #ece7db, #dfd9ca);
+  --theme-bg-toolbar: #fbf9f2;
+  --theme-bg-hover: rgba(58, 79, 96, 0.07);
+  --theme-bg-active: rgba(58, 79, 96, 0.12);
+  --theme-bg-tag: #e9e4d7;
+
+  --theme-text-primary: #2b3238;
+  --theme-text-secondary: #5a646a;
+  --theme-text-muted: #8e9699;
+  --theme-text-white: #fffdf8;
+
+  /* 石青为主色，朱砂为辅助色，取“丹青”之意 */
+  --theme-accent-primary: #40657a;
+  --theme-accent-secondary: #a85342;
+  --theme-accent-hover: #345467;
+  --theme-color-success: #477358;
+  --theme-color-success-dark: #3a6149;
+  --theme-color-danger: #a85342;
+  --theme-color-warning: #b9854a;
+  --theme-color-info: #6a93a3;
+
+  --theme-border: #d7d1c2;
+  --theme-border-light: #e5e0d4;
+  --theme-color-scrollbar: #c7c0af;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #eae5d9;
+  --theme-surface-hover: #e0dacb;
+  --theme-text-on-accent: #fdfbf5;
+
+  /* 阴影 — 淡墨晕染，避免生硬纯黑 */
+  --theme-shadow-sm: 0 8px 28px rgba(43, 50, 55, 0.06);
+  --theme-shadow-md: 0 12px 36px rgba(43, 50, 55, 0.08);
+  --theme-shadow-toast: 0 6px 24px rgba(43, 50, 55, 0.11);
+
+  /* 圆角 — 与现有主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 标题用楷体/宋体承接水墨气质，正文保持无衬线以保证可读性 */
+  --theme-font-display:
+    'Quicksand', 'KaiTi', 'STKaiti', 'Kaiti SC', 'Songti SC', 'SimSun', 'Noto Serif CJK SC', serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  /* 动效 — 与现有主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

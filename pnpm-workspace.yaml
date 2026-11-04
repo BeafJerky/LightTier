@@ -1,0 +1,13 @@
+packages:
+  - '.'
+
+# 与 src-tauri/Cargo.lock 的 tauri 2.10.3 对齐，避免插件按 ^ 范围漂移
+overrides:
+  '@tauri-apps/api': 2.10.1
+  '@tauri-apps/plugin-os': 2.3.2
+  '@tauri-apps/plugin-window-state': 2.4.1
+
+allowBuilds:
+  core-js: true
+  es5-ext: true
+  esbuild: true

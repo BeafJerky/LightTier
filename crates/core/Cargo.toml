@@ -1,0 +1,13 @@
+[package]
+name = "lighttier-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LightTier 跨平台通用能力：日志装配与系统命令"
+
+[dependencies]
+log = "0.4.29"
+chrono = "0.4.44"
+tauri = "2.10.3"
+tauri-plugin-log = "2.8.0"
+tauri-plugin-shell = "2.3.5"

@@ -1,0 +1,10 @@
+[package]
+name = "lighttier-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LightTier 桌面端能力：内核子进程与应用内更新"
+
+[dependencies]
+log = "0.4.29"
+tauri = "2.10.3"

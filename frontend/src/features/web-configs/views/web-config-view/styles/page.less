@@ -1,0 +1,302 @@
+.nwc-root {
+  display: flex;
+  gap: var(--theme-space-4);
+  height: 100%;
+  min-height: 0;
+  font-family: var(--theme-font-body);
+}
+
+.nwc-left {
+  display: flex;
+  width: 240px;
+  min-height: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--theme-space-2);
+}
+
+.nwc-right {
+  min-height: 0;
+  padding: var(--theme-space-5) var(--theme-space-6);
+  overflow-y: auto;
+  background: var(--theme-bg-card);
+  border: 1.5px solid var(--theme-border);
+  border-radius: var(--theme-radius-xl);
+  flex: 1;
+}
+
+/* 移动端适配：master-detail 互斥，列表与详情单独展示 */
+@media (width <= 900px) {
+  .nwc-root {
+    flex-direction: column;
+  }
+
+  .nwc-left {
+    width: 100%;
+    flex: 1;
+  }
+
+  /* 未选中时隐藏空状态卡片，仅展示列表 */
+  .nwc-root:not(.nwc-detail-open) .nwc-right {
+    display: none;
+  }
+
+  /* 选中详情后隐藏列表，仅展示详情 */
+  .nwc-detail-open .nwc-left {
+    display: none;
+  }
+
+  .nwc-right {
+    flex: 1;
+    padding: var(--theme-space-4);
+  }
+}
+
+.nwc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--theme-space-2);
+  opacity: 0.5;
+}
+
+.nwc-empty-icon {
+  font-size: 40px;
+  color: var(--theme-color-scrollbar);
+}
+
+.nwc-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-text-muted);
+}
+
+/* ===== Android：总览式分组列表与详情 ===== */
+.nwc-root.nwc-android {
+  display: block;
+  height: auto;
+  min-height: auto;
+}
+
+.nwc-root.nwc-android .nwc-left {
+  display: flex;
+  width: 100%;
+  flex: none;
+  flex-direction: column;
+}
+
+/* --- 详情页（独立路由，列表与详情互斥） --- */
+.nwc-root.nwc-android .nwc-right {
+  display: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.nwc-root.nwc-android.nwc-detail-open .nwc-left {
+  display: none;
+}
+
+.nwc-root.nwc-android.nwc-detail-open .nwc-right {
+  display: block;
+}
+
+/* 详情加载态也使用卡片容器；Android 空态图标沿用列表卡片的圆形图标 */
+.nwc-root.nwc-android .nwc-empty {
+  height: auto;
+  padding: 44px var(--theme-space-5);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+  opacity: 1;
+}
+
+.nwc-root.nwc-android .nwc-empty-icon {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 2px;
+  font-size: 24px;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-round);
+  align-items: center;
+  justify-content: center;
+}
+
+.nwc-state-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--theme-border);
+  border-top-color: var(--theme-accent-primary);
+  border-radius: var(--theme-radius-round);
+  animation: nwc-spin 0.8s linear infinite;
+}
+
+@keyframes nwc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nwc-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 服务安装弹窗 */
+.nwc-svc-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-4);
+}
+
+.nwc-svc-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-1);
+}
+
+.nwc-svc-radio-group {
+  display: flex;
+  gap: var(--theme-space-3);
+}
+
+/* 复用 wcf-* 样式（原定义在 WebConfigForm.vue scoped 中，跨组件不生效） */
+.wcf-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-muted, #c8bdb2);
+  text-transform: uppercase;
+}
+
+.wcf-radio {
+  position: relative;
+  display: inline-flex;
+  padding: var(--theme-space-2) var(--theme-space-4);
+  font-size: 13px;
+  color: var(--theme-text-secondary, #7a6e5e);
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px solid var(--theme-border, #ede4db);
+  border-radius: var(--theme-radius-pill, 100px);
+  transition: var(--theme-transition-interactive);
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.wcf-radio:hover {
+  border-color: var(--theme-accent-primary, #e8a0a0);
+}
+
+/* 原生 radio 隐藏后，键盘聚焦时在整个胶囊上显示焦点环 */
+.wcf-radio:has(input:focus-visible) {
+  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
+  outline-offset: 2px;
+}
+
+.wcf-radio.active {
+  color: var(--theme-accent-primary, #e8a0a0);
+  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 6%, transparent);
+  border-color: var(--theme-accent-primary, #e8a0a0);
+}
+
+.wcf-radio-dot {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--theme-border, #ede4db);
+  border-radius: 50%;
+  transition: var(--theme-transition-colors);
+}
+
+.wcf-radio.active .wcf-radio-dot {
+  background: var(--theme-accent-primary, #e8a0a0);
+  border-color: var(--theme-accent-primary, #e8a0a0);
+  box-shadow: inset 0 0 0 2px var(--theme-bg-card, #fff);
+}
+
+.wcf-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.nwc-footer-actions {
+  display: flex;
+  gap: var(--theme-space-2);
+}
+
+.wcf-footer-hint {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted, #c8bdb2);
+  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 4%, transparent);
+  border-radius: var(--theme-radius-sm, 6px);
+}
+
+/* 确认弹窗 */
+.cfm-msg {
+  padding: var(--theme-space-1) 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+}
+
+.cfm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--theme-space-3);
+  margin-top: var(--theme-space-4);
+}
+
+/* Android 横屏宽屏：列表与详情常驻左右分栏，两栏各自滚动 */
+@media (width >= 700px) and (orientation: landscape) {
+  .nwc-root.nwc-android {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    align-items: stretch;
+    gap: var(--theme-space-4);
+  }
+
+  .nwc-root.nwc-android .nwc-left,
+  .nwc-root.nwc-android.nwc-detail-open .nwc-left {
+    display: flex;
+    width: auto;
+    min-height: 0;
+  }
+
+  .nwc-root.nwc-android .nwc-right {
+    display: block;
+    min-height: 0;
+    padding: var(--theme-space-4);
+    overflow-y: auto;
+    background: var(--theme-bg-card);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius-xl);
+  }
+
+  /* 右栏本身已是卡片，内部占位/加载态不再套一层卡片 */
+  .nwc-root.nwc-android .nwc-right > .nwc-empty {
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+}

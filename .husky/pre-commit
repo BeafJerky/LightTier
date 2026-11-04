@@ -1,0 +1,4 @@
+# 仓库根或 source/ 作为 git 根时都能定位到 package 目录
+cd "$(dirname "$0")/.." || exit 1
+pnpm run ts:check
+pnpm run lint:lint-staged

@@ -1,0 +1,95 @@
+.nd-stats {
+  display: flex;
+  gap: var(--theme-space-4);
+}
+
+.nd-stat-card {
+  display: flex;
+  padding: var(--theme-space-4);
+  background: var(--theme-bg);
+  border: 1.5px solid var(--theme-border-light);
+  border-radius: var(--theme-radius-lg);
+  transition: var(--theme-transition-surface);
+  flex: 1;
+  align-items: center;
+  gap: var(--theme-space-4);
+}
+
+.nd-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+.nd-stat-icon {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--theme-radius-md);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nd-stat-icon.running {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 10%, transparent);
+}
+
+.nd-stat-icon.stopped {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 12%, transparent);
+}
+
+.nd-stat-icon.total {
+  color: var(--theme-accent-secondary);
+  background: color-mix(in srgb, var(--theme-accent-secondary) 10%, transparent);
+}
+
+.nd-stat-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.nd-stat-num {
+  font-family: var(--theme-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--theme-text-primary);
+}
+
+.nd-stat-lbl {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+/* 移动端适配：统计卡片换行 */
+@media (width <= 900px) {
+  .nd-stats {
+    flex-wrap: wrap;
+  }
+
+  .nd-stat-card {
+    flex: 1 1 140px;
+  }
+}
+
+/* 手机尺寸：缩小图标与间距，让三张统计卡在 390px 下仍可并排 */
+@media (width <= 480px) {
+  .nd-stat-card {
+    padding: var(--theme-space-3);
+    gap: var(--theme-space-2);
+    flex-basis: 110px;
+  }
+
+  .nd-stat-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+    border-radius: var(--theme-radius-md);
+  }
+
+  .nd-stat-body {
+    min-width: 0;
+  }
+}

@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/core", "crates/desktop", "crates/android"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "AGPL-3.0"
+
+[profile.release]
+codegen-units = 1 # Allows LLVM to perform better optimization.
+lto = true # Enables link-time-optimizations.
+opt-level = "s" # Prioritizes small binary size. Use `3` if you prefer speed.
+panic = "abort" # Higher performance by disabling panic handlers.
+strip = true # Ensures debug symbols are removed.
+
+[patch.crates-io]
+# proc-macro-crate v2.0.2 pins `toml_datetime = "=0.6.3"` (pulled in via the gtk/glib
+# Linux dependency chain), which conflicts with easytier's `toml ^0.8.12`
+# (requiring toml_datetime ^0.6.5). Cargo resolves one version per 0.6.x semver
+# series across all platforms, including Windows/Android builds.
+#
+# The vendor copy at src-tauri/vendor/proc-macro-crate relaxes the pin to `toml_datetime ^0.6`.
+# Track upstream fix: https://github.com/Boshen/proc-macro-crate/issues/18
+# TODO: Remove this patch once proc-macro-crate >= v2.1.0 is published with the fix,
+#       then delete the vendor/proc-macro-crate directory.
+proc-macro-crate = { path = "src-tauri/vendor/proc-macro-crate" }

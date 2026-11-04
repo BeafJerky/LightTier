@@ -1,0 +1,165 @@
+.nm-hero {
+  padding: var(--theme-space-5);
+  margin-bottom: var(--theme-space-4);
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-accent-primary) 14%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-xxl);
+}
+
+.nm-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--theme-color-success) 17%, transparent),
+      transparent 62%
+    ),
+    var(--theme-bg-card);
+  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+}
+
+.nm-hero-head {
+  display: flex;
+  margin-bottom: var(--theme-space-3);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-2);
+}
+
+.nm-hero-state {
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  align-items: center;
+  gap: 6px;
+}
+
+.nm-hero-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--theme-text-muted);
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+}
+
+.nm-hero-dot.on {
+  background: var(--theme-color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color-success) 14%, transparent);
+}
+
+.nm-hero-chip {
+  max-width: 55%;
+  padding: 3px 9px;
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 11px;
+  color: var(--theme-accent-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  border-radius: var(--theme-radius-pill);
+}
+
+.nm-hero-name {
+  overflow: hidden;
+  font-family: var(--theme-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nm-hero-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.nm-hero-metrics {
+  display: flex;
+  padding: var(--theme-space-3) 0;
+  margin-top: var(--theme-space-4);
+  border-top: 1px solid var(--theme-border-light);
+  border-bottom: 1px solid var(--theme-border-light);
+  align-items: center;
+  gap: var(--theme-space-4);
+}
+
+.nm-hero-metric {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nm-hero-label {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.nm-hero-value {
+  font-family: var(--theme-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-hero-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--theme-border-light);
+}
+
+.nm-hero-actions {
+  display: flex;
+  margin-top: var(--theme-space-4);
+  gap: 10px;
+}
+
+.nm-hero-actions .nm-hero-btn {
+  height: 44px;
+  min-width: 0;
+  font-weight: 600;
+  flex: 1;
+}
+
+.nm-hero-btn :deep(.n-button__content) {
+  min-width: 0;
+  gap: 6px;
+}
+
+.nm-hero-btn :deep(.n-button__content > span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nm-hero-foot {
+  display: flex;
+  margin-top: var(--theme-space-3);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.nm-hero-foot-sep {
+  width: 3px;
+  height: 3px;
+  background: currentcolor;
+  border-radius: var(--theme-radius-round);
+  opacity: 0.5;
+}

@@ -1,0 +1,57 @@
+/* @theme-label: 赛博朋克 */
+:root {
+  /* 赛博朋克主题 — 霓虹暗底 + 高对比荧光色 */
+  --theme-bg: #0a0a12;
+  --theme-bg-card: #12121f;
+  --theme-bg-sidebar: linear-gradient(180deg, #0e0e1a, #0a0a14);
+  --theme-bg-toolbar: #12121f;
+  --theme-bg-hover: rgba(0, 240, 255, 0.08);
+  --theme-bg-active: rgba(0, 240, 255, 0.14);
+  --theme-bg-tag: #1a1a2e;
+
+  --theme-text-primary: #e0e0ff;
+  --theme-text-secondary: #8888aa;
+  --theme-text-muted: #555570;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #00f0ff;
+  --theme-accent-secondary: #ff2a6d;
+  --theme-accent-hover: #00d4e0;
+  --theme-color-success: #05ffa1;
+  --theme-color-success-dark: #04e08e;
+  --theme-color-danger: #ff2a6d;
+  --theme-color-warning: #f5e642;
+  --theme-color-info: #00f0ff;
+
+  --theme-border: #2a2a40;
+  --theme-border-light: #1e1e32;
+  --theme-color-scrollbar: #2a2a40;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #1a1a2e;
+  --theme-surface-hover: #22223a;
+  --theme-text-on-accent: #0a0a12;
+
+  /* 阴影 — 霓虹光晕 */
+  --theme-shadow-sm: 0 0 12px rgba(0, 240, 255, 0.08);
+  --theme-shadow-md: 0 0 24px rgba(0, 240, 255, 0.1);
+  --theme-shadow-toast: 0 0 20px rgba(0, 240, 255, 0.12);
+
+  /* 圆角 — 与奶油主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 字体 — 与奶油主题一致 */
+  --theme-font-display: 'Quicksand', sans-serif;
+  --theme-font-body: 'Sora', sans-serif;
+
+  /* 动效 — 与奶油主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

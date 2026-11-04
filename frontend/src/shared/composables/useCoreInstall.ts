@@ -1,0 +1,88 @@
+import { ref } from 'vue'
+import { join } from '@tauri-apps/api/path'
+import { CORE_PATH, getCoreFileName } from '@/shared/constants/easytier'
+import { useEasyTierStore } from '@/shared/store/easytier'
+import { useMockData } from '@/shared/platform/mockData'
+import { cleanCoreDirExceptPackages, extractFile } from '@/shared/platform/fileUtil'
+import { stopAllNodes } from '@/shared/platform/shellUtil'
+import { isAndroid } from '@/shared/platform/platformUtil'
+import { getArch, getOsType } from '@/shared/platform/sysUtil'
+
+/**
+ * 安装内核（解压 resource/core 下已下载的内核压缩包）
+ * 设置弹窗使用；安装包不再随桌面应用内置，需先经设置页下载。
+ *
+ * 切换内核版本前必须停掉所有用旧内核启动的实例与服务：
+ * - Windows 服务会占用 easytier-core.exe，运行中覆盖会导致解压失败；
+ * - 旧内核继续运行会与新版本配置/CLI 能力不一致。
+ */
+export const useCoreInstall = () => {
+  const installing = ref(false)
+  const store = useEasyTierStore()
+
+  // 停止桌面端已安装的全部内核服务（普通配置 + Web 配置服务）
+  const stopAllKernelServices = async () => {
+    if (isAndroid()) return
+    const { checkService, stopService, checkWebService, stopWebService } = useMockData()
+    for (const cfg of store.configList) {
+      try {
+        const status = await checkService(cfg.configFileName)
+        if (status && status !== 'notInstalled' && status !== 'stopped') {
+          await stopService(cfg.configFileName)
+        }
+      } catch {
+        /* 单个服务停止失败不阻断切换 */
+      }
+    }
+    for (const cfg of store.configWebList) {
+      try {
+        const status = await checkWebService(cfg.configFileName)
+        if (status && status !== 'notInstalled' && status !== 'stopped') {
+          await stopWebService(cfg.configFileName)
+        }
+      } catch {
+        /* 同上 */
+      }
+    }
+  }
+
+  /**
+   * 安装指定版本的核心
+   * @param version 版本号（如 v2.6.4），需与 resource/core 下的压缩包文件名匹配
+   * @returns 安装是否成功
+   */
+  const installCore = async (version: string): Promise<boolean> => {
+    installing.value = true
+    try {
+      // 切换前先停服务与所有运行中的节点，并清理运行态记录
+      // 列表未加载时（如首次进入设置页）先补齐，避免漏停 Web 配置服务
+      if (!isAndroid()) {
+        await Promise.all([store.loadConfigFiles(), store.loadWebConfigFiles()])
+      }
+      await stopAllKernelServices()
+      await stopAllNodes()
+      store.setRunningList([])
+      store.setStartQueue([])
+      store.stopLoop = true
+      // 按平台/架构生成压缩包文件名（与下载文件名一致；纯字符串拼接，避免 CSP 拦截 eval）
+      const filename = getCoreFileName(getOsType(), getArch(), version)
+      const zipPath = await join(CORE_PATH, filename)
+      // 工具函数基于 BaseDirectory.Resource，必须传相对路径，不能用 resourceDir() 拼绝对路径。
+      // extractFile 会先完成压缩包读取与安全校验，再回调清理旧内核文件（保留各版本 zip），
+      // 最后写入新内核；压缩包损坏时不会误删当前可用内核。
+      const ok = await extractFile(zipPath, CORE_PATH, false, cleanCoreDirExceptPackages)
+      if (ok) {
+        // 安装完成后重新探测版本，让表单/CLI/服务适配立即切换到新内核
+        await store.detectCoreVersion()
+      }
+      return ok
+    } catch (e) {
+      console.error('安装核心失败:', e)
+      return false
+    } finally {
+      installing.value = false
+    }
+  }
+
+  return { installing, installCore }
+}

@@ -1,0 +1,61 @@
+/* @theme-label: 极昼 */
+:root {
+  /* 极昼主题 — 高对比亮色，优先可读性与无障碍 */
+  --theme-bg: #ffffff;
+  --theme-bg-card: #ffffff;
+  --theme-bg-sidebar: linear-gradient(180deg, #f2f4f7, #e7ebf0);
+  --theme-bg-toolbar: #ffffff;
+  --theme-bg-hover: rgba(0, 95, 204, 0.08);
+  --theme-bg-active: rgba(0, 95, 204, 0.14);
+  --theme-bg-tag: #eef1f5;
+
+  --theme-text-primary: #111418;
+  --theme-text-secondary: #3f4750;
+  --theme-text-muted: #5f6873;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #005fcc;
+  --theme-accent-secondary: #7a4bc2;
+  --theme-accent-hover: #004fa8;
+  --theme-color-success: #1b7f3b;
+  --theme-color-success-dark: #14652f;
+  --theme-color-danger: #b3261e;
+  --theme-color-warning: #8a5a00;
+  --theme-color-info: #005fcc;
+
+  --theme-border: #b8c0c9;
+  --theme-border-light: #d7dde4;
+  --theme-color-scrollbar: #9aa4ae;
+
+  /* 表面色 — 弹窗/卡片内部 */
+  --theme-surface-secondary: #eef1f5;
+  --theme-surface-hover: #e2e7ee;
+  --theme-text-on-accent: #ffffff;
+
+  /* 阴影 — 清晰但不过重 */
+  --theme-shadow-sm: 0 8px 28px rgba(17, 20, 24, 0.08);
+  --theme-shadow-md: 0 12px 36px rgba(17, 20, 24, 0.1);
+  --theme-shadow-toast: 0 6px 24px rgba(17, 20, 24, 0.12);
+
+  /* 圆角 — 与现有主题一致 */
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 100px;
+  --theme-radius-round: 50%;
+
+  /* 字体 — 保留默认无衬线，避免装饰性字体影响辨识 */
+  --theme-font-display:
+    'Quicksand', ui-rounded, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', sans-serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  /* 动效 — 与现有主题一致 */
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.3s;
+}

@@ -1,0 +1,76 @@
+.nm-detail-header {
+  display: flex;
+  padding-bottom: var(--theme-space-4);
+  margin-bottom: var(--theme-space-4);
+  border-bottom: 2px solid var(--theme-border-light);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nm-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-3);
+}
+
+/* 移动端返回按钮（默认隐藏，仅窄屏在详情头部展示） */
+.nm-detail-title-row .nm-back-btn {
+  display: none;
+}
+
+.nm-detail-title {
+  margin: 0;
+  font-family: var(--theme-font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nm-badge {
+  padding: 2px var(--theme-space-3);
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  border-radius: var(--theme-radius-pill);
+}
+
+.nm-badge.on {
+  color: var(--theme-color-success-dark);
+  background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-color-success) 18%, transparent);
+}
+
+.nm-badge.off {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-text-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
+}
+
+.nm-detail-rpc {
+  padding: 2px var(--theme-space-2);
+  font-family: var(--theme-font-mono, monospace);
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-tag);
+  border-radius: var(--theme-radius-sm);
+}
+
+@media (width <= 900px) {
+  .nm-detail-title-row .nm-back-btn {
+    display: inline-flex;
+  }
+
+  /* 详情头部允许换行，避免标题与按钮组互挤导致标题竖排/按钮溢出 */
+  .nm-detail-header {
+    flex-wrap: wrap;
+    gap: var(--theme-space-3);
+  }
+
+  .nm-detail-title-row {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .nm-detail-title {
+    overflow-wrap: break-word;
+  }
+}

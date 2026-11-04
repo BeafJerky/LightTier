@@ -1,0 +1,10 @@
+[package]
+name = "protoc-fetch"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+protoc-bin-vendored = "3"

@@ -1,0 +1,56 @@
+[package]
+authors = ["BeafJerky"]
+description = "LightTier"
+edition = "2021"
+license = "AGPL-3.0"
+name = "lighttier"
+repository = "https://github.com/BeafJerky/LightTier"
+rust-version = "1.92.0"
+version = "2.0.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+name = "app_lib"
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = ["config-json5"] }
+
+[dependencies]
+lighttier-core = { path = "../crates/core" }
+log = "0.4.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.10.3", features = [
+    "tray-icon",
+    "image-ico",
+    "image-png",
+    "config-json5",
+    # "devtools"
+] }
+tauri-plugin-fs = "2.5.0"
+tauri-plugin-dialog = "2.3.2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-http = "2.5.8"
+tauri-plugin-log = "2.8.0"
+tauri-plugin-os = "2.3.2"
+tauri-plugin-shell = "2.3.5"
+
+# 生产构建必须启用（官方模板要求的 DO NOT REMOVE 特性）：未启用时 tauri 按 dev 模式编译
+# （tauri build.rs：dev = !custom-protocol），Android 端资源请求会被代理到 devUrl，
+# 手机无 dev server 时白屏报 "Failed to request http://localhost:4000/"。手动打包见 lt-android-repack.ps1。
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+lighttier-desktop = { path = "../crates/desktop" }
+tauri-plugin-single-instance = "2.4.1"
+tauri-plugin-window-state = "2.4.1"
+tauri-plugin-prevent-default = "4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# 进程内内核、RPC 与 VPN 能力（薄命令包装在本 crate，实现见 lighttier-android）
+lighttier-android = { path = "../crates/android" }
+# Vendored copy of EasyTier's tauri-plugin-vpnservice (see android/tauri-plugin-vpnservice/).
+tauri-plugin-vpnservice = { path = "../android/tauri-plugin-vpnservice" }

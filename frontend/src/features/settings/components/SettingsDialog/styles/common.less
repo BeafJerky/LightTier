@@ -1,0 +1,146 @@
+/* 设置行：多分类共用 */
+
+.sd-row {
+  display: flex;
+  min-width: 0;
+  padding: var(--theme-space-3) 0;
+  border-bottom: 1px solid var(--theme-border-light, #f5ede6);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-space-3);
+  flex-wrap: wrap;
+}
+
+.sd-row:last-child {
+  border-bottom: none;
+}
+
+/* 开关型设置整行可点，扩大触摸热区并给出按压反馈 */
+label.sd-row {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+label.sd-row:active {
+  opacity: 0.78;
+}
+
+.sd-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sd-row-title {
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-primary, #4a3728);
+}
+
+.sd-row-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-text-muted, #c8bdb2);
+  overflow-wrap: anywhere;
+}
+
+/* 行内校验错误（刷新间隔 / 锁定密码） */
+.sd-field-error {
+  max-width: 200px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-accent-primary, #e8a0a0);
+  text-align: right;
+}
+
+/* 按钮组 */
+.sd-btn-group {
+  display: flex;
+  gap: var(--theme-space-2);
+  flex-shrink: 0;
+}
+
+/* 版本徽标：核心管理与关于页的检查更新共用 */
+.sd-core-ver-tag {
+  padding: 2px var(--theme-space-3);
+  font-family: var(--theme-font-body, 'Sora', sans-serif);
+  font-size: 12px;
+  color: var(--theme-text-muted, #c8bdb2);
+  white-space: nowrap;
+  background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
+  border-radius: var(--theme-radius-sm, 6px);
+  align-self: center;
+}
+
+.sd-core-ver-tag.sd-core-ver-ok {
+  color: var(--theme-color-success, #7fba8a);
+  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+}
+
+/* 下载进度：轨道用卡片底色，填充跟随主题强调色；无总大小时走不确定态 */
+.sd-download-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-space-2);
+}
+
+.sd-download-progress-track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  background: var(--theme-bg-card, #fff);
+  border: 1px solid var(--theme-border-light, #f5ede6);
+  border-radius: var(--theme-radius-pill, 100px);
+}
+
+.sd-download-progress-fill {
+  height: 100%;
+  background: var(--theme-accent-primary, #d4a574);
+  border-radius: inherit;
+  transition: width 0.12s linear;
+}
+
+.sd-download-progress-fill.is-indeterminate {
+  width: 30%;
+  animation: sd-download-indeterminate 1.1s ease-in-out infinite;
+}
+
+.sd-download-progress-text {
+  font-size: 12px;
+  color: var(--theme-text-muted, #c8bdb2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes sd-download-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(370%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-download-progress-fill {
+    transition: none;
+  }
+
+  .sd-download-progress-fill.is-indeterminate {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+@media (width <= 640px) {
+  /* 行内控件过宽时允许换行，避免挤压描述文案 */
+  .sd-row {
+    flex-wrap: wrap;
+  }
+}

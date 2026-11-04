@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "enables the default permissions for Android",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "fs:default",
+    "fs:read-all",
+    "fs:read-files",
+    "fs:write-all",
+    "fs:write-files",
+    "fs:allow-exists",
+    "fs:allow-open",
+    "fs:allow-read-dir",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-applog-read-recursive",
+    "fs:allow-applog-write-recursive",
+    "log:default",
+    "log:allow-log",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "os:default",
+    "os:allow-hostname",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://**"
+        }
+      ]
+    },
+    "vpnservice:default",
+    "vpnservice:allow-register-listener"
+  ]
+}

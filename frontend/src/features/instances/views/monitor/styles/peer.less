@@ -1,0 +1,75 @@
+@import url('./section.less');
+
+/* Peer 卡片网格 */
+.nm-peer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--theme-space-2);
+}
+
+.nm-peer-card {
+  padding: var(--theme-space-3) var(--theme-space-4);
+  background: var(--theme-bg-tag);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  transition: var(--theme-transition-surface);
+}
+
+/* 触屏点按会残留 :hover，悬停反馈只在支持悬停的设备上生效 */
+@media (hover: hover) {
+  .nm-peer-card:hover {
+    border-color: var(--theme-accent-primary);
+    box-shadow: var(--theme-shadow-sm);
+  }
+}
+
+.nmp-top {
+  display: flex;
+  padding-bottom: var(--theme-space-2);
+  margin-bottom: var(--theme-space-2);
+  border-bottom: 1px solid var(--theme-border-light);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nmp-hostname {
+  font-family: var(--theme-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.nmp-lat {
+  font-family: var(--theme-font-display);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nmp-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-space-1);
+}
+
+.nmp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.nmp-key {
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+}
+
+.nmp-val {
+  color: var(--theme-text-secondary);
+  text-align: right;
+  word-break: break-all;
+}
+
+.nmp-val.warn {
+  font-weight: 500;
+  color: var(--theme-color-danger);
+}

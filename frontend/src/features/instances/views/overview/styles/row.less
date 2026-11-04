@@ -1,0 +1,108 @@
+.nda-row {
+  display: flex;
+  min-height: 60px;
+  padding-right: 12px;
+  align-items: stretch;
+}
+
+.nda-row + .nda-row {
+  border-top: 1px solid var(--theme-border-light);
+}
+
+.nda-row-on {
+  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+}
+
+.nda-row-conflict {
+  box-shadow: inset 3px 0 0 var(--theme-color-danger);
+}
+
+.nda-row .nda-row-main {
+  height: auto;
+  min-width: 0;
+  min-height: 60px;
+  padding: 12px 4px 12px 12px;
+  text-align: left;
+  flex: 1;
+}
+
+.nda-row .nda-row-main :deep(.n-button__content) {
+  min-width: 0;
+  gap: var(--theme-space-3);
+  justify-content: flex-start;
+}
+
+.nda-row-icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-hover);
+  border-radius: 11px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-row-icon.on {
+  color: var(--theme-color-success);
+  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+}
+
+.nda-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nda-row-name {
+  display: flex;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.nda-row-warn {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-color-danger);
+  background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
+  border-radius: var(--theme-radius-round);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.nda-row-sub {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nda-row-chev {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.nda-row-action {
+  margin: auto 0;
+}
+
+@media (hover: hover) {
+  .nda-row .nda-row-main:hover {
+    background: var(--theme-bg-hover);
+  }
+}
