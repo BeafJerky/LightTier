@@ -838,6 +838,64 @@ const replaceVars = (input: string, depth = 0): string => {
   return output
 }
 
+/** 按括号深度切分逗号，避免拆断 rgb()/var() 内部的逗号 */
+const splitTopLevel = (input: string): string[] => {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === '(') depth++
+    else if (input[i] === ')') depth--
+    else if (input[i] === ',' && depth === 0) {
+      parts.push(input.slice(start, i))
+      start = i + 1
+    }
+  }
+  parts.push(input.slice(start))
+  return parts
+}
+
+/** 单侧混色端点：颜色、自身 alpha 与显式占比（未声明时为 null） */
+const parseMixStop = (
+  stop: string
+): { rgb: [number, number, number]; alpha: number; weight: number | null } | null => {
+  const weighted = /^(.*?)\s+([\d.]+)%$/.exec(stop)
+  const colorText = (weighted ? weighted[1] : stop).trim()
+  const weight = weighted ? Number(weighted[2]) : null
+  if (/^transparent$/i.test(colorText)) return { rgb: [0, 0, 0], alpha: 0, weight }
+  const rgb = parseCssColor(colorText)
+  if (!rgb) return null
+  const alphaToken = /^rgba?\([^)]*[,/]\s*([\d.]+)(%?)\s*\)$/i.exec(colorText)
+  const alpha = alphaToken ? Number.parseFloat(alphaToken[1]) / (alphaToken[2] ? 100 : 1) : 1
+  return { rgb, alpha, weight }
+}
+
+/**
+ * 纯 JS 求值 color-mix(in srgb, …)。
+ * 旧版 Android WebView 不支持该函数，临时节点会让声明静默失效并回落到继承色，
+ * 因此不能依赖 computed color；此处按 sRGB 预乘 alpha 插值，结果与浏览器一致。
+ */
+const evaluateColorMix = (expression: string): string | null => {
+  const parts = splitTopLevel(expression.slice('color-mix('.length, -1))
+  if (parts.length !== 3 || !/^in srgb$/i.test(parts[0].trim())) return null
+  const from = parseMixStop(parts[1].trim())
+  const to = parseMixStop(parts[2].trim())
+  if (!from || !to) return null
+  // 规范：只声明一侧占比时，另一侧取补数；两侧都未声明才各占 50%
+  const fromWeight = from.weight ?? (to.weight === null ? 50 : 100 - to.weight)
+  const toWeight = to.weight ?? 100 - fromWeight
+  const total = fromWeight + toWeight
+  if (total <= 0) return null
+  const fromAlpha = (from.alpha * fromWeight) / total
+  const toAlpha = (to.alpha * toWeight) / total
+  const alpha = fromAlpha + toAlpha
+  if (alpha <= 0) return 'rgba(0, 0, 0, 0)'
+  const channels = [0, 1, 2].map((index) =>
+    Math.round((from.rgb[index] * fromAlpha + to.rgb[index] * toAlpha) / alpha)
+  )
+  return `rgba(${channels.join(', ')}, ${Number(alpha.toFixed(3))})`
+}
+
 /** 将字符串中所有 color-mix() 求值为具体颜色 */
 const resolveColorMix = (input: string): string => {
   let output = input
@@ -858,7 +916,10 @@ const resolveColorMix = (input: string): string => {
     }
     if (end < 0) break
     const expression = output.slice(start, end + 1)
-    output = output.slice(0, start) + normalizeColor(expression) + output.slice(end + 1)
+    output =
+      output.slice(0, start) +
+      (evaluateColorMix(expression) ?? normalizeColor(expression)) +
+      output.slice(end + 1)
   }
   return output
 }

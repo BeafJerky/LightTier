@@ -5,7 +5,7 @@
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-accent-primary) 14%, transparent),
+      rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.14),
       transparent 62%
     ),
     var(--theme-bg-card);
@@ -17,11 +17,11 @@
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-color-success) 17%, transparent),
+      rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.17),
       transparent 62%
     ),
     var(--theme-bg-card);
-  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+  border-color: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.28);
 }
 
 .nm-hero-head {
@@ -53,7 +53,7 @@
 
 .nm-hero-dot.on {
   background: var(--theme-color-success);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color-success) 14%, transparent);
+  box-shadow: 0 0 0 4px rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.14);
 }
 
 .nm-hero-chip {
@@ -65,7 +65,7 @@
   color: var(--theme-accent-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.1);
   border-radius: var(--theme-radius-pill);
 }
 

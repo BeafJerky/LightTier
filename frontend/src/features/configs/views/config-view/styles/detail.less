@@ -53,14 +53,14 @@
 
 .nw-badge.on {
   color: var(--theme-color-success-dark);
-  background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-color-success) 18%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.08);
+  border: 1px solid rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.18);
 }
 
 .nw-badge.off {
   color: var(--theme-text-muted);
-  background: color-mix(in srgb, var(--theme-text-muted) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
+  background: rgb(var(--theme-text-muted-rgb, 200, 189, 178), 0.1);
+  border: 1px solid rgb(var(--theme-text-muted-rgb, 200, 189, 178), 0.18);
 }
 
 .nw-badge-demo {
@@ -240,8 +240,8 @@
 
 .nw-tag-exit {
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 4%, transparent);
-  border-color: color-mix(in srgb, var(--theme-accent-primary) 20%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.04);
+  border-color: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.2);
 }
 
 .nw-empty {
@@ -289,7 +289,7 @@
 
 .nw-svc-dot.svc-running {
   background: var(--theme-color-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+  box-shadow: 0 0 6px rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.4);
 }
 
 .nw-svc-dot.svc-stopped {

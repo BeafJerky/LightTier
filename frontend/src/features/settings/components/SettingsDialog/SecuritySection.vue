@@ -205,7 +205,7 @@ const {
 
 .sd-lock-status.on {
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 /* 双输入表单：新密码 / 确认密码两列对齐，按钮右对齐 */

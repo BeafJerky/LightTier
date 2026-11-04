@@ -288,7 +288,7 @@ onMounted(async () => {
   width: 36px;
   height: 36px;
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
   border-radius: 11px;
   flex-shrink: 0;
   align-items: center;

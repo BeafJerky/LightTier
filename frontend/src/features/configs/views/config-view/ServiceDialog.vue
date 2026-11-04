@@ -217,7 +217,7 @@ const handleInstall = async () => {
 
 .svc-radio.active {
   color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 6%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.06);
   border-color: var(--theme-accent-primary, #e8a0a0);
 }
 
@@ -241,7 +241,7 @@ const handleInstall = async () => {
   font-size: 11px;
   line-height: 1.5;
   color: var(--theme-text-muted, #c8bdb2);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 4%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.04);
   border-radius: var(--theme-radius-sm, 6px);
 }
 

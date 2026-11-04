@@ -1372,7 +1372,7 @@ onBeforeUnmount(() => {
   z-index: 0;
   width: min(68px, calc(100% - 12px));
   height: 46px;
-  background: color-mix(in srgb, var(--theme-accent-primary) 14%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.14);
   border-radius: var(--theme-radius-pill);
   transform: translate(-50%, -50%);
 }

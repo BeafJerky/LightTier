@@ -256,7 +256,7 @@ onMounted(() => {
   margin-bottom: 2px;
   font-size: 24px;
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.1);
   border-radius: var(--theme-radius-round);
   align-items: center;
   justify-content: center;
@@ -298,7 +298,7 @@ onMounted(() => {
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12),
       transparent 62%
     ),
     var(--theme-bg-card);
@@ -313,11 +313,11 @@ onMounted(() => {
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-color-success) 15%, transparent),
+      rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.15),
       transparent 62%
     ),
     var(--theme-bg-card);
-  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+  border-color: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.28);
 }
 
 .nw-root.nw-android :deep(.nw-detail-title-row) {

@@ -184,7 +184,7 @@
 }
 
 .nw-row-on {
-  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.05);
 }
 
 /* 横屏分栏：标出右侧详情对应的列表行 */
@@ -194,7 +194,12 @@
 }
 
 .nw-row-on.active {
-  background: color-mix(in srgb, var(--theme-color-success) 10%, var(--theme-bg-active));
+  background:
+    linear-gradient(
+      rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.1),
+      rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.1)
+    ),
+    var(--theme-bg-active);
   box-shadow: inset 3px 0 0 var(--theme-color-success);
 }
 
@@ -212,7 +217,7 @@
 
 .nw-row-icon.on {
   color: var(--theme-color-success);
-  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 .nw-row-text {
@@ -269,7 +274,7 @@
   }
 
   .nw-row-on:hover {
-    background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
+    background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.08);
   }
 
   .nw-add-btn:hover {

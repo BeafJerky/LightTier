@@ -20,7 +20,7 @@
 
 .ed-input-unsupported :deep(.n-input__border),
 .ed-input-unsupported :deep(.n-input__state-border) {
-  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 45%, transparent);
+  border-color: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.45);
 }
 
 .ed-form-section {
@@ -113,15 +113,15 @@
 /* 当前内核未兼容：表单最后方，默认收起，只读展示 */
 .ed-locked-collapse {
   padding: 10px 12px;
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 5%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--theme-color-warning, #d9a441) 35%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.05);
+  border: 1px dashed rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.35);
   border-radius: var(--theme-radius-md, 10px);
 }
 
 .ed-locked-collapse .ed-form-section-title {
   margin-bottom: 8px;
   color: var(--theme-color-warning, #d9a441);
-  border-bottom-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 25%, transparent);
+  border-bottom-color: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.25);
 }
 
 .ed-locked-hint {
@@ -144,7 +144,7 @@
   font-family: 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
-  background: color-mix(in srgb, var(--theme-bg-card, #fff) 55%, transparent);
+  background: rgb(var(--theme-bg-card-rgb, 255, 255, 255), 0.55);
   border-radius: var(--theme-radius-sm, 6px);
   align-items: baseline;
 }

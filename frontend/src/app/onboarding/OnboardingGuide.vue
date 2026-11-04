@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
   height: 64px;
   margin-bottom: 20px;
   color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 12%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
   border-radius: var(--theme-radius-round, 50%);
   align-items: center;
   justify-content: center;
@@ -576,7 +576,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 12%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
   border-radius: var(--theme-radius-sm, 10px);
   flex-shrink: 0;
   align-items: center;
@@ -620,7 +620,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 14%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.14);
   border-radius: var(--theme-radius-pill, 100px);
 }
 
@@ -700,7 +700,7 @@ onBeforeUnmount(() => {
   height: 56px;
   margin-bottom: 16px;
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 14%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.14);
   border-radius: var(--theme-radius-round, 50%);
   align-items: center;
   justify-content: center;

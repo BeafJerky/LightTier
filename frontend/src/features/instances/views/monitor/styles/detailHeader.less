@@ -35,14 +35,14 @@
 
 .nm-badge.on {
   color: var(--theme-color-success-dark);
-  background: color-mix(in srgb, var(--theme-color-success) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-color-success) 18%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.08);
+  border: 1px solid rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.18);
 }
 
 .nm-badge.off {
   color: var(--theme-text-muted);
-  background: color-mix(in srgb, var(--theme-text-muted) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-text-muted) 18%, transparent);
+  background: rgb(var(--theme-text-muted-rgb, 200, 189, 178), 0.1);
+  border: 1px solid rgb(var(--theme-text-muted-rgb, 200, 189, 178), 0.18);
 }
 
 .nm-detail-rpc {

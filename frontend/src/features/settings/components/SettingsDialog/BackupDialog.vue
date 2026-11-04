@@ -731,7 +731,7 @@ const {
 }
 
 .bk-cat.checked {
-  background: color-mix(in srgb, var(--theme-accent-primary, #d4a574) 6%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 212, 165, 116), 0.06);
   border-color: var(--theme-accent-primary, #d4a574);
 }
 
@@ -818,7 +818,7 @@ const {
 }
 
 .bk-mode.active {
-  background: color-mix(in srgb, var(--theme-accent-primary, #d4a574) 6%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 212, 165, 116), 0.06);
   border-color: var(--theme-accent-primary, #d4a574);
 }
 
@@ -907,12 +907,12 @@ const {
 
 .bk-notice.is-success {
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 10%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.1);
 }
 
 .bk-notice.is-warning {
   color: var(--theme-color-warning, #d9a441);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 10%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.1);
 }
 
 .bk-notice.is-info {
@@ -978,12 +978,12 @@ const {
 .bk-summary-chip.status-new,
 .bk-summary-chip.status-safe {
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 .bk-summary-chip.status-conflict {
   color: var(--theme-color-warning, #d9a441);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 12%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.12);
 }
 
 .bk-summary-chip.status-same {
@@ -993,7 +993,7 @@ const {
 
 .bk-summary-chip.status-invalid {
   color: var(--theme-color-danger, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 12%, transparent);
+  background: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.12);
 }
 
 /* 逐项列表 */
@@ -1014,7 +1014,7 @@ const {
 }
 
 .bk-item.status-conflict {
-  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 45%, transparent);
+  border-color: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.45);
 }
 
 .bk-item.status-invalid {
@@ -1070,12 +1070,12 @@ const {
 .bk-status.status-new,
 .bk-status.status-safe {
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 .bk-status.status-conflict {
   color: var(--theme-color-warning, #d9a441);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 12%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.12);
 }
 
 .bk-status.status-same {
@@ -1085,7 +1085,7 @@ const {
 
 .bk-status.status-invalid {
   color: var(--theme-color-danger, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 12%, transparent);
+  background: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.12);
 }
 
 .bk-item-sub {
@@ -1160,7 +1160,7 @@ const {
   height: 56px;
   margin-bottom: var(--theme-space-2);
   color: var(--theme-color-success, #7fba8a);
-  background: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
   border-radius: 50%;
   align-items: center;
   justify-content: center;
@@ -1168,7 +1168,7 @@ const {
 
 .bk-done-icon.has-fail {
   color: var(--theme-color-warning, #d9a441);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 12%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.12);
 }
 
 .bk-done-title {

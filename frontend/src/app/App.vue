@@ -302,7 +302,7 @@ body {
   margin: 0 auto 14px;
   font-size: 22px;
   color: var(--theme-accent-primary, #e8a0a0);
-  background: color-mix(in srgb, var(--theme-accent-primary, #e8a0a0) 12%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
   border-radius: var(--theme-radius-round, 50%);
   align-items: center;
   justify-content: center;

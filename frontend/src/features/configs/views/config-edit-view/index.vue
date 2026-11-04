@@ -344,7 +344,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 .nce-page :deep(.ed-form-input:focus) {
   background: var(--theme-bg-card);
   border-color: var(--theme-accent-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
+  box-shadow: 0 0 0 3px rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
 }
 
 .nce-page :deep(.ed-form-switch) {
@@ -356,7 +356,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 }
 
 .nce-page :deep(.ed-form-switch.on) {
-  border-color: color-mix(in srgb, var(--theme-color-success) 26%, transparent);
+  border-color: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.26);
 }
 
 /* 标签型字段行 */

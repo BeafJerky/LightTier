@@ -42,8 +42,8 @@
   display: flex;
   padding: var(--theme-space-3) var(--theme-space-4);
   margin-bottom: var(--theme-space-4);
-  background: color-mix(in srgb, var(--theme-accent-primary) 8%, transparent);
-  border: 1.5px dashed color-mix(in srgb, var(--theme-accent-primary) 35%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.08);
+  border: 1.5px dashed rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.35);
   border-radius: var(--theme-radius-lg);
   animation: ndQueueIn var(--theme-duration) var(--theme-ease-out);
   align-items: center;
@@ -105,11 +105,16 @@
   flex-shrink: 0;
 }
 
+/* 网格在桌面端撑满剩余高度并滚动；行高必须按内容排布，否则行会被拉伸至填满容器 */
 .nd-grid {
   display: grid;
+  /* 卡片悬浮时上浮并带阴影，预留内边距避免被滚动容器裁掉边线，负外边距保持原位 */
+  padding: var(--theme-space-2);
+  margin: calc(var(--theme-space-2) * -1);
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--theme-space-3);
   min-height: 100px;
+  align-content: start;
 }
 
 .nd-empty {
@@ -239,7 +244,7 @@
   height: 58px;
   margin-bottom: var(--theme-space-1);
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.1);
   border-radius: var(--theme-radius-round);
   align-items: center;
   justify-content: center;

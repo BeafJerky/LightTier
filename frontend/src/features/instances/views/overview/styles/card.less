@@ -14,8 +14,8 @@
 }
 
 .ndc-on {
-  background: color-mix(in srgb, var(--theme-color-success) 4%, var(--theme-bg));
-  border-color: color-mix(in srgb, var(--theme-color-success) 22%, var(--theme-border-light));
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.04);
+  border-color: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.22);
 }
 
 /* 卡片主体即进入配置详情的入口：整块可点，操作按钮留在主体之外 */
@@ -59,7 +59,7 @@
   color: var(--theme-color-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
+  background: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.12);
   border-radius: var(--theme-radius-pill);
 }
 
@@ -75,7 +75,7 @@
 
   50% {
     border-color: var(--theme-color-danger);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--theme-color-danger) 35%, transparent);
+    box-shadow: 0 0 12px rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.35);
   }
 }
 
@@ -83,7 +83,7 @@
   display: inline-flex;
   padding: 2px 8px 2px 7px;
   color: var(--theme-text-muted);
-  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
+  background: rgb(var(--theme-text-muted-rgb, 200, 189, 178), 0.08);
   border-radius: var(--theme-radius-pill);
   align-items: center;
   gap: 6px;
@@ -91,7 +91,7 @@
 
 .ndc-status.on {
   color: var(--theme-color-success-dark);
-  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 .ndc-dot {
@@ -102,7 +102,7 @@
 
 .ndc-dot.on {
   background: var(--theme-color-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+  box-shadow: 0 0 6px rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.4);
 }
 
 .ndc-dot.off {

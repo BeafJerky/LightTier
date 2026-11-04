@@ -224,21 +224,17 @@ const handleClick = (event: MouseEvent) => {
 
 .lt-btn--success-soft {
   --lt-btn-color: var(--theme-color-success-dark, #6aaa78);
-  --lt-btn-bg: color-mix(in srgb, var(--theme-color-success, #7fba8a) 12%, transparent);
+  --lt-btn-bg: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
   --lt-btn-border-color: transparent;
-  --lt-btn-bg-hover: color-mix(in srgb, var(--theme-color-success, #7fba8a) 20%, transparent);
+  --lt-btn-bg-hover: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.2);
 }
 
 .lt-btn--danger {
   --lt-btn-color: var(--theme-color-danger, #e8a0a0);
-  --lt-btn-bg: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 8%, transparent);
+  --lt-btn-bg: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.08);
   --lt-btn-border-color: transparent;
-  --lt-btn-bg-hover: color-mix(in srgb, var(--theme-color-danger, #e8a0a0) 14%, transparent);
-  --lt-btn-border-color-hover: color-mix(
-    in srgb,
-    var(--theme-color-danger, #e8a0a0) 55%,
-    transparent
-  );
+  --lt-btn-bg-hover: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.14);
+  --lt-btn-border-color-hover: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.55);
 }
 
 .lt-btn--bare {

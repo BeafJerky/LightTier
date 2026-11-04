@@ -10,7 +10,7 @@
 }
 
 .nda-row-on {
-  background: color-mix(in srgb, var(--theme-color-success) 5%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.05);
 }
 
 .nda-row-conflict {
@@ -46,7 +46,7 @@
 
 .nda-row-icon.on {
   color: var(--theme-color-success);
-  background: color-mix(in srgb, var(--theme-color-success) 12%, transparent);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
 }
 
 .nda-row-text {
@@ -76,7 +76,7 @@
   font-size: 10px;
   font-weight: 700;
   color: var(--theme-color-danger);
-  background: color-mix(in srgb, var(--theme-color-danger) 12%, transparent);
+  background: rgb(var(--theme-color-danger-rgb, 232, 160, 160), 0.12);
   border-radius: var(--theme-radius-round);
   flex-shrink: 0;
   align-items: center;

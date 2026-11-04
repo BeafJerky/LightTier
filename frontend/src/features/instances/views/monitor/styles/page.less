@@ -87,7 +87,7 @@
 
 .nmc-dot.on {
   background: var(--theme-color-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--theme-color-success) 40%, transparent);
+  box-shadow: 0 0 6px rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.4);
 }
 
 .nmc-dot.off {
@@ -225,7 +225,7 @@
   margin-bottom: 2px;
   font-size: 24px;
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.1);
   border-radius: var(--theme-radius-round);
   align-items: center;
   justify-content: center;
@@ -298,7 +298,7 @@
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-accent-primary) 12%, transparent),
+      rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12),
       transparent 62%
     ),
     var(--theme-bg-card);
@@ -313,11 +313,11 @@
   background:
     radial-gradient(
       120% 90% at 100% 0%,
-      color-mix(in srgb, var(--theme-color-success) 15%, transparent),
+      rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.15),
       transparent 62%
     ),
     var(--theme-bg-card);
-  border-color: color-mix(in srgb, var(--theme-color-success) 28%, var(--theme-border));
+  border-color: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.28);
 }
 
 .nm-root.nm-android :deep(.nm-detail-title-row) {
@@ -514,7 +514,7 @@
   margin-bottom: 2px;
   font-size: 26px;
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 10%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.1);
   border-radius: var(--theme-radius-round);
   align-items: center;
   justify-content: center;
@@ -790,8 +790,8 @@
 
 .nm-stale-banner.warn {
   color: var(--theme-accent-primary);
-  background: color-mix(in srgb, var(--theme-accent-primary) 8%, transparent);
-  border-color: color-mix(in srgb, var(--theme-accent-primary) 25%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.08);
+  border-color: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.25);
 }
 
 .nm-stale-text {

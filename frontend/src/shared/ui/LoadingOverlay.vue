@@ -39,7 +39,7 @@ const labelText = computed(() => props.label || t('newCommon.loading'))
   z-index: 20;
   display: flex;
   background: rgb(253 248 244 / 68%);
-  background: color-mix(in srgb, var(--theme-bg, #fdf8f4) 68%, transparent);
+  background: rgb(var(--theme-bg-rgb, 253, 248, 244), 0.68);
   align-items: center;
   justify-content: center;
 }

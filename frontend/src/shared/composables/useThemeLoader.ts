@@ -34,6 +34,51 @@ const themeRevision = ref(0)
 
 const SPLASH_PALETTE_KEY = 'theme-splash-palette'
 
+/**
+ * 透明度混色用的 RGB 分量变量（theme.css 为内置主题静态定义）。
+ * 外部主题只声明 --theme-*，注入后按计算值补齐这些分量，
+ * 避免旧版 WebView 不支持 color-mix() 时丢失浅色底纹。
+ */
+const RGB_SOURCE_VARS = [
+  '--theme-bg',
+  '--theme-bg-card',
+  '--theme-text-primary',
+  '--theme-text-muted',
+  '--theme-accent-primary',
+  '--theme-accent-secondary',
+  '--theme-color-success',
+  '--theme-color-danger',
+  '--theme-color-warning'
+]
+
+const readRgbTriplet = (property: string): string | null => {
+  const raw = window.getComputedStyle(document.documentElement).getPropertyValue(property).trim()
+  if (!raw) return null
+  const host = document.body || document.documentElement
+  const probe = document.createElement('span')
+  probe.style.display = 'none'
+  probe.style.color = raw
+  host.appendChild(probe)
+  const resolved = window.getComputedStyle(probe).color
+  probe.remove()
+  const channels = resolved
+    .match(/rgba?\(([^)]+)\)/)?.[1]
+    .split(/[,/\s]+/)
+    .filter(Boolean)
+  if (!channels || channels.length < 3) return null
+  const rgb = channels.slice(0, 3).map((channel) => Math.round(Number.parseFloat(channel)))
+  return rgb.some(Number.isNaN) ? null : rgb.join(', ')
+}
+
+const syncRgbVars = (enabled: boolean) => {
+  const inline = document.documentElement.style
+  for (const name of RGB_SOURCE_VARS) {
+    const triplet = enabled ? readRgbTriplet(name) : null
+    if (triplet) inline.setProperty(`${name}-rgb`, triplet)
+    else inline.removeProperty(`${name}-rgb`)
+  }
+}
+
 /** 缓存首屏实际生效的颜色：主题 CSS 在应用启动后才加载，首屏脚本只能读 localStorage */
 const persistSplashPalette = (name: string) => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
@@ -64,10 +109,13 @@ export const useThemeLoader = () => {
     style.id = 'custom-theme'
     style.textContent = cssText
     document.head.appendChild(style)
+    syncRgbVars(true)
   }
 
   const removeExternalTheme = () => {
     document.getElementById('custom-theme')?.remove()
+    // 恢复内置主题在 theme.css 中声明的分量
+    syncRgbVars(false)
   }
 
   // 应用主题：记录名称 + 注入/移除外部 CSS + 更新 data-theme 属性

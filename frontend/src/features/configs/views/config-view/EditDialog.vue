@@ -686,14 +686,14 @@ defineExpose({
 
 .ed-compat-banner.is-error {
   color: var(--theme-accent-primary, #b4544f);
-  background: color-mix(in srgb, var(--theme-accent-primary, #b4544f) 8%, transparent);
-  border-color: color-mix(in srgb, var(--theme-accent-primary, #b4544f) 25%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 180, 84, 79), 0.08);
+  border-color: rgb(var(--theme-accent-primary-rgb, 180, 84, 79), 0.25);
 }
 
 .ed-compat-banner.is-warning {
   color: var(--theme-text-secondary, #8b7355);
-  background: color-mix(in srgb, var(--theme-color-warning, #d9a441) 8%, transparent);
-  border-color: color-mix(in srgb, var(--theme-color-warning, #d9a441) 22%, transparent);
+  background: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.08);
+  border-color: rgb(var(--theme-color-warning-rgb, 217, 164, 65), 0.22);
 }
 
 .ed-compat-title {

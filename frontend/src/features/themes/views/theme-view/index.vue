@@ -101,7 +101,7 @@ watch(visible, (v) => {
 }
 
 .ntv-page :deep(.td-item.active) {
-  background: color-mix(in srgb, var(--theme-accent-primary) 5%, transparent);
+  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.05);
 }
 
 .ntv-page :deep(.td-item-dot) {
