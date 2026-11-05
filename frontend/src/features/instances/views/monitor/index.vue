@@ -267,7 +267,7 @@ import * as coreApi from '@/shared/platform/coreApi'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useWideLandscape } from '@/shared/composables/useWideLandscape'
 import TrendChart from '@/features/instances/components/TrendChart.vue'
@@ -289,6 +289,7 @@ defineOptions({ name: 'NewMonitor' })
 const easyTierStore = useEasyTierStore()
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const isAndroidPlatform = isAndroid()
 // 横屏宽屏：运行态仪表盘左右分栏（左：主卡/流量/节点信息，右：趋势/对等节点）
 const isWideLandscape = useWideLandscape()
@@ -417,14 +418,26 @@ const loadConfigs = async () => {
     }
     await updateRunningList()
 
-    // 从运行中的配置（displayList）中选择，避免选中已停止的配置导致左侧无高亮卡片
-    // 窄屏（移动端）默认展示清单，不自动进入详情；Android 详情由路由驱动
-    if (!isAndroidPlatform && window.innerWidth > 900 && displayList.value.length > 0) {
+    // 从运行中的配置（displayList）中选择，避免选中已停止的配置导致左侧无高亮卡片。
+    // 总览卡片跳转携带 ?name= 时优先命中目标；窄屏仅在显式指定目标时自动进入详情，
+    // 其余情况保持清单视图。
+    if (!isAndroidPlatform && displayList.value.length > 0) {
+      const requestedName = typeof route.query.name === 'string' ? route.query.name : ''
+      const requested = requestedName
+        ? displayList.value.find((c) => c.configFileName === requestedName)
+        : undefined
       const last = easyTierStore.getLastRunConfigName()
-      const target = last
-        ? displayList.value.find((c) => c.configFileName === last) || displayList.value[0]
-        : displayList.value[0]
-      selectConfig(target)
+      const fallback =
+        (last ? displayList.value.find((c) => c.configFileName === last) : undefined) ||
+        displayList.value[0]
+      const target = requested || (window.innerWidth > 900 ? fallback : undefined)
+      if (target) selectConfig(target)
+      // 消费后清除目标，避免后续刷新/再次进入被旧目标覆盖
+      if (requestedName) {
+        const query = { ...route.query }
+        delete query.name
+        void router.replace({ query })
+      }
     }
   } catch (e) {
     console.error('加载监控配置失败:', e)
@@ -545,7 +558,10 @@ const stopSelected = async () => {
 const openSelectedConfig = () => {
   const name = selectedConfig.value?.configFileName
   if (!name) return
-  router.push({ name: 'NewConfigDetailView', query: { name } })
+  router.push({
+    name: isAndroidPlatform ? 'NewConfigDetailView' : 'NewConfigView',
+    query: { name }
+  })
 }
 
 // 运行状态变化（外部启停/服务变化）：重新运行 → 重置差分基线并恢复轮询；

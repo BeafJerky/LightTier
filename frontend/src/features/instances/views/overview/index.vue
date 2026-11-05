@@ -354,11 +354,21 @@ const startAction = async (item: RunningItem, opts: { auto?: boolean } = {}) => 
 const stopAction = (item: RunningItem) => stopInstance(item)
 
 const goConfigDetail = (item: RunningItem) => {
-  router.push({ name: 'NewConfigDetailView', query: { name: item.configFileName } })
+  // 桌面配置页是列表+详情同页，带入 ?name= 由配置页选中目标；
+  // Android 列表/详情为独立路由，走详情路由
+  router.push({
+    name: isAndroidPlatform ? 'NewConfigDetailView' : 'NewConfigView',
+    query: { name: item.configFileName }
+  })
 }
-const goMonitorDetail = (_item: RunningItem) => {
-  // Android 单实例：监控页自动跟随当前运行配置；桌面端在监控页选择实例
-  router.push({ name: 'NewMonitor' })
+const goMonitorDetail = (item: RunningItem) => {
+  // 桌面监控页可切换实例，带入 ?name= 定位点击的运行实例；
+  // Android 单实例由监控页自动跟随当前运行配置
+  router.push(
+    isAndroidPlatform
+      ? { name: 'NewMonitor' }
+      : { name: 'NewMonitor', query: { name: item.configFileName } }
+  )
 }
 const toggleConfig = (item: RunningItem & { running: boolean }) => {
   if (item.running) void stopAction(item)

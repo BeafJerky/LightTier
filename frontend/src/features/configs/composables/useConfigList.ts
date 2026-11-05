@@ -167,17 +167,37 @@ export function useConfigList(options: UseConfigListOptions) {
       .map(({ item }) => item)
   })
 
+  // 桌面端跨页跳转携带 ?name=<configFileName>：返回目标名并立即清除 query，
+  // 避免后续刷新/外部刷新回调再次把选中项抢回旧目标（Android 的 name 是详情路由真源，不能清）
+  const consumeRouteTargetName = (): string => {
+    const name = typeof route.query.name === 'string' ? route.query.name : ''
+    if (!name) return ''
+    const query = { ...route.query }
+    delete query.name
+    void router.replace({ query })
+    return name
+  }
+
   // 运行时状态刷新（FAB 已负责文件加载）
   const refreshRuntimeState = async () => {
     await updateRunningList()
     // 窄屏（移动端）默认展示清单，不自动进入详情，由用户点卡片跳转；
     // Android 详情由路由驱动，不在此自动选中
-    if (!isAndroidPlatform && window.innerWidth > 900 && easyTierStore.configList.length > 0) {
-      const last = easyTierStore.getLastRunConfigName()
-      const target = last
-        ? easyTierStore.configList.find((c) => c.configFileName === last)
-        : easyTierStore.configList[0]
-      if (target) await selectConfig(target)
+    if (!isAndroidPlatform && easyTierStore.configList.length > 0) {
+      // 显式目标（总览/监控跳转）优先且不受宽窄屏限制
+      const requestedName = consumeRouteTargetName()
+      const requested = requestedName
+        ? easyTierStore.configList.find((c) => c.configFileName === requestedName)
+        : undefined
+      if (requested) {
+        await selectConfig(requested)
+      } else if (window.innerWidth > 900) {
+        const last = easyTierStore.getLastRunConfigName()
+        const target =
+          (last ? easyTierStore.configList.find((c) => c.configFileName === last) : undefined) ||
+          easyTierStore.configList[0]
+        if (target) await selectConfig(target)
+      }
     }
     // 加载服务状态
     for (const c of easyTierStore.configList) {
