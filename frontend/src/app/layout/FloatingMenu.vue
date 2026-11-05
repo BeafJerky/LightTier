@@ -25,6 +25,42 @@
           </svg>
           <span>{{ t('newCommon.refreshConfig') }}</span>
         </LtButton>
+        <!-- 检查更新：直达关于页并自动检查一次 -->
+        <LtButton variant="bare" class="fab-menu-item" role="menuitem" @click="handleCheckUpdate">
+          <svg
+            class="fab-menu-icon"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8" />
+            <path d="M8.5 12.5 12 16l3.5-3.5" />
+          </svg>
+          <span>{{ t('newSettings.checkUpdate') }}</span>
+        </LtButton>
+        <!-- 打开配置目录：直达 resource/config，便于手动管理 TOML -->
+        <LtButton variant="bare" class="fab-menu-item" role="menuitem" @click="handleOpenConfigDir">
+          <svg
+            class="fab-menu-icon"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          </svg>
+          <span>{{ t('newConfig.openConfigDir') }}</span>
+        </LtButton>
       </div>
     </Transition>
 
@@ -59,18 +95,27 @@
 /**
  * FloatingMenu — 全局悬浮快捷菜单（FAB）
  *
- * 右下角悬浮主按钮，展开后提供“刷新配置”快捷操作：并发重载普通配置与 Web 配置
- * 文件列表，再触发当前页运行时状态刷新；菜单展开时点击组件外部自动收起，
+ * 右下角悬浮主按钮，展开后提供“刷新配置”（并发重载普通配置与 Web 配置文件列表，
+ * 再触发当前页运行时状态刷新）、“检查更新”（交给外壳打开设置-关于并自动检查）与
+ * “打开配置目录”（交给系统文件管理器）；菜单展开时点击组件外部自动收起，
  * 组件卸载时移除全局点击监听。
  */
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import { join, resourceDir } from '@tauri-apps/api/path'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { useCreamToast } from '@/shared/ui/useCreamToast'
+import { openPath } from '@/shared/platform/fileUtil'
+import { CONFIG_PATH } from '@/shared/constants/easytier'
 import { LtButton } from '@/shared/ui'
 
 defineOptions({ name: 'FloatingMenu' })
 
+const emit = defineEmits<{ 'check-update': [] }>()
+
 const { t } = useI18n()
+const { show: toast } = useCreamToast()
 const easyTierStore = useEasyTierStore()
 
 const menuOpen = ref(false)
@@ -97,6 +142,24 @@ const handleRefresh = async () => {
   menuOpen.value = false
   await Promise.all([easyTierStore.loadConfigFiles(), easyTierStore.loadWebConfigFiles()])
   easyTierStore.triggerPageRefresh()
+}
+
+// 检查更新：桌面端设置以弹窗承载，由外壳负责定位“关于”并触发一次检查
+const handleCheckUpdate = () => {
+  menuOpen.value = false
+  emit('check-update')
+}
+
+// 打开配置目录：与配置详情页同一条路径（resource/config）；浏览器预览无 Tauri IPC，不动作
+const handleOpenConfigDir = async () => {
+  menuOpen.value = false
+  if (!isTauriRuntime()) return
+  try {
+    const opened = await openPath(await join(await resourceDir(), CONFIG_PATH))
+    if (!opened) toast(t('newConfig.openDirFail'), 'error')
+  } catch {
+    toast(t('newConfig.openDirFail'), 'error')
+  }
 }
 
 // 点击外部关闭菜单

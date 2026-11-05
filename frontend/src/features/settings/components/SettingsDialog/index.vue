@@ -310,12 +310,24 @@ import {
 
 type SettingsSection = 'general' | 'core' | 'data' | 'security' | 'about'
 const props = withDefaults(
-  defineProps<{ modelValue: boolean; inline?: boolean; section?: SettingsSection }>(),
+  defineProps<{
+    modelValue: boolean
+    inline?: boolean
+    section?: SettingsSection
+    // 首次打开时定位的分类（快捷菜单“检查更新”直达关于页）
+    initialTab?: SettingsSection
+    // 打开后自动触发一次检查更新，由父组件在消费后置回 false
+    checkUpdateOnOpen?: boolean
+  }>(),
   {
-    inline: false
+    inline: false,
+    checkUpdateOnOpen: false
   }
 )
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'auto-checked': []
+}>()
 
 // 内部可见态：与父组件 v-model 双向同步
 const visible = ref(props.modelValue)
@@ -497,11 +509,11 @@ watch(panelTab, (tab) => {
   if (tab === 'core') void kernel.refreshDownloadedCores()
 })
 
-// 弹窗打开时：重置到通用 tab、恢复持久化的自动运行设置，并加载应用/内核版本信息
+// 弹窗打开时：按入口定位分类、恢复持久化的自动运行设置，并加载应用/内核版本信息
 //（Android 版本取编译期内核；桌面走 easytier-cli 与资源目录）
 watch(visible, async (v) => {
   if (v) {
-    activeTab.value = 'general'
+    activeTab.value = props.initialTab || 'general'
     kernel.resetMirrorSession()
     // 打开时让当前分类在窄屏横向 tab 中自动可见
     scrollActiveTabIntoView()
@@ -516,6 +528,11 @@ watch(visible, async (v) => {
       store.autoRunConfigName = savedConfigName
     }
     await update.loadAppVersion()
+    // 快捷入口“检查更新”：版本号就绪后再发起一次检查，先通知父组件消费标记避免重复触发
+    if (props.checkUpdateOnOpen) {
+      emit('auto-checked')
+      void update.handleCheckUpdate()
+    }
     // 内核版本探测走全局 store：桌面 easytier-cli -V / Android 编译期内置版本
     try {
       await store.detectCoreVersion()
@@ -527,6 +544,14 @@ watch(visible, async (v) => {
     kernel.closeCoreVerDropdown()
   }
 })
+
+// 供外壳在设置已打开时复用同一入口（FAB 悬浮在弹窗之上，仍可点击）
+const focusAboutAndCheck = () => {
+  activeTab.value = 'about'
+  scrollActiveTabIntoView()
+  void update.loadAppVersion().then(() => update.handleCheckUpdate())
+}
+defineExpose({ focusAboutAndCheck })
 </script>
 
 <style scoped lang="less">

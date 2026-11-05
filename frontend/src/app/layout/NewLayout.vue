@@ -387,8 +387,15 @@
   </Teleport>
   <!-- 设置/主题弹窗：仅桌面端；Android 走独立路由页面 -->
   <ThemeDialog v-if="!isAndroidPlatform" v-model="themeDialogVisible" />
-  <SettingsDialog v-if="!isAndroidPlatform" v-model="settingsDialogVisible" />
-  <FloatingMenu v-if="!isAndroidPlatform" />
+  <SettingsDialog
+    v-if="!isAndroidPlatform"
+    ref="settingsDialogRef"
+    v-model="settingsDialogVisible"
+    :initial-tab="settingsInitialTab"
+    :check-update-on-open="settingsCheckUpdateOnOpen"
+    @auto-checked="settingsCheckUpdateOnOpen = false"
+  />
+  <FloatingMenu v-if="!isAndroidPlatform" @check-update="openCheckUpdate" />
 </template>
 
 <script setup lang="ts">
@@ -428,6 +435,10 @@ const { watchSystemTheme, currentTheme, currentThemeLabel } = useThemeLoader()
 let stopSystemThemeWatch: (() => void) | null = null
 const themeDialogVisible = ref(false)
 const settingsDialogVisible = ref(false)
+// 快捷入口“检查更新”：打开设置时定位到“关于”，并自动触发一次检查
+const settingsInitialTab = ref<'about' | undefined>(undefined)
+const settingsCheckUpdateOnOpen = ref(false)
+const settingsDialogRef = ref<{ focusAboutAndCheck: () => void } | null>(null)
 
 const localeStore = useLocaleStore()
 const easyTierStore = useEasyTierStore()
@@ -553,8 +564,24 @@ const switchTab = (path: string) => {
 const openSettings = () => {
   // 先收抽屉：避免侧栏悬停在二级页面/弹窗之上
   sidebarOpen.value = false
+  // 常规入口不继承上一次的定位/自动检查状态
+  settingsInitialTab.value = undefined
+  settingsCheckUpdateOnOpen.value = false
   if (isAndroidPlatform) router.push('/new/settings')
   else settingsDialogVisible.value = true
+}
+
+// 快捷菜单“检查更新”：桌面设置是弹窗，直接定位到关于页并自动检查一次
+const openCheckUpdate = () => {
+  sidebarOpen.value = false
+  // FAB 层级高于弹窗遮罩，设置已打开时可再次点击：直接切到关于并检查，避免“点了没反应”
+  if (settingsDialogVisible.value) {
+    settingsDialogRef.value?.focusAboutAndCheck()
+    return
+  }
+  settingsInitialTab.value = 'about'
+  settingsCheckUpdateOnOpen.value = true
+  settingsDialogVisible.value = true
 }
 
 // 打开主题设置（同设置，平台分流）
