@@ -4,6 +4,7 @@
 //! 命令名、参数与返回结构保持不变，注册入口见 `lib.rs`。
 
 pub mod process;
+pub mod runtime;
 pub mod system;
 
 #[cfg(desktop)]

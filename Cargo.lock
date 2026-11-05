@@ -4022,6 +4022,7 @@ dependencies = [
  "lighttier-android",
  "lighttier-core",
  "lighttier-desktop",
+ "lighttier-runtime",
  "log",
  "serde",
  "serde_json",
@@ -4073,6 +4074,19 @@ version = "2.0.2"
 dependencies = [
  "log",
  "tauri",
+]
+
+[[package]]
+name = "lighttier-runtime"
+version = "2.0.2"
+dependencies = [
+ "lighttier-android",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tokio",
+ "toml 0.8.23",
 ]
 
 [[package]]

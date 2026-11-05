@@ -1,8 +1,10 @@
 /**
  * 内核运行列表同步
  *
- * 总览 / 配置管理 / 监控页共用同一条链路：读取当前配置名 → coreApi 扫描运行实例
- * → 写回 store。扫描失败时保留上一份状态：浏览器 Mock 环境静默，真实环境留诊断日志。
+ * Tauri（桌面/Android）：读取后端运行态快照（`lighttier-runtime` 单例扫描），
+ * 仅在配置清单变化或显式强制刷新时触发一次扫描；页面挂载本身不再扫描。
+ * 浏览器 Mock：沿用 coreApi mock 扫描。
+ * 扫描失败时保留上一份状态：真实环境留诊断日志，浏览器静默。
  */
 import { useEasyTierStore } from '@/shared/store/easytier'
 import * as coreApi from '@/shared/platform/coreApi'
@@ -13,17 +15,42 @@ export interface RunningListSyncOptions {
   onError?: (error: unknown) => void
 }
 
+export interface RunningListSyncRequest {
+  /** 启动/停止实例后强制重扫，避免等待后端扫描周期 */
+  force?: boolean
+}
+
 export function useRunningListSync(options: RunningListSyncOptions = {}) {
   const easyTierStore = useEasyTierStore()
 
-  const updateRunningList = async (): Promise<void> => {
+  const handleError = (error: unknown) => {
+    if (options.onError) options.onError(error)
+    else if (isTauri()) console.warn('[RunningList] 运行态扫描失败，保留上一份状态:', error)
+  }
+
+  const updateRunningList = async (request: RunningListSyncRequest = {}): Promise<void> => {
+    const names = easyTierStore.configList.map((c) => c.configFileName)
+
+    if (isTauri()) {
+      const { useRuntimeStore } = await import('@/shared/store/runtime')
+      const runtime = useRuntimeStore()
+      try {
+        if (await runtime.init()) {
+          const changed = await runtime.syncCatalog(names)
+          if (changed || request.force) await runtime.refresh()
+          else easyTierStore.setRunningList(runtime.toRunningList())
+          return
+        }
+      } catch (error) {
+        handleError(error)
+      }
+    }
+
     try {
-      const names = easyTierStore.configList.map((c) => c.configFileName)
       const newList = await coreApi.getRunningList(names)
       easyTierStore.setRunningList(newList)
-    } catch (e) {
-      if (options.onError) options.onError(e)
-      else if (isTauri()) console.warn('[RunningList] 运行态扫描失败，保留上一份状态:', e)
+    } catch (error) {
+      handleError(error)
     }
   }
 

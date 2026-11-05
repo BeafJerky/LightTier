@@ -1,0 +1,17 @@
+[package]
+name = "lighttier-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LightTier 运行态与监控快照服务：单例扫描、缓存、订阅采样与事件推送"
+
+[dependencies]
+log = "0.4.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = "2.10.3"
+tokio = { version = "1", features = ["rt", "time", "sync", "process", "fs", "macros"] }
+toml = "0.8"
+
+[target.'cfg(target_os = "android")'.dependencies]
+lighttier-android = { path = "../android" }

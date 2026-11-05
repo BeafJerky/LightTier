@@ -122,7 +122,7 @@ export function useInstanceActions(options: InstanceActionsOptions) {
       easyTierStore.stopLoop = false
       easyTierStore.p2pNotify = true
       easyTierStore.setLastRunConfigName(item)
-      await updateRunningList()
+      await updateRunningList({ force: true })
       toast(t('newCommon.startSuccess'), 'success')
     } catch (e: any) {
       // 失败自动回滚该配置的 AutoMetric 状态（不影响其他配置的持有计数）
@@ -178,6 +178,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
         toast(t('newConfig.exitRouteAutoCleared'), 'success')
       }
     }
+    // 停止后立即对齐后端运行态，避免残留条目等到下一个扫描周期
+    await updateRunningList({ force: true })
     return true
   }
 

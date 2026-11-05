@@ -1,17 +1,22 @@
 /**
- * 监控数据查询与轮询：coreApi 查询、失败重试、快照落地与轮询生命周期。
+ * 监控数据查询与轮询：Tauri 订阅后端采样（lighttier-runtime），浏览器走 Mock 轮询。
  *
- * 可靠性策略（与原页面一致）：单次查询超时 10s、失败重试一次；node/peer 任一缺失则丢弃
- * 本次不完整快照，保留上一份完整数据；连续失败 3 次停止轮询（页面仍保留最后快照）。
+ * Tauri：`monitor_subscribe` 立即返回该实例上一份快照（首屏无等待），
+ * 后续由 `monitor:snapshot` 事件推送；失败保留上一份数据并由后端退避重试。
+ * 浏览器：保留原有 3s 轮询与失败重试（仅 mock 数据，无真实内核）。
  * 页面可见性由调用方负责（隐藏时 stopPolling，恢复时 startPolling）。
  */
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue'
-import * as coreApi from '@/shared/platform/coreApi'
-import { readFileContent } from '@/shared/platform/fileUtil'
-import { CONFIG_PATH } from '@/shared/constants/easytier'
-import { getNatType, processPeerData, routeCost } from '@/shared/lib/monitorFormat'
-import * as toml from 'smol-toml'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { getNatType, processPeerData, routeCost } from '@/shared/lib/monitorFormat'
+import {
+  onMonitorSnapshot,
+  subscribeMonitor,
+  toRuntimeInstance,
+  unsubscribeMonitor,
+  type RuntimeMonitorSnapshot
+} from '@/shared/platform/runtimeApi'
 
 export interface MonitorSnapshot {
   nodeInfo: any
@@ -37,19 +42,25 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
   // 监控快照：一次轮询的完整结果（nodeInfo 已合并 TOML 展示字段与 NAT 映射结果）
   const selectedData = ref<MonitorSnapshot | null>(null)
 
-  // 连续失败阈值：前两次保留快照并继续自动重试；达到上限停止轮询，
-  // 但保留最后一份快照并提示数据可能已过期（UX-108），由手动重试恢复。
+  // 连续失败阈值：前两次保留快照并继续自动重试；达到上限提示数据可能已过期
+  // （UX-108），由手动重试恢复。Tauri 模式下由后端快照的 failures 驱动。
   const consecutiveFailures = ref(0)
   const MAX_FAILURES = 3
   const pollFailed = computed(() => consecutiveFailures.value >= MAX_FAILURES)
 
   let isMounted = false
   let pollTimer: ReturnType<typeof setInterval> | null = null
-  // 每次启停自增，丢弃切换配置/页面隐藏后仍在飞的旧请求结果，
-  // 避免旧请求失败时把新配置的轮询计数推到上限并误停新轮询。
+  // 每次启停自增，丢弃切换配置/页面隐藏后仍在飞的旧结果
   let pollGeneration = 0
-  // 全局在飞标记：只由请求自身置位/复位（stopPolling 不得清除），保证任意时刻只有一个查询
+  // 浏览器 Mock 在飞标记：保证任意时刻只有一个查询
   let isFetching = false
+
+  // Tauri 后端订阅：当前订阅名（事件过滤）与命令串行队列
+  // （订阅/取消必须保序，避免切换配置时旧取消把新订阅冲掉）
+  let activeRuntimeName = ''
+  let monitorUnlisten: UnlistenFn | null = null
+  let monitorQueue: Promise<unknown> = Promise.resolve()
+  let subscribeSeq = 0
 
   // --- 判断 Tauri 环境（withGlobalTauri 已关闭，用 isTauri() 检测） ---
   const isTauriEnv = (): boolean => {
@@ -284,136 +295,77 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     return avg.toFixed(1) + 'ms'
   }
 
-  /**
-   * CLI 的 RPC 查询存在偶发超时（内核繁忙时实测约 1/3 失败）。
-   * 单次失败不应立即清空界面：先短延迟重试一次，仍失败返回 null，
-   * 由调用方保留上一份完整快照，避免节点信息/对等节点区块反复消失再出现。
-   */
-  // 查询超时兜底：Rust 侧若一直不返回，isFetching 会永久为 true 并让轮询停摆
-  const withQueryTimeout = (promise: Promise<any>, ms = 10000): Promise<any> =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('monitor query timeout')), ms)
-      promise.then(
-        (value) => {
-          clearTimeout(timer)
-          resolve(value)
-        },
-        (err) => {
-          clearTimeout(timer)
-          reject(err)
-        }
-      )
+  /** 后端快照归一化：NAT 数字映射 + peer 格式化 + 流量/延迟汇总 */
+  const fromRuntimeSnapshot = (dto: RuntimeMonitorSnapshot): MonitorSnapshot | null => {
+    if (!dto.nodeInfo || !Array.isArray(dto.peerList)) return null
+    const nodeInfo: any = { ...dto.nodeInfo }
+    if (nodeInfo.stun_info?.udp_nat_type != null) {
+      nodeInfo.stun_info = {
+        ...nodeInfo.stun_info,
+        _udp_nat_type: getNatType(nodeInfo.stun_info.udp_nat_type)
+      }
+    }
+    const processed = processPeerData(dto.peerList)
+    const remotePeers = processed.filter((p) => p.cost !== routeCost('Local'))
+    return {
+      nodeInfo,
+      peerList: processed,
+      lastUpdate: dto.sampledAt,
+      txTotal: remotePeers.reduce((sum, p) => sum + parseHumanBytes(p.tx_bytes), 0),
+      rxTotal: remotePeers.reduce((sum, p) => sum + parseHumanBytes(p.rx_bytes), 0),
+      avgLatency: calcAvgLatency(processed)
+    }
+  }
+
+  /** 浏览器 Mock：与真实数据结构一致，覆盖演示场景 */
+  const fetchMockSnapshot = (item: RunningItem): MonitorSnapshot => {
+    const rawPeers = mockPeers[item.configFileName] || []
+    const processed = processPeerData(rawPeers)
+    return {
+      nodeInfo: mockNodeInfo[item.configFileName] || {},
+      peerList: processed,
+      lastUpdate: Date.now(),
+      txTotal: processed.reduce((sum, p) => sum + (Number(p.tx_bytes) || 0), 0),
+      rxTotal: processed.reduce((sum, p) => sum + (Number(p.rx_bytes) || 0), 0),
+      avgLatency: calcAvgLatency(processed)
+    }
+  }
+
+  /** 串行执行订阅命令，保证「取消旧订阅」一定先于「订阅新配置」到达后端 */
+  const enqueueMonitorTask = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = monitorQueue.then(task, task)
+    monitorQueue = run.catch(() => undefined)
+    return run
+  }
+
+  const applyRuntimeSnapshot = (dto: RuntimeMonitorSnapshot, expectedName: string) => {
+    if (dto.configFileName !== expectedName) return
+    consecutiveFailures.value = dto.failures
+    // sampledAt 为 0：从未成功采样，保留加载态/失败态，避免展示全空数据
+    if (dto.sampledAt <= 0) return
+    const snapshot = fromRuntimeSnapshot(dto)
+    if (!snapshot) return
+    selectedData.value = snapshot
+    // 失败重发的仍是上一份旧数据：展示保留，但不再写趋势/摘要（否则画出一段零速率假曲线）
+    if (dto.stale) return
+    options.onSnapshot(dto.configFileName, snapshot)
+  }
+
+  /** 监听后端采样事件（仅一次）；挂载状态与当前订阅名在回调内二次校验 */
+  const ensureMonitorListener = async () => {
+    if (monitorUnlisten) return
+    const unlisten = await onMonitorSnapshot((dto) => {
+      if (!isMounted || !activeRuntimeName) return
+      applyRuntimeSnapshot(dto, activeRuntimeName)
     })
-
-  const queryWithRetry = async (
-    query: () => Promise<any>,
-    isValid: (value: any) => boolean
-  ): Promise<any> => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const result = await withQueryTimeout(query())
-        if (isValid(result)) return result
-      } catch {
-        // CLI 调用失败（RPC 超时/进程退出）按未命中处理，仍重试一次
-      }
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 150))
+    if (!isMounted) {
+      unlisten()
+      return
     }
-    return null
+    monitorUnlisten = unlisten
   }
 
-  // 拉取一次监控快照：浏览器走 Mock；Tauri 环境并行查询 node/peer，
-  // 并把 TOML 展示字段（instance_name/network_name/dhcp/exit_nodes/port_forward）注入 nodeInfo
-  const fetchMonitorData = async (item: RunningItem) => {
-    const isTauri = isTauriEnv()
-    if (!isTauri) {
-      // 非 Tauri 环境使用 mock
-      const rawPeers = mockPeers[item.configFileName] || []
-      const processed = processPeerData(rawPeers)
-      const txTotal = processed.reduce((s, p) => s + (Number(p.tx_bytes) || 0), 0)
-      const rxTotal = processed.reduce((s, p) => s + (Number(p.rx_bytes) || 0), 0)
-      const snapshot: MonitorSnapshot = {
-        nodeInfo: mockNodeInfo[item.configFileName] || {},
-        peerList: processed,
-        lastUpdate: Date.now(),
-        txTotal,
-        rxTotal,
-        avgLatency: calcAvgLatency(processed)
-      }
-      return snapshot
-    }
-
-    // Tauri 环境（桌面：easytier-cli；Android：进程内 RPC —— 均由 coreApi 分发）
-    try {
-      // 从 TOML 读取展示字段（instance_name, network_name, dhcp, exit_nodes, port_forward）
-      let instanceName = ''
-      let networkName = ''
-      let dhcp = false
-      let exitNodes: any[] = []
-      let portForward: any[] = []
-      try {
-        const content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-        if (content) {
-          const parsed = toml.parse(content) as any
-          instanceName = (parsed.instance_name as string) || ''
-          networkName = (parsed.network_identity as any)?.network_name || ''
-          dhcp = !!parsed.dhcp
-          exitNodes = Array.isArray(parsed.exit_nodes) ? parsed.exit_nodes : []
-          portForward = Array.isArray(parsed.port_forward) ? parsed.port_forward : []
-        }
-      } catch (e) {
-        console.error('解析监控配置失败:', e)
-      }
-
-      const [nodeInfo, peerList] = await Promise.all([
-        queryWithRetry(
-          () => coreApi.queryNode(item),
-          (v) => !!v
-        ),
-        queryWithRetry(
-          () => coreApi.queryPeer(item),
-          (v) => Array.isArray(v)
-        )
-      ])
-      if (!nodeInfo || !peerList) {
-        // 任一查询失败：本次快照不完整，直接丢弃（调用方保留上一份数据并计失败次数）
-        return null
-      }
-
-      // 从 TOML 缓存注入配置信息
-      if (nodeInfo) {
-        nodeInfo._instance_name = instanceName
-        nodeInfo._network_name = networkName
-        nodeInfo._dhcp = dhcp
-        nodeInfo._exit_nodes = exitNodes
-        nodeInfo._port_forward = portForward
-      }
-      // NAT 类型数字映射（复用 easyTierUtil 中已验证的映射）
-      if (nodeInfo?.stun_info?.udp_nat_type != null) {
-        nodeInfo.stun_info._udp_nat_type = getNatType(nodeInfo.stun_info.udp_nat_type)
-      }
-      const rawPeers = peerList
-
-      const processed = processPeerData(rawPeers)
-      const remotePeers = processed.filter((p) => p.cost !== routeCost('Local'))
-      const txTotal = remotePeers.reduce((s, p) => s + parseHumanBytes(p.tx_bytes), 0)
-      const rxTotal = remotePeers.reduce((s, p) => s + parseHumanBytes(p.rx_bytes), 0)
-
-      const snapshot: MonitorSnapshot = {
-        nodeInfo: nodeInfo || {},
-        peerList: processed,
-        lastUpdate: Date.now(),
-        txTotal,
-        rxTotal,
-        avgLatency: calcAvgLatency(processed)
-      }
-      return snapshot
-    } catch (e) {
-      console.error('获取监控数据失败:', e)
-      return null
-    }
-  }
-
-  // 开始轮询（先清理旧定时器；仅对运行中的选中实例生效）
+  // 开始订阅/轮询（先清理旧定时器与旧订阅；仅对运行中的选中实例生效）
   const startPolling = () => {
     stopPolling()
     const cfg = options.selectedConfig.value
@@ -421,25 +373,39 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     if (!options.runningSet.value.has(cfg.configFileName)) return
     const gen = pollGeneration
 
+    if (isTauriEnv()) {
+      activeRuntimeName = cfg.configFileName
+      const interval = (options.refreshInterval() || 3) * 1000
+      const seq = ++subscribeSeq
+      void (async () => {
+        try {
+          await ensureMonitorListener()
+          const cached = await enqueueMonitorTask(() =>
+            subscribeMonitor(toRuntimeInstance(cfg), interval)
+          )
+          if (gen !== pollGeneration || seq !== subscribeSeq || !isMounted) return
+          if (cached) applyRuntimeSnapshot(cached, cfg.configFileName)
+        } catch (e) {
+          console.warn('[Monitor] 订阅后端采样失败:', e)
+          if (gen === pollGeneration && seq === subscribeSeq) {
+            consecutiveFailures.value = Math.max(consecutiveFailures.value, 1)
+          }
+        }
+      })()
+      return
+    }
+
     const doPoll = async () => {
       if (isFetching) return
       isFetching = true
       try {
-        const data = await fetchMonitorData(cfg)
-        // 页面隐藏/切换配置后旧请求返回：直接丢弃，不影响新轮询状态
+        const data = fetchMockSnapshot(cfg)
+        // 页面隐藏/切换配置后旧结果返回：直接丢弃
         if (gen !== pollGeneration || !isMounted) return
         if (options.selectedConfig.value?.configFileName !== cfg.configFileName) return
-        if (data) {
-          selectedData.value = data
-          options.onSnapshot(cfg.configFileName, data)
-          consecutiveFailures.value = 0
-        } else {
-          consecutiveFailures.value++
-          if (consecutiveFailures.value >= MAX_FAILURES) {
-            // 停止轮询但不丢弃最后快照，由 stale 横幅提示并允许手动重试
-            stopPolling()
-          }
-        }
+        selectedData.value = data
+        options.onSnapshot(cfg.configFileName, data)
+        consecutiveFailures.value = 0
       } finally {
         isFetching = false
       }
@@ -450,17 +416,21 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     pollTimer = setInterval(doPoll, (options.refreshInterval() || 3) * 1000)
   }
 
-  // 停止轮询：代际自增使在飞请求作废；不清 isFetching，
-  // 由请求自身复位，避免旧请求与新一代请求并发
+  // 停止订阅/轮询：代际自增使在飞结果作废；后端取消订阅在队列中执行
   const stopPolling = () => {
     pollGeneration++
+    subscribeSeq++
+    activeRuntimeName = ''
     if (pollTimer) {
       clearInterval(pollTimer)
       pollTimer = null
     }
+    if (isTauriEnv()) {
+      void enqueueMonitorTask(() => unsubscribeMonitor()).catch(() => undefined)
+    }
   }
 
-  // 手动重试：重置失败计数并立即重新开始轮询
+  // 手动重试：重置失败计数并重新订阅（后端订阅重建即重置失败计数与退避）
   const retryPolling = () => {
     if (!options.selectedConfig.value) return
     consecutiveFailures.value = 0
@@ -478,6 +448,9 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
   onUnmounted(() => {
     isMounted = false
     stopPolling()
+    const unlisten = monitorUnlisten
+    monitorUnlisten = null
+    if (unlisten) unlisten()
   })
 
   return {

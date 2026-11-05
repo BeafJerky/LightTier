@@ -4,7 +4,8 @@
 //! Android 端使用进程内内核（见 `android` 模块）。
 
 #[cfg(desktop)]
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+use tauri::Manager;
 
 mod commands;
 
@@ -38,7 +39,13 @@ pub fn run() {
             commands::process::run_command,
             commands::system::check_port_available,
             commands::system::open_external_url,
-            commands::update::launch_update_installer
+            commands::update::launch_update_installer,
+            commands::runtime::runtime_get_snapshot,
+            commands::runtime::runtime_set_catalog,
+            commands::runtime::runtime_refresh,
+            commands::runtime::monitor_subscribe,
+            commands::runtime::monitor_unsubscribe,
+            commands::runtime::monitor_get_snapshot
         ]);
     }
 
@@ -49,6 +56,12 @@ pub fn run() {
             commands::process::run_command,
             commands::system::check_port_available,
             commands::system::open_external_url,
+            commands::runtime::runtime_get_snapshot,
+            commands::runtime::runtime_set_catalog,
+            commands::runtime::runtime_refresh,
+            commands::runtime::monitor_subscribe,
+            commands::runtime::monitor_unsubscribe,
+            commands::runtime::monitor_get_snapshot,
             android::instance::start_instance,
             android::instance::stop_instance,
             android::instance::list_instances,
@@ -101,7 +114,10 @@ pub fn run() {
     }
 
     app_builder
-        .setup(|_app| {
+        .setup(|app| {
+            // 运行态服务：后台扫描运行中实例并推送监控快照
+            app.manage(lighttier_runtime::setup(app.handle()));
+
             // Android：启动进程内 easytier 内核与 RPC 服务
             #[cfg(target_os = "android")]
             android::setup();

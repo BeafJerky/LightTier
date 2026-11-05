@@ -139,14 +139,14 @@ pub async fn stop_instance(instance_id: Option<String>) -> Result<(), String> {
 /// 运行中实例信息。
 #[derive(Serialize)]
 pub struct InstanceInfo {
-    instance_id: String,
-    config_file: Option<String>,
-    instance_name: String,
-    network_name: String,
-    running: bool,
+    pub instance_id: String,
+    pub config_file: Option<String>,
+    pub instance_name: String,
+    pub network_name: String,
+    pub running: bool,
     /// "10.126.126.1/24"，实例未就绪时为 None。
-    virtual_ipv4: Option<String>,
-    error_msg: Option<String>,
+    pub virtual_ipv4: Option<String>,
+    pub error_msg: Option<String>,
 }
 
 /// 列出当前运行中的实例（单实例模型下最多一条）。

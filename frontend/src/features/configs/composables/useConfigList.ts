@@ -764,17 +764,30 @@ export function useConfigList(options: UseConfigListOptions) {
     }
   }
 
-  // 服务管理
-  const loadServiceStatus = async (configFileName: string) => {
+  // 服务检测存在 TTL 缓存：每次进入配置页为每个配置跑一次 PowerShell 查询
+  // 是切菜单卡顿的主要来源，此处 60s 内复用上次结果，变更操作后强制刷新
+  const SERVICE_STATUS_TTL = 60_000
+  const serviceStatusCache = new Map<string, { status: string; at: number }>()
+
+  const loadServiceStatus = async (configFileName: string, force = false) => {
     // Windows 服务专属能力；Android 无此模型（服务面板整体隐藏）
     if (isAndroidPlatform) return
+    if (!force) {
+      const cached = serviceStatusCache.get(configFileName)
+      if (cached && Date.now() - cached.at < SERVICE_STATUS_TTL) {
+        serviceStatusMap.value.set(configFileName, cached.status)
+        return
+      }
+    }
+    let status: string
     try {
-      const status = await checkService(configFileName)
-      serviceStatusMap.value.set(configFileName, status)
+      status = await checkService(configFileName)
     } catch {
       // 检测失败不能伪装成“未安装”：unknown 会同时阻止删除，避免遗留孤儿服务
-      serviceStatusMap.value.set(configFileName, 'unknown')
+      status = 'unknown'
     }
+    serviceStatusCache.set(configFileName, { status, at: Date.now() })
+    serviceStatusMap.value.set(configFileName, status)
   }
 
   // 打开服务安装弹窗（选择 nssm / 官方服务等安装方式）
@@ -811,7 +824,7 @@ export function useConfigList(options: UseConfigListOptions) {
       } else {
         toast(t('newConfig.svcInstallFail'), 'error')
       }
-      await loadServiceStatus(configName)
+      await loadServiceStatus(configName, true)
     } catch {
       toast(t('newConfig.svcInstallFail'), 'error')
     }
@@ -826,8 +839,9 @@ export function useConfigList(options: UseConfigListOptions) {
         ok ? t('newConfig.svcStartSuccess') : t('newConfig.svcStartFail'),
         ok ? 'success' : 'error'
       )
-      await loadServiceStatus(selectedConfig.value.configFileName)
-      await updateRunningList()
+      await loadServiceStatus(selectedConfig.value.configFileName, true)
+      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
+      await updateRunningList({ force: true })
     } catch {
       toast(t('newConfig.svcStartFail'), 'error')
     }
@@ -844,9 +858,9 @@ export function useConfigList(options: UseConfigListOptions) {
       )
       // 仅在真正停止后提示；失败时不再补一条“已停止”的成功 toast
       if (ok) toast(t('newConfig.svcStopHint'), 'success', 3000)
-      await loadServiceStatus(selectedConfig.value.configFileName)
-      // 服务启停会改变内核运行状态，统一刷新运行列表
-      await updateRunningList()
+      await loadServiceStatus(selectedConfig.value.configFileName, true)
+      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
+      await updateRunningList({ force: true })
     } catch {
       toast(t('newConfig.svcStopFail'), 'error')
     }
@@ -866,7 +880,7 @@ export function useConfigList(options: UseConfigListOptions) {
         result ? t('newConfig.svcUninstallSuccess') : t('newConfig.svcUninstallFail'),
         result ? 'success' : 'error'
       )
-      await loadServiceStatus(selectedConfig.value.configFileName)
+      await loadServiceStatus(selectedConfig.value.configFileName, true)
     } catch {
       toast(t('newConfig.svcUninstallFail'), 'error')
     }

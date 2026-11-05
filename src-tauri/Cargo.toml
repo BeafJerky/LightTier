@@ -19,6 +19,7 @@ tauri-build = { version = "2.5.6", features = ["config-json5"] }
 
 [dependencies]
 lighttier-core = { path = "../crates/core" }
+lighttier-runtime = { path = "../crates/runtime" }
 log = "0.4.29"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
