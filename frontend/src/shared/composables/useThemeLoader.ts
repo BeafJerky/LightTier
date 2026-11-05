@@ -9,6 +9,7 @@
  * - 切换主题后缓存首屏调色板，供 index.html 在主题 CSS 加载前还原背景与强调色
  */
 import { ref } from 'vue'
+import { extractThemeLabel } from '@/shared/lib/themeLabel'
 
 /** 系统是否偏好深色（非浏览器环境恒为 false） */
 const prefersDark = (): boolean => {
@@ -29,6 +30,8 @@ export const systemDefaultTheme = (): string => (prefersDark() ? 'dark' : 'cream
 export const resolveDefaultTheme = (): string => readSavedTheme() || systemDefaultTheme()
 
 const currentTheme = ref(resolveDefaultTheme())
+// 外部主题显示名（取 CSS 内 @theme-label）；内置主题为 null，由界面走 i18n
+const currentThemeLabel = ref<string | null>(null)
 // 主题应用版本号：即使主题名未变（重启恢复外部主题），也能通知依赖方重新读取计算样式
 const themeRevision = ref(0)
 
@@ -121,6 +124,7 @@ export const useThemeLoader = () => {
   // 应用主题：记录名称 + 注入/移除外部 CSS + 更新 data-theme 属性
   const applyTheme = (name: string, externalCss?: string) => {
     currentTheme.value = name
+    currentThemeLabel.value = externalCss ? extractThemeLabel(externalCss, name) : null
     localStorage.setItem('theme', name)
 
     if (externalCss) {
@@ -137,6 +141,7 @@ export const useThemeLoader = () => {
   const setBuiltinTheme = (name: string) => {
     removeExternalTheme()
     currentTheme.value = name
+    currentThemeLabel.value = null
     document.documentElement.setAttribute('data-theme', name)
     themeRevision.value++
     persistSplashPalette(name)
@@ -168,6 +173,7 @@ export const useThemeLoader = () => {
 
   return {
     currentTheme,
+    currentThemeLabel,
     themeRevision,
     applyTheme,
     resetTheme,

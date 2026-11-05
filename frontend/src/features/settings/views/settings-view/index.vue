@@ -121,7 +121,7 @@ const isWideLandscape = useWideLandscape()
 const { t } = useI18n()
 const store = useEasyTierStore()
 const localeStore = useLocaleStore()
-const { currentTheme } = useThemeLoader()
+const { currentTheme, currentThemeLabel } = useThemeLoader()
 
 const appVersion = ref('...')
 const langSheetVisible = ref(false)
@@ -136,7 +136,7 @@ const themeLabel = computed(() => {
   const name = currentTheme.value
   if (name === 'cream') return t('newTheme.cream')
   if (name === 'dark') return t('newTheme.dark')
-  return name
+  return currentThemeLabel.value || name
 })
 
 const groups = computed(() => {

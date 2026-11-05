@@ -14,6 +14,7 @@ import { BaseDirectory } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { isAndroid } from '@/shared/platform/platformUtil'
+import { extractThemeLabel } from '@/shared/lib/themeLabel'
 import { useThemeLoader } from './useThemeLoader'
 
 /** 外部主题元信息（cssText 为完整样式文本，供应用时注入） */
@@ -33,19 +34,11 @@ const isValidThemeCss = (cssText: string): boolean => {
 const THEME_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 const isValidThemeName = (name: string): boolean => THEME_NAME_PATTERN.test(name)
 
-// 显示名元数据：CSS 注释中的 `@theme-label: 丹青水墨`；仅用于界面展示，不参与路径拼接
-const THEME_LABEL_PATTERN = /@theme-label\s*:\s*([^*\r\n]+)/
-const THEME_LABEL_MAX_LENGTH = 40
-
 // 主题色徽标：优先主强调色，其次成功色
 const THEME_COLOR_PATTERN = /--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/
 
-/** 提取主题显示名；未声明、为空或超长时按规则回退/截断（文件名始终作为稳定 ID） */
-export const extractThemeLabel = (cssText: string, fallback: string): string => {
-  const label = cssText.match(THEME_LABEL_PATTERN)?.[1].trim()
-  if (!label) return fallback
-  return label.slice(0, THEME_LABEL_MAX_LENGTH)
-}
+// 显示名解析见 shared/lib/themeLabel（文件名始终作为稳定 ID）
+export { extractThemeLabel }
 
 const toThemeInfo = (name: string, cssText: string): ExternalThemeInfo | null => {
   if (!isValidThemeName(name) || !isValidThemeCss(cssText)) return null

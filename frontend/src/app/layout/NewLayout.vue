@@ -423,7 +423,7 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 const { toasts } = useCreamToast()
 const { t } = useI18n()
 const isAndroidPlatform = isAndroid()
-const { watchSystemTheme, currentTheme } = useThemeLoader()
+const { watchSystemTheme, currentTheme, currentThemeLabel } = useThemeLoader()
 // 系统深色偏好监听的取消函数（onBeforeUnmount 释放）
 let stopSystemThemeWatch: (() => void) | null = null
 const themeDialogVisible = ref(false)
@@ -439,11 +439,11 @@ const currentLangName = computed(
 )
 const langDropdownVisible = ref(false)
 
-// 底部入口的右侧当前值：内置主题走 i18n，外部主题直接显示名称
+// 底部入口的右侧当前值：内置主题走 i18n，外部主题显示 CSS 内的 @theme-label
 const themeLabel = computed(() => {
   if (currentTheme.value === 'cream') return t('newTheme.cream')
   if (currentTheme.value === 'dark') return t('newTheme.dark')
-  return currentTheme.value
+  return currentThemeLabel.value || currentTheme.value
 })
 const appVersion = ref('')
 
