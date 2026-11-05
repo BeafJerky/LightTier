@@ -4,12 +4,14 @@
 #   powershell -ExecutionPolicy Bypass -File .\lt-nightly.ps1                    # 只打包，产物在 %TEMP%\lighttier-nightly\<版本>
 #   powershell -ExecutionPolicy Bypass -File .\lt-nightly.ps1 -Publish           # 打包并创建 GitHub 预发布（prerelease）
 #   powershell -ExecutionPolicy Bypass -File .\lt-nightly.ps1 -BaseVersion 1.10.0
+#   powershell -ExecutionPolicy Bypass -File .\lt-nightly.ps1 -Build 2            # 同日重建：版本与标签都带 .2
 #   powershell -ExecutionPolicy Bypass -File .\lt-nightly.ps1 -DryRun            # 只打印版本/标签/命令
 #
-# 版本规则: <下一补丁版或 -BaseVersion>-nightly.<yyyyMMdd>，如 2.0.0-nightly.20261024
-# 标签规则: v<版本>（如 v2.0.0-nightly.20261024）；与正式版 v2.0.0 区分，
+# 版本规则: <下一补丁版或 -BaseVersion>-nightly.<yyyyMMdd>[.<Build>]，如 2.0.0-nightly.20261024
+# 标签规则: v<版本>（如 v2.0.0-nightly.20261024.2）；与正式版 v2.0.0 区分，
 # 且带 v 前缀 + 真实版本号，客户端“只更新稳定版”关闭时能按版本正确比较。
-# 同一天多次发布需用 -Tag v2.0.0-nightly.20261024-2 或 -BaseVersion 另开版本号，否则标签重名。
+# 同日重建必须用 -Build 2（而不是给标签加 -2 后缀）：客户端比较的是安装包里的版本号，
+# 标签上的额外后缀无法反映到已安装版本，会导致“永远已是最新”。
 # 桌面端只出 NSIS（EXE）：Tauri 2 的 MSI 打包器要求预发布标识为纯数字（<=65535），日期后缀无法用于 MSI；
 # 正式版仍由 lt-repack-all.ps1 产出 NSIS + MSI。
 # -Publish 使用 gh 创建 prerelease，不会改动 GitHub 的 latest，也不会写 CHANGELOG；
@@ -18,6 +20,8 @@ param(
     [switch]$Publish,
     [switch]$DryRun,
     [string]$BaseVersion = "",
+    # 同日第几次构建（从 1 起）。非空时版本与标签都追加 .<Build>，让客户端能判出新旧
+    [string]$Build = "",
     [string]$Tag = "",
     [string]$Notes = ""
 )
@@ -50,6 +54,10 @@ if (-not $BaseVersion) {
 if ($BaseVersion -notmatch '^\d+\.\d+\.\d+$') { Write-Host "FATAL: BaseVersion 必须为 x.y.z：$BaseVersion"; exit 1 }
 $nightlyDate = Get-Date -Format "yyyyMMdd"
 $version = "$BaseVersion-nightly.$nightlyDate"
+if ($Build) {
+    if ($Build -notmatch '^[1-9]\d*$') { Write-Host "FATAL: Build 必须为正整数（从 1 起）：$Build"; exit 1 }
+    $version = "$version.$([int]$Build)"
+}
 if (-not $Tag) { $Tag = "v$version" }
 
 $baseParts = $BaseVersion.Split('.')
@@ -78,6 +86,17 @@ if ($DryRun) {
 }
 
 Set-Location $root
+
+# ---------- 发布预检 ----------
+# 标签已存在说明同日已有构建；此时二进制版本相同，客户端会判为“已是最新”，
+# 在构建前就拦下，避免白跑一轮
+if ($Publish -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+    & gh release view $Tag --json tagName *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "FATAL: 标签 $Tag 已存在。同日重建请加 -Build <序号>（如 -Build 2），版本与标签都会带上序号"
+        exit 1
+    }
+}
 
 # ---------- [1/2] 桌面端（NSIS） ----------
 # 仅覆盖 version；--config 与 tauri.conf.json5 走 JSON 合并（RFC 7396）
@@ -171,7 +190,7 @@ $ghArgs = @(
 Write-Host "=== publishing: $Tag ==="
 & gh @ghArgs
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "FATAL: gh release create 失败（tag 是否已存在？）"
+    Write-Host "FATAL: gh release create 失败（tag 是否已存在？同日重建请加 -Build <序号>）"
     exit 1
 }
 Write-Host "=== PUBLISHED: https://github.com/BeafJerky/LightTier/releases/tag/$Tag ==="
