@@ -1,19 +1,22 @@
 import { describe, it, expect, vi } from 'vitest'
-import {
-  resolveWebServiceStatuses,
-  WEB_SERVICE_STATUS_TTL_MS
-} from '@/features/web-configs/lib/webServiceStatusCache'
+import { resolveServiceStatuses, SERVICE_STATUS_TTL_MS } from '@/shared/lib/serviceStatusCache'
 
-describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
+describe('resolveServiceStatuses（服务状态缓存）', () => {
   it('命中原有缓存时不调用检测，并立即回传状态', async () => {
     const cache = new Map([['a', { status: 'runningService', at: 1_000 }]])
     const load = vi.fn(async () => 'notInstalled')
     const updates: Array<[string, string]> = []
 
-    await resolveWebServiceStatuses(['a'], load, (name, status) => updates.push([name, status]), {
-      cache,
-      now: () => 2_000
-    })
+    await resolveServiceStatuses(
+      'test:spec',
+      ['a'],
+      load,
+      (name, status) => updates.push([name, status]),
+      {
+        cache,
+        now: () => 2_000
+      }
+    )
 
     expect(load).not.toHaveBeenCalled()
     expect(updates).toEqual([['a', 'runningService']])
@@ -25,7 +28,10 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
     const updates: Array<[string, string]> = []
     const onUpdate = (name: string, status: string) => updates.push([name, status])
 
-    await resolveWebServiceStatuses(['a', 'b'], load, onUpdate, { cache, now: () => 1_000 })
+    await resolveServiceStatuses('test:spec', ['a', 'b'], load, onUpdate, {
+      cache,
+      now: () => 1_000
+    })
     expect(load).toHaveBeenCalledTimes(2)
     expect(cache.get('a')?.status).toBe('running')
     expect(updates).toEqual(
@@ -35,9 +41,9 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
       ])
     )
 
-    await resolveWebServiceStatuses(['a', 'b'], load, onUpdate, {
+    await resolveServiceStatuses('test:spec', ['a', 'b'], load, onUpdate, {
       cache,
-      now: () => 1_000 + WEB_SERVICE_STATUS_TTL_MS - 1
+      now: () => 1_000 + SERVICE_STATUS_TTL_MS - 1
     })
     expect(load).toHaveBeenCalledTimes(2)
   })
@@ -48,14 +54,14 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
     const updates: Array<[string, string]> = []
     const onUpdate = (name: string, status: string) => updates.push([name, status])
 
-    await resolveWebServiceStatuses(['a'], load, onUpdate, {
+    await resolveServiceStatuses('test:spec', ['a'], load, onUpdate, {
       cache,
-      now: () => 1_000 + WEB_SERVICE_STATUS_TTL_MS
+      now: () => 1_000 + SERVICE_STATUS_TTL_MS
     })
     expect(load).toHaveBeenCalledTimes(1)
     expect(updates).toEqual([['a', 'running']])
 
-    await resolveWebServiceStatuses(['a'], load, onUpdate, {
+    await resolveServiceStatuses('test:spec', ['a'], load, onUpdate, {
       cache,
       now: () => 2_000,
       force: true
@@ -72,7 +78,9 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
         releases.set(name, resolve)
       })
 
-    const task = resolveWebServiceStatuses(['a', 'b'], load, () => {}, { cache: new Map() })
+    const task = resolveServiceStatuses('test:spec', ['a', 'b'], load, () => {}, {
+      cache: new Map()
+    })
 
     expect(started).toEqual(['a', 'b'])
     releases.get('a')?.('running')
@@ -89,7 +97,7 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
         releases.set(name, resolve)
       })
 
-    const task = resolveWebServiceStatuses(['a', 'b', 'c', 'd'], load, () => {}, {
+    const task = resolveServiceStatuses('test:spec', ['a', 'b', 'c', 'd'], load, () => {}, {
       cache: new Map(),
       concurrency: 2
     })
@@ -114,15 +122,39 @@ describe('resolveWebServiceStatuses（Web 配置服务状态缓存）', () => {
     })
     const updates: Array<[string, string]> = []
 
-    await resolveWebServiceStatuses(['a'], load, (name, status) => updates.push([name, status]), {
-      cache,
-      now: () => 1_000
-    })
+    await resolveServiceStatuses(
+      'test:spec',
+      ['a'],
+      load,
+      (name, status) => updates.push([name, status]),
+      {
+        cache,
+        now: () => 1_000
+      }
+    )
 
     expect(updates).toEqual([['a', 'unknown']])
     expect(cache.has('a')).toBe(false)
 
-    await resolveWebServiceStatuses(['a'], load, () => {}, { cache, now: () => 1_001 })
+    await resolveServiceStatuses('test:spec', ['a'], load, () => {}, { cache, now: () => 1_001 })
     expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('不同 scope 的同名配置互不串用缓存', async () => {
+    const updates: Array<[string, string]> = []
+    const loadInstance = vi.fn(async () => 'notInstalled')
+
+    await resolveServiceStatuses(
+      'test:scope-web',
+      ['same'],
+      async () => 'running',
+      () => {}
+    )
+    await resolveServiceStatuses('test:scope-instance', ['same'], loadInstance, (name, status) =>
+      updates.push([name, status])
+    )
+
+    expect(loadInstance).toHaveBeenCalledTimes(1)
+    expect(updates).toEqual([['same', 'notInstalled']])
   })
 })

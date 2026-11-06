@@ -196,7 +196,7 @@ import WebConfigForm from './WebConfigForm.vue'
 import WebConfigList from './WebConfigList.vue'
 import WebConfigDetail from './WebConfigDetail.vue'
 import { isWebChecking, isWebRunning, isWebServiceStatusPending } from '../../lib/webConfigStatus'
-import { resolveWebServiceStatuses } from '../../lib/webServiceStatusCache'
+import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
 import type { FormWebData } from '@/entities/config/formTypes'
 
 defineOptions({ name: 'NewWebConfigView' })
@@ -375,7 +375,8 @@ const refreshWebRuntimeState = async (forceServiceStatus = false) => {
     }
   }
   // 服务状态先回传 TTL 缓存，缺失项并发检测；不阻塞列表渲染
-  void resolveWebServiceStatuses(
+  void resolveServiceStatuses(
+    'web-config',
     list.map((item) => item.configFileName),
     async (configFileName) => (await checkWebService(configFileName)) as string,
     (configFileName, serviceStatus) => {

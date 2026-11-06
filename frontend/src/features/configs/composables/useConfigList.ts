@@ -27,6 +27,7 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { resourceDir, join } from '@tauri-apps/api/path'
 import { openPath } from '@/shared/platform/fileUtil'
 import { getErrorMessage } from '@/shared/lib/error'
+import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
 import {
   setExitRoute,
   clearExitRoute,
@@ -199,10 +200,13 @@ export function useConfigList(options: UseConfigListOptions) {
         if (target) await selectConfig(target)
       }
     }
-    // 加载服务状态
-    for (const c of easyTierStore.configList) {
-      loadServiceStatus(c.configFileName)
-    }
+    // 服务状态：优先回传 TTL 缓存，缺失项限流并发检测，不阻塞列表渲染
+    void resolveServiceStatuses(
+      SERVICE_STATUS_SCOPE,
+      easyTierStore.configList.map((c) => c.configFileName),
+      checkService,
+      applyServiceStatus
+    )
   }
 
   // 选中配置卡片：加载详情、重置路由筛选，并记录选择（供下次进入页面恢复）
@@ -784,30 +788,25 @@ export function useConfigList(options: UseConfigListOptions) {
     }
   }
 
-  // 服务检测存在 TTL 缓存：每次进入配置页为每个配置跑一次 PowerShell 查询
-  // 是切菜单卡顿的主要来源，此处 60s 内复用上次结果，变更操作后强制刷新
-  const SERVICE_STATUS_TTL = 60_000
-  const serviceStatusCache = new Map<string, { status: string; at: number }>()
+  // 服务状态缓存按 scope 存于 shared/lib：跨页面挂载复用，避免每次进入配置页重跑全部服务查询
+  const SERVICE_STATUS_SCOPE = 'config'
+
+  const applyServiceStatus = (configFileName: string, status: string) => {
+    serviceStatusMap.value.set(configFileName, status)
+  }
 
   const loadServiceStatus = async (configFileName: string, force = false) => {
     // Windows 服务专属能力；Android 无此模型（服务面板整体隐藏）
     if (isAndroidPlatform) return
-    if (!force) {
-      const cached = serviceStatusCache.get(configFileName)
-      if (cached && Date.now() - cached.at < SERVICE_STATUS_TTL) {
-        serviceStatusMap.value.set(configFileName, cached.status)
-        return
-      }
-    }
-    let status: string
-    try {
-      status = await checkService(configFileName)
-    } catch {
-      // 检测失败不能伪装成“未安装”：unknown 会同时阻止删除，避免遗留孤儿服务
-      status = 'unknown'
-    }
-    serviceStatusCache.set(configFileName, { status, at: Date.now() })
-    serviceStatusMap.value.set(configFileName, status)
+    // 检测失败由 resolveServiceStatuses 回传 unknown 且不写缓存：
+    // 不能伪装成“未安装”，unknown 会同时阻止删除，避免遗留孤儿服务
+    await resolveServiceStatuses(
+      SERVICE_STATUS_SCOPE,
+      [configFileName],
+      checkService,
+      applyServiceStatus,
+      { force }
+    )
   }
 
   // 打开服务安装弹窗（选择 nssm / 官方服务等安装方式）
