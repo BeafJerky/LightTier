@@ -9,6 +9,13 @@ export const isWebRunning = (item: FormWebData): boolean =>
 export const isWebChecking = (item: FormWebData, isAndroid: boolean): boolean =>
   !isAndroid && (!item.status || item.status === 'checking')
 
+// 服务状态延后检测：尚无结果时不得当作“未安装服务”放行删除；
+// Android 不检测 Windows 服务，不应因此阻塞配置管理
+export const isWebServiceStatusPending = (
+  isAndroid: boolean,
+  serviceStatus: string | undefined
+): boolean => !isAndroid && serviceStatus === undefined
+
 export const getWebStatusClass = (item: FormWebData, isAndroid: boolean): string =>
   isWebChecking(item, isAndroid) ? 'checking' : isWebRunning(item) ? 'on' : 'off'
 

@@ -94,6 +94,7 @@ export default {
     exitRouteResidueAutoCleared: '已自动清理上次异常退出残留的出口节点路由',
     deleteBlockedRunning: '该配置正在运行，请先停止后再删除',
     deleteBlockedService: '该配置已安装 Windows 服务，请先卸载服务后再删除',
+    deleteBlockedChecking: '正在检测服务状态，请稍后再试',
     coreStartInvalidPid: '内核未返回有效的进程号，启动失败'
   },
   newOverview: {

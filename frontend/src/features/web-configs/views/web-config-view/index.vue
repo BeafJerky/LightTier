@@ -195,7 +195,8 @@ import { LtButton, LtInput } from '@/shared/ui'
 import WebConfigForm from './WebConfigForm.vue'
 import WebConfigList from './WebConfigList.vue'
 import WebConfigDetail from './WebConfigDetail.vue'
-import { isWebChecking, isWebRunning } from '../../lib/webConfigStatus'
+import { isWebChecking, isWebRunning, isWebServiceStatusPending } from '../../lib/webConfigStatus'
+import { resolveWebServiceStatuses } from '../../lib/webServiceStatusCache'
 import type { FormWebData } from '@/entities/config/formTypes'
 
 defineOptions({ name: 'NewWebConfigView' })
@@ -317,7 +318,10 @@ const extractConfigServerUrl = (cmdLine: string): string | null => {
   return m[1].replace(/^"|"$/g, '')
 }
 // 刷新运行时状态：进程扫描 + 服务状态合并到列表项，并恢复/初始化选中项（FAB 已负责文件加载）
-const refreshWebRuntimeState = async () => {
+// 服务检测不阻塞列表加载；刷新序号用于丢弃重叠刷新的过期回调
+let runtimeRefreshSeq = 0
+const refreshWebRuntimeState = async (forceServiceStatus = false) => {
+  const seq = ++runtimeRefreshSeq
   const list = webConfigList.value
   // 记录上一轮状态：进程扫描失败时恢复，避免把“检测失败”显示成“未运行”
   const previous = list.map((item) => ({ item, status: item.status, pid: item.pid }))
@@ -370,15 +374,20 @@ const refreshWebRuntimeState = async () => {
       item.pid = undefined
     }
   }
-  // 检测服务状态
-  for (const item of list) {
-    const svcStatus = await checkWebService(item.configFileName)
-    const svcKey = svcStatus as string
-    if (svcKey === 'running') {
-      item.status = 'runningService'
-    }
-    serviceStatusMap.value.set(item.configFileName, svcKey)
-  }
+  // 服务状态先回传 TTL 缓存，缺失项并发检测；不阻塞列表渲染
+  void resolveWebServiceStatuses(
+    list.map((item) => item.configFileName),
+    async (configFileName) => (await checkWebService(configFileName)) as string,
+    (configFileName, serviceStatus) => {
+      if (seq !== runtimeRefreshSeq) return
+      serviceStatusMap.value.set(configFileName, serviceStatus)
+      if (serviceStatus === 'running') {
+        const item = list.find((c) => c.configFileName === configFileName)
+        if (item) item.status = 'runningService'
+      }
+    },
+    { force: forceServiceStatus }
+  )
   // 未选中时自动选中首项（桌面宽屏；Android 默认展示清单，由路由决定是否进入详情）
   if (!isAndroidPlatform && !selectedConfig.value && window.innerWidth > 900 && list.length > 0) {
     selectedConfig.value = list[0]
@@ -386,11 +395,12 @@ const refreshWebRuntimeState = async () => {
 }
 
 // 重新加载 Web 配置列表并刷新运行时状态
-const refreshWebList = async () => {
+// forceServiceStatus：服务安装/启停/卸载后强制重新检测，忽略 TTL 缓存
+const refreshWebList = async (options: { forceServiceStatus?: boolean } = {}) => {
   loading.value = true
   try {
     await easyTierStore.loadWebConfigFiles()
-    await refreshWebRuntimeState()
+    await refreshWebRuntimeState(options.forceServiceStatus)
   } catch {
     /* non-Tauri */
   } finally {
@@ -518,6 +528,11 @@ const deleteConfig = async () => {
     return
   }
   const svcStatus = serviceStatusMap.value.get(selectedConfig.value.configFileName)
+  // 服务状态延后检测：尚无结果时不能当作“未安装服务”放行删除
+  if (isWebServiceStatusPending(isAndroidPlatform, svcStatus)) {
+    toast(t('newCommon.deleteBlockedChecking'), 'warning', 4000)
+    return
+  }
   if (svcStatus && svcStatus !== 'notInstalled') {
     toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
     return
@@ -654,7 +669,7 @@ const handleServiceInstalled = async () => {
       ok ? 'success' : 'error'
     )
     svcDialogVisible.value = false
-    await refreshWebList()
+    await refreshWebList({ forceServiceStatus: true })
   } catch {
     toast(t('newWebConfig.svcInstallFail'), 'error')
   } finally {
@@ -671,7 +686,7 @@ const handleStartService = async () => {
       ok ? t('newWebConfig.svcStartSuccess') : t('newWebConfig.svcStartFail'),
       ok ? 'success' : 'error'
     )
-    await refreshWebList()
+    await refreshWebList({ forceServiceStatus: true })
   } catch {
     toast(t('newWebConfig.svcStartFail'), 'error')
   }
@@ -688,7 +703,7 @@ const handleStopService = async () => {
     )
     // 仅在成功时提示；失败时保留错误，不再追加“已停止”的成功文案
     if (ok) toast(t('newWebConfig.svcStopHint'), 'success', 3000)
-    await refreshWebList()
+    await refreshWebList({ forceServiceStatus: true })
   } catch {
     toast(t('newWebConfig.svcStopFail'), 'error')
   }
@@ -708,7 +723,7 @@ const handleUninstallService = async () => {
       result ? t('newWebConfig.svcUninstallSuccess') : t('newWebConfig.svcUninstallFail'),
       result ? 'success' : 'error'
     )
-    await refreshWebList()
+    await refreshWebList({ forceServiceStatus: true })
   } catch {
     toast(t('newWebConfig.svcUninstallFail'), 'error')
   }
@@ -727,6 +742,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 使在途的服务检测回调失效，避免卸载后写回已销毁页面的状态
+  runtimeRefreshSeq++
   easyTierStore.clearPageRefresh()
 })
 </script>

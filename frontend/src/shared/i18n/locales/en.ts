@@ -97,6 +97,7 @@ export default {
     deleteBlockedRunning: 'This configuration is running. Stop it before deleting',
     deleteBlockedService:
       'A Windows service is installed for this configuration. Uninstall it before deleting',
+    deleteBlockedChecking: 'Service status is still being checked. Try again shortly',
     coreStartInvalidPid: 'The core did not return a valid process ID; start failed'
   },
   newOverview: {
