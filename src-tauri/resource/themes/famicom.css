@@ -1,0 +1,55 @@
+/* @theme-label: 红白机 */
+:root {
+  /* 红白机主题 — 奶油机身 + 红白机红 + 金色点缀 + 墨黑描边，全直角与硬投影 */
+  --theme-bg: #f3ecdc;
+  --theme-bg-card: #fffaf0;
+  --theme-bg-sidebar: linear-gradient(180deg, #efe6d3, #e7dcc6);
+  --theme-bg-toolbar: #fffaf0;
+  --theme-bg-hover: rgba(179, 38, 30, 0.07);
+  --theme-bg-active: rgba(179, 38, 30, 0.12);
+  --theme-bg-tag: #e9dfcc;
+
+  --theme-text-primary: #241d18;
+  --theme-text-secondary: #52463b;
+  --theme-text-muted: #746859;
+  --theme-text-white: #fffdf7;
+
+  --theme-accent-primary: #b3261e;
+  --theme-accent-secondary: #b8860b;
+  --theme-accent-hover: #981f18;
+  --theme-color-success: #2f7d32;
+  --theme-color-success-dark: #256b29;
+  --theme-color-danger: #b3261e;
+  --theme-color-warning: #a85f00;
+  --theme-color-info: #1e5f8a;
+
+  --theme-border: #2b241e;
+  --theme-border-light: #c8baa2;
+  --theme-color-scrollbar: #b6a78d;
+
+  --theme-surface-secondary: #efe6d3;
+  --theme-surface-hover: #e5dac4;
+  --theme-text-on-accent: #fffdf7;
+
+  --theme-shadow-sm: 3px 3px 0 rgba(43, 36, 30, 0.18);
+  --theme-shadow-md: 5px 5px 0 rgba(43, 36, 30, 0.2);
+  --theme-shadow-toast: 4px 4px 0 rgba(43, 36, 30, 0.22);
+
+  --theme-radius-xs: 0;
+  --theme-radius-sm: 0;
+  --theme-radius-md: 0;
+  --theme-radius-lg: 0;
+  --theme-radius-xl: 0;
+  --theme-radius-xxl: 0;
+  --theme-radius-pill: 0;
+  --theme-radius-round: 50%;
+
+  --theme-font-display:
+    ui-monospace, 'Cascadia Mono', Consolas, 'MS Gothic', 'Microsoft YaHei', monospace;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.16s;
+}

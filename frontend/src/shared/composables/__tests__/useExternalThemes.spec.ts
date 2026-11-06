@@ -48,9 +48,11 @@ describe('discoverThemes', () => {
     const themes = await discoverThemes()
 
     const names = themes.map((theme) => theme.name)
-    expect(names).toHaveLength(10)
+    expect(names).toHaveLength(12)
     expect(names).toContain('cha-yan')
     expect(names).toContain('cyberpunk-2077')
+    expect(names).toContain('famicom')
+    expect(names).toContain('claude')
     expect(new Set(names).size).toBe(names.length)
     expect(themes.find((theme) => theme.name === 'cha-yan')?.label).toBe('茶烟')
   })
@@ -64,7 +66,7 @@ describe('discoverThemes', () => {
     const { discoverThemes } = useExternalThemes()
     const themes = await discoverThemes()
 
-    expect(themes).toHaveLength(10)
+    expect(themes).toHaveLength(12)
     const custom = themes.find((theme) => theme.name === 'cha-yan')
     expect(custom?.label).toBe('自定义茶烟')
     expect(custom?.color).toBe('#123456')

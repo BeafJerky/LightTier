@@ -1,0 +1,54 @@
+/* @theme-label: Claude */
+:root {
+  --theme-bg: #f0eee6;
+  --theme-bg-card: #faf9f5;
+  --theme-bg-sidebar: linear-gradient(180deg, #efebe1, #e8e3d7);
+  --theme-bg-toolbar: #faf9f5;
+  --theme-bg-hover: rgba(184, 92, 58, 0.06);
+  --theme-bg-active: rgba(184, 92, 58, 0.11);
+  --theme-bg-tag: #e8e3d7;
+
+  --theme-text-primary: #191919;
+  --theme-text-secondary: #57534b;
+  --theme-text-muted: #706b60;
+  --theme-text-white: #ffffff;
+
+  --theme-accent-primary: #b85c3a;
+  --theme-accent-secondary: #8b7355;
+  --theme-accent-hover: #a54f30;
+  --theme-color-success: #5e7a45;
+  --theme-color-success-dark: #4f6839;
+  --theme-color-danger: #b04a3e;
+  --theme-color-warning: #8f641f;
+  --theme-color-info: #526f8a;
+
+  --theme-border: #d8d2c4;
+  --theme-border-light: #e7e2d6;
+  --theme-color-scrollbar: #c6bfae;
+
+  --theme-surface-secondary: #efebe1;
+  --theme-surface-hover: #e6e0d3;
+  --theme-text-on-accent: #ffffff;
+
+  --theme-shadow-sm: 0 8px 28px rgba(60, 52, 44, 0.06);
+  --theme-shadow-md: 0 12px 36px rgba(60, 52, 44, 0.08);
+  --theme-shadow-toast: 0 6px 24px rgba(60, 52, 44, 0.1);
+
+  --theme-radius-xs: 4px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 12px;
+  --theme-radius-lg: 14px;
+  --theme-radius-xl: 18px;
+  --theme-radius-xxl: 20px;
+  --theme-radius-pill: 10px;
+  --theme-radius-round: 50%;
+
+  --theme-font-display:
+    'Georgia', 'Iowan Old Style', 'Noto Serif CJK SC', 'Songti SC', 'SimSun', serif;
+  --theme-font-body:
+    'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    sans-serif;
+
+  --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --theme-duration: 0.2s;
+}
