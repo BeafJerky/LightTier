@@ -14,12 +14,12 @@
         <span class="sd-about-ver">v{{ appVersion }}</span>
       </div>
     </div>
+    <!-- 链接不能带 target="_blank"：tauri-plugin-shell 会注入全局点击监听，
+         对 target=_blank 的外链再打开一次，与本组件的 openExternalLink 叠加成两次 -->
     <div class="sd-about-links">
       <a
         class="sd-about-link"
         :href="MANAGER_REPO_HOME"
-        target="_blank"
-        rel="noopener"
         @click.prevent="openExternalLink(MANAGER_REPO_HOME)"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -32,8 +32,6 @@
       <a
         class="sd-about-link"
         :href="GITHUB_EASYTIER"
-        target="_blank"
-        rel="noopener"
         @click.prevent="openExternalLink(GITHUB_EASYTIER)"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
