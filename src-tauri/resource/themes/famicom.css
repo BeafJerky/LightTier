@@ -44,8 +44,10 @@
   --theme-radius-pill: 0;
   --theme-radius-round: 50%;
 
+  /* 标题不能用 MS Gothic：它覆盖大量简体字形但没有 600 粗体，
+     同一标题会被拆成日文哥特体与雅黑两套字体，出现粗细跳变 */
   --theme-font-display:
-    ui-monospace, 'Cascadia Mono', Consolas, 'MS Gothic', 'Microsoft YaHei', monospace;
+    ui-monospace, 'Cascadia Mono', Consolas, 'Microsoft YaHei', 'Noto Sans CJK SC', monospace;
   --theme-font-body:
     'Sora', 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
     sans-serif;
