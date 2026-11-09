@@ -4017,7 +4017,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "lighttier-android",
  "lighttier-core",
@@ -4043,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-android"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "easytier",
  "humansize",
@@ -4059,7 +4059,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-core"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "log",
@@ -4070,7 +4070,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-desktop"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "log",
  "tauri",
@@ -4078,7 +4078,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-runtime"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "lighttier-android",
  "log",
