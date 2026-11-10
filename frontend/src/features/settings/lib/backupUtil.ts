@@ -65,6 +65,16 @@ const HASH_PATTERN = /^[0-9a-f]{64}$/
 const LOCK_HASH_PATTERN = /^sha256\$[0-9a-f]{32}\$[0-9a-f]{64}$/
 const SUPPORTED_LANGS = ['zh-CN', 'en'] as const
 
+/** 仍需写入 localStorage 的偏好（自动运行设置已改为 Pinia 单一真源） */
+export const RESTORABLE_PREFERENCE_LOCAL_KEYS = [
+  'settings.minimizeOnStart',
+  'settings.onboardingDone'
+] as const
+/** 旧版备份中的自动运行本地键：仅用于恢复时迁移进 store，不再写入 */
+export const LEGACY_AUTO_RUN_LOCAL_KEYS = [
+  'settings.autoRunNetwork',
+  'settings.autoRunConfigName'
+] as const
 const PREFERENCE_LOCAL_KEYS = [
   'settings.autoRunNetwork',
   'settings.autoRunConfigName',
@@ -102,6 +112,25 @@ const isRestorableConfigRef = (value: unknown): value is string =>
     (value === value.trim() && isBoundedString(value, MAX_NAME_LENGTH) && isValidConfigName(value)))
 
 const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean'
+
+/**
+ * 从旧备份的 local 段提取自动运行设置。
+ * 自动运行已收敛到 Pinia 持久化字段，旧备份仍可能只带 settings.* 键，恢复时迁移进 store。
+ */
+export const extractLegacyAutoRunSettings = (
+  local: Record<string, string>
+): { autoRunNetworkSetting?: boolean; autoRunConfigName?: string } => {
+  const result: { autoRunNetworkSetting?: boolean; autoRunConfigName?: string } = {}
+  const network = local['settings.autoRunNetwork']
+  if (network === 'true' || network === 'false') {
+    result.autoRunNetworkSetting = network === 'true'
+  }
+  const name = local['settings.autoRunConfigName']
+  if (name !== undefined && isRestorableConfigRef(name)) {
+    result.autoRunConfigName = name
+  }
+  return result
+}
 
 const isStringArray = (value: unknown, maxEntries: number, maxLength = 100): value is string[] =>
   Array.isArray(value) &&

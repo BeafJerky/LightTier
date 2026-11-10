@@ -29,8 +29,11 @@ import {
   buildBackupManifest,
   buildRestorePlan,
   createBackupItem,
+  extractLegacyAutoRunSettings,
   isValidBackupConfigName,
+  LEGACY_AUTO_RUN_LOCAL_KEYS,
   parseWebConfigValue,
+  RESTORABLE_PREFERENCE_LOCAL_KEYS,
   sanitizeAppearancePayload,
   sanitizeMirrorPayload,
   sanitizePreferencesPayload,
@@ -49,20 +52,10 @@ import { migrateLockPassword } from '@/shared/platform/lockUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getAppVersion } from '@/shared/platform/sysUtil'
 
-const SETTINGS_AUTO_RUN_KEY = 'settings.autoRunNetwork'
-const SETTINGS_AUTO_RUN_CONFIG_KEY = 'settings.autoRunConfigName'
-const SETTINGS_MINIMIZE_KEY = 'settings.minimizeOnStart'
-const SETTINGS_ONBOARDING_KEY = 'settings.onboardingDone'
 const THEME_KEY = 'theme'
 const LANG_KEY = 'lang'
 const SERVICE_CONFIG_PREFIX = 'service-config:'
 
-const PREFERENCE_LOCAL_KEYS = [
-  SETTINGS_AUTO_RUN_KEY,
-  SETTINGS_AUTO_RUN_CONFIG_KEY,
-  SETTINGS_MINIMIZE_KEY,
-  SETTINGS_ONBOARDING_KEY
-] as const
 const SUPPORTED_LANGS = ['zh-CN', 'en'] as const
 const THEME_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
 const URL_PATTERN = /^https?:\/\/\S+$/i
@@ -138,7 +131,7 @@ const readMirrorList = (key: string): string[] => {
 const collectPreferencesPayload = (): PreferencesPayload => {
   const store = useEasyTierStore()
   const local: Record<string, string> = {}
-  for (const key of PREFERENCE_LOCAL_KEYS) {
+  for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
     const value = readStorage(key)
     if (value !== null) local[key] = value
   }
@@ -409,19 +402,29 @@ const resolveRestorableTheme = async (theme: string): Promise<string> => {
 const applyPreferences = (item: BackupItem): void => {
   const payload = sanitizePreferencesPayload(item.value)
   if (!payload) throw new Error('invalid preferences payload')
-  for (const key of PREFERENCE_LOCAL_KEYS) {
+  for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
     if (Object.prototype.hasOwnProperty.call(payload.local, key)) {
       localStorage.setItem(key, payload.local[key])
     } else {
       localStorage.removeItem(key)
     }
   }
+  // 旧备份可能只带 settings.autoRun* 本地键：迁移进 store（单一真源）后清理残留
+  const legacy = extractLegacyAutoRunSettings(payload.local)
+  const patch: PreferencesPayload['store'] = { ...payload.store }
+  if (patch.autoRunNetworkSetting === undefined && legacy.autoRunNetworkSetting !== undefined) {
+    patch.autoRunNetworkSetting = legacy.autoRunNetworkSetting
+  }
+  if (patch.autoRunConfigName === undefined && legacy.autoRunConfigName !== undefined) {
+    patch.autoRunConfigName = legacy.autoRunConfigName
+  }
+  for (const key of LEGACY_AUTO_RUN_LOCAL_KEYS) localStorage.removeItem(key)
   // 服务安装方式按“合并”恢复：不删除本地其它配置的记录，避免已有服务失去方式识别
   for (const [key, value] of Object.entries(payload.serviceConfigs)) {
     localStorage.setItem(key, value)
   }
   // store 已由 pinia 持久化插件管理，$patch 会同步写回 localStorage
-  useEasyTierStore().$patch(payload.store)
+  useEasyTierStore().$patch(patch)
 }
 
 const applyAppearance = async (item: BackupItem): Promise<void> => {

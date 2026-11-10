@@ -107,6 +107,7 @@
  */
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { ServiceInstallConfig } from '@/entities/config/formTypes'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
 
@@ -119,7 +120,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [v: boolean]
-  installed: [configName: string, options: any]
+  installed: [configName: string, options: ServiceInstallConfig]
 }>()
 
 const visible = ref(props.modelValue)
@@ -135,8 +136,8 @@ watch(visible, (v) => {
 
 const installing = ref(false)
 // 安装表单：切换安装方式时仅展示对应分支的字段（nssm 账户 / official 显示名等）
-const form = ref({
-  installMethod: 'nssm' as 'nssm' | 'official',
+const form = ref<ServiceInstallConfig>({
+  installMethod: 'nssm',
   description: '',
   displayName: '',
   enableAutostart: true,

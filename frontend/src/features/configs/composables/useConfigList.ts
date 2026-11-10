@@ -27,7 +27,6 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { resourceDir, join } from '@tauri-apps/api/path'
 import { openPath } from '@/shared/platform/fileUtil'
 import { getErrorMessage } from '@/shared/lib/error'
-import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
 import {
   setExitRoute,
   clearExitRoute,
@@ -38,12 +37,9 @@ import {
 import { useTrendBuffer } from '@/shared/composables/useTrendBuffer'
 import { useInstanceActions } from '@/shared/composables/useInstanceActions'
 import { useRunningListSync } from '@/shared/composables/useRunningListSync'
-import { useConfigCompatCheck } from '@/shared/composables/useConfigCompatCheck'
-import {
-  isExitRouteEnabled,
-  setExitRouteEnabled,
-  migrateLightTierConfig
-} from '@/entities/config/lighttierConfigUtil'
+import { isExitRouteEnabled, setExitRouteEnabled } from '@/entities/config/lighttierConfigUtil'
+import { useConfigDetail } from './useConfigDetail'
+import { useConfigServices } from './useConfigServices'
 
 interface UseConfigListOptions {
   /** 页面级自定义确认弹窗（由壳组件提供，Promise<boolean>） */
@@ -58,23 +54,15 @@ export function useConfigList(options: UseConfigListOptions) {
   const isWideLandscape = useWideLandscape()
   // 启动进行中标志：避免连点造成重复启动/路由重复下发
   const isStarting = ref(false)
-  // 当前选中配置（列表卡片数据）与其 TOML 解析后的详情
+  // 当前选中配置（列表卡片数据）
   const selectedConfig = ref<RunningItem | null>(null)
-  const selectedDetail = ref<EasyTierConfig | null>(null)
+  // 退出节点路由与目录操作仅在桌面 Tauri 环境可用（withGlobalTauri 已关闭，统一用 isTauri()）
+  const isTauri = isTauriRuntime() && !isAndroidPlatform
 
   const { show: toast } = useCreamToast()
   const { clearTrend } = useTrendBuffer()
   // 文件/服务操作统一从 useMockData 获取：Tauri 环境走真实实现，浏览器 Mock 环境自动降级
-  const {
-    readFileContent,
-    writeFileContent,
-    deleteFileOrDir,
-    checkService,
-    installService,
-    uninstallService,
-    startService,
-    stopService
-  } = useMockData()
+  const { readFileContent, writeFileContent, deleteFileOrDir, checkService } = useMockData()
   const { t } = useI18n()
   const router = useRouter()
   const route = useRoute()
@@ -99,39 +87,25 @@ export function useConfigList(options: UseConfigListOptions) {
     return labelKey ? t(labelKey) : key
   }
 
-  // 将 useMockData 返回的原始状态 key 映射为国际化字符串
-  const mapServiceStatus = (key: string): string => {
-    switch (key) {
-      case 'running':
-        return t('newCommon.running')
-      case 'stopped':
-        return t('newConfig.stoppedStatus')
-      case 'stopping':
-        return t('newCommon.stopping')
-      case 'notInstalled':
-        return t('newConfig.notInstalled')
-      case 'unknown':
-        return t('newSettings.unknown')
-      default:
-        return key
-    }
-  }
-
   // ===== 配置编辑弹窗（仅桌面端；Android 走独立路由页面） =====
   const editVisible = ref(false)
   const editConfigName = ref('')
   const editTomlContent = ref('')
   const editDialogMode = ref<'add' | 'edit'>('edit')
 
-  // 服务管理
-  const svcDialogVisible = ref(false)
-  const svcConfigName = ref('')
-  const serviceStatusMap = ref<Map<string, string>>(new Map())
-  const currentServiceStatus = computed(() => {
-    if (!selectedConfig.value) return ''
-    // 未返回结果前保持空串（UI 显示“检测中”），不能默认成“未安装”误导用户去重复安装
-    return serviceStatusMap.value.get(selectedConfig.value.configFileName) || ''
-  })
+  // ===== Windows 服务面板（仅非 Android） =====
+  const {
+    svcDialogVisible,
+    svcConfigName,
+    currentServiceStatus,
+    mapServiceStatus,
+    refreshServiceStatuses,
+    openServiceDialog,
+    handleServiceInstalled,
+    handleStartService,
+    handleStopService,
+    handleUninstallService
+  } = useConfigServices({ selectedConfig, confirm: options.confirm, isAndroidPlatform })
 
   // 配置名列表（用于新增时查重）
   const configNameList = computed(() => easyTierStore.configList.map((c) => c.configFileName))
@@ -200,13 +174,7 @@ export function useConfigList(options: UseConfigListOptions) {
         if (target) await selectConfig(target)
       }
     }
-    // 服务状态：优先回传 TTL 缓存，缺失项限流并发检测，不阻塞列表渲染
-    void resolveServiceStatuses(
-      SERVICE_STATUS_SCOPE,
-      easyTierStore.configList.map((c) => c.configFileName),
-      checkService,
-      applyServiceStatus
-    )
+    refreshServiceStatuses()
   }
 
   // 选中配置卡片：加载详情、重置路由筛选，并记录选择（供下次进入页面恢复）
@@ -214,8 +182,6 @@ export function useConfigList(options: UseConfigListOptions) {
     // Android 横屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
     if (isAndroidPlatform && isWideLandscape.value) {
       selectedConfig.value = item
-      routeFilter.value = ''
-      selectedDetail.value = null
       await loadConfigDetail(item)
       easyTierStore.setLastSelectedConfig(item)
       return
@@ -227,95 +193,32 @@ export function useConfigList(options: UseConfigListOptions) {
       return
     }
     selectedConfig.value = item
-    routeFilter.value = ''
-    // 先清空旧详情，避免读取失败时仍显示上一个配置的内容
-    selectedDetail.value = null
     await loadConfigDetail(item)
     easyTierStore.setLastSelectedConfig(item)
   }
 
+  // 详情读取与解析状态机（含过期请求丢弃）
+  const {
+    selectedDetail,
+    detailState,
+    detailError,
+    detailErrorTitle,
+    routeFilter,
+    filteredRoutes,
+    loadConfigDetail,
+    resetDetail
+  } = useConfigDetail({
+    readFileContent,
+    writeFileContent,
+    isTauri,
+    t
+  })
+
   // 移动端 master-detail：从详情返回清单
   const closeDetail = () => {
     // 作废在飞的详情请求，避免关闭后又把内容写回
-    detailSeq++
+    resetDetail()
     selectedConfig.value = null
-    selectedDetail.value = null
-    detailState.value = 'idle'
-    detailError.value = null
-  }
-
-  // 详情显式状态机：idle | loading | ready | demo | error
-  const detailState = ref<'idle' | 'loading' | 'ready' | 'demo' | 'error'>('idle')
-  const detailError = ref<{ kind: 'read' | 'parse' | 'empty'; message: string } | null>(null)
-  const detailErrorTitle = computed(() => {
-    switch (detailError.value?.kind) {
-      case 'parse':
-        return t('newConfig.detailParseFailed')
-      case 'empty':
-        return t('newConfig.detailEmpty')
-      default:
-        return t('newConfig.detailLoadFailed')
-    }
-  })
-
-  // 读取并解析配置 TOML：Mock 环境无 fileName 时展示演示数据并明确标注；
-  // Tauri 环境读取/解析失败进入错误态，不再静默回退演示数据
-  // 请求序号：快速切换配置时，旧请求返回后不得把上一个配置的内容/错误写到新选中项上
-  let detailSeq = 0
-  const loadConfigDetail = async (item: RunningItem) => {
-    const seq = ++detailSeq
-    const stale = () => seq !== detailSeq
-    detailState.value = 'loading'
-    detailError.value = null
-    selectedDetail.value = null
-    if (!item.fileName) {
-      if (!isTauri) {
-        selectedDetail.value = getDemoConfig(item.configFileName)
-        detailState.value = 'demo'
-        return
-      }
-      detailState.value = 'error'
-      detailError.value = { kind: 'read', message: '' }
-      return
-    }
-
-    let content: string
-    try {
-      content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-    } catch {
-      if (stale()) return
-      detailState.value = 'error'
-      detailError.value = { kind: 'read', message: '' }
-      return
-    }
-    if (stale()) return
-    if (!content || !content.trim()) {
-      detailState.value = 'error'
-      detailError.value = { kind: 'empty', message: '' }
-      return
-    }
-
-    try {
-      const cfg = toml.parse(content) as Record<string, any>
-      // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
-      if (migrateLightTierConfig(cfg)) {
-        try {
-          await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
-        } catch {
-          /* 回写失败不阻断详情展示 */
-        }
-      }
-      if (stale()) return
-      selectedDetail.value = cfg as unknown as EasyTierConfig
-      detailState.value = 'ready'
-    } catch (e) {
-      if (stale()) return
-      detailState.value = 'error'
-      detailError.value = {
-        kind: 'parse',
-        message: e instanceof Error ? e.message : String(e)
-      }
-    }
   }
 
   // Android 详情路由 → 页面状态：进入时加载对应配置，返回列表时清空详情
@@ -340,8 +243,6 @@ export function useConfigList(options: UseConfigListOptions) {
       return
     }
     selectedConfig.value = item
-    routeFilter.value = ''
-    selectedDetail.value = null
     await loadConfigDetail(item)
     easyTierStore.setLastSelectedConfig(item)
   }
@@ -383,19 +284,8 @@ export function useConfigList(options: UseConfigListOptions) {
     }
   }
 
-  // 5.2：路由筛选（本期仅 TOML 静态筛选；运行时 route 信息待 CLI 输出含 routes 列验证后追加）
-  const routeFilter = ref('')
-  const filteredRoutes = computed(() => {
-    const routes = selectedDetail.value?.routes || []
-    const kw = routeFilter.value.trim().toLowerCase()
-    return kw ? routes.filter((r) => String(r).toLowerCase().includes(kw)) : routes
-  })
-
-  // 运行列表同步与配置兼容性检查统一走 shared 组合式函数
+  // 运行列表同步统一走 shared 组合式函数
   const { updateRunningList } = useRunningListSync()
-  const { getCompatIssues: getConfigCompatIssues } = useConfigCompatCheck()
-  const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
-    issues.map((i) => t(`coreCompat.${i.code}`, i.params || {})).join('\n')
 
   // ===== 启动 / 停止 =====
   const { startInstance, stopInstance } = useInstanceActions({
@@ -424,73 +314,6 @@ export function useConfigList(options: UseConfigListOptions) {
 
   // 停止内核实例：Android 停 VPN+内核，桌面结束子进程；成功后恢复跃点并清除该配置的退出路由
   const stopAction = (item: RunningItem) => stopInstance(item)
-
-  // 内置演示配置：浏览器 Mock 环境或读取失败时展示，保证界面完整可用（按名称匹配，缺省回退首个）
-  function getDemoConfig(name: string): EasyTierConfig {
-    const demos: Record<string, any> = {
-      东京中继节点: {
-        hostname: 'tokyo-relay-01',
-        instance_name: '东京中继',
-        rpc_portal: '127.0.0.1:15888',
-        dhcp: true,
-        network_identity: { network_name: 'global-mesh', network_secret: '••••' },
-        listeners: ['tcp://0.0.0.0:11000', 'udp://0.0.0.0:11000'],
-        peer: [{ uri: 'tcp://public-node-1:11000' }, { uri: 'udp://public-node-2:11000' }],
-        exit_nodes: [],
-        routes: ['10.0.0.0/8', '172.16.0.0/12'],
-        flags: { default_protocol: 'tcp', mtu: 1380, latency_first: true }
-      },
-      新加坡出口: {
-        hostname: 'sg-exit-01',
-        instance_name: '新加坡出口',
-        rpc_portal: '127.0.0.1:15888',
-        dhcp: true,
-        network_identity: { network_name: 'global-mesh', network_secret: '••••' },
-        listeners: ['tcp://0.0.0.0:11001'],
-        peer: [{ uri: 'tcp://public-node-1:11000' }],
-        exit_nodes: ['0.0.0.0/0'],
-        routes: [],
-        flags: { default_protocol: 'tcp', mtu: 1380, enable_exit_node: true }
-      },
-      家庭局域网: {
-        hostname: 'home-router',
-        instance_name: '家庭网络',
-        rpc_portal: '127.0.0.1:15888',
-        dhcp: true,
-        network_identity: { network_name: 'home-mesh', network_secret: '••••' },
-        listeners: [],
-        peer: [{ uri: 'tcp://tokyo-relay:11000' }],
-        exit_nodes: [],
-        routes: ['192.168.1.0/24'],
-        flags: { default_protocol: 'tcp', mtu: 1380, latency_first: true }
-      },
-      办公室组网: {
-        hostname: 'office-gw',
-        instance_name: '办公室网关',
-        rpc_portal: '127.0.0.1:15888',
-        dhcp: true,
-        network_identity: { network_name: 'office-mesh', network_secret: '••••' },
-        listeners: ['tcp://0.0.0.0:11002'],
-        peer: [{ uri: 'tcp://tokyo-relay:11000' }],
-        exit_nodes: [],
-        routes: ['10.10.0.0/16'],
-        flags: { default_protocol: 'tcp', mtu: 1380, latency_first: true }
-      },
-      移动设备: {
-        hostname: 'mobile-01',
-        instance_name: '手机',
-        rpc_portal: '127.0.0.1:15888',
-        dhcp: true,
-        network_identity: { network_name: 'home-mesh', network_secret: '••••' },
-        listeners: [],
-        peer: [{ uri: 'tcp://home-router:11000' }],
-        exit_nodes: [],
-        routes: [],
-        flags: { default_protocol: 'tcp', latency_first: true, no_tun: true }
-      }
-    }
-    return (demos[name] || demos['东京中继节点']) as EasyTierConfig
-  }
 
   // ===== 生命周期 =====
   onMounted(async () => {
@@ -630,7 +453,7 @@ export function useConfigList(options: UseConfigListOptions) {
       clearTrend(target.configFileName)
       toast(t('newCommon.deleteSuccess'), 'success')
       selectedConfig.value = null
-      selectedDetail.value = null
+      resetDetail()
       await easyTierStore.loadConfigFiles()
       await refreshRuntimeState()
       // Android 详情为独立路由：删除后回到列表页
@@ -641,13 +464,11 @@ export function useConfigList(options: UseConfigListOptions) {
   }
 
   // ===== 退出节点路由开关（5.9 / 5.10，仅 Tauri 桌面端） =====
-  // 判定依据：Tauri 运行时且非 Android（Android 无 route 命令/PowerShell，视为非适用环境）；
-  // withGlobalTauri 已关闭，统一用 @tauri-apps/api 的 isTauri() 检测
-  const isTauri = isTauriRuntime() && !isAndroidPlatform
+  // 判定依据：Tauri 运行时且非 Android（Android 无 route 命令/PowerShell，视为非适用环境）
   const isExitRouteBusy = ref(false)
 
   // 开关状态：优先 [lighttier].exit_route_enabled，兼容旧 flags / 顶层标记
-  const exitRouteFlag = computed(() => isExitRouteEnabled(selectedDetail.value as any))
+  const exitRouteFlag = computed(() => isExitRouteEnabled(selectedDetail.value))
 
   const exitRouteStatus = computed<'enabled' | 'disabled' | 'desktop'>(() => {
     if (!isTauri) return 'desktop'
@@ -665,11 +486,11 @@ export function useConfigList(options: UseConfigListOptions) {
     if (!item.fileName) return false
     try {
       const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-      const cfg = toml.parse(raw) as any
+      const cfg = toml.parse(raw)
       setExitRouteEnabled(cfg, enabled)
       await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
       // 同步内存视图，避免开关状态与文件不一致；选中项已切换时不改其他配置的详情
-      const detail = selectedDetail.value as any
+      const detail = selectedDetail.value
       if (detail && selectedConfig.value?.configFileName === item.configFileName) {
         setExitRouteEnabled(detail, enabled)
       }
@@ -697,7 +518,7 @@ export function useConfigList(options: UseConfigListOptions) {
         }
       } else {
         // 启用：添加路由 + 写入标记
-        const res = await setExitRoute(detail as any, item.configFileName)
+        const res = await setExitRoute(detail, item.configFileName)
         if (res.ok) {
           await persistExitRouteFlag(item, true)
           toast(t('newConfig.exitRouteSuccess'), 'success')
@@ -785,123 +606,6 @@ export function useConfigList(options: UseConfigListOptions) {
       toast(t('newConfig.exitRouteFail') + detail, 'error', 5000)
     } else if (res.reason === 'read-failed') {
       toast(t('newConfig.exitRouteFail'), 'error', 3000)
-    }
-  }
-
-  // 服务状态缓存按 scope 存于 shared/lib：跨页面挂载复用，避免每次进入配置页重跑全部服务查询
-  const SERVICE_STATUS_SCOPE = 'config'
-
-  const applyServiceStatus = (configFileName: string, status: string) => {
-    serviceStatusMap.value.set(configFileName, status)
-  }
-
-  const loadServiceStatus = async (configFileName: string, force = false) => {
-    // Windows 服务专属能力；Android 无此模型（服务面板整体隐藏）
-    if (isAndroidPlatform) return
-    // 检测失败由 resolveServiceStatuses 回传 unknown 且不写缓存：
-    // 不能伪装成“未安装”，unknown 会同时阻止删除，避免遗留孤儿服务
-    await resolveServiceStatuses(
-      SERVICE_STATUS_SCOPE,
-      [configFileName],
-      checkService,
-      applyServiceStatus,
-      { force }
-    )
-  }
-
-  // 打开服务安装弹窗（选择 nssm / 官方服务等安装方式）
-  const openServiceDialog = () => {
-    if (!selectedConfig.value) return
-    svcConfigName.value = selectedConfig.value.configFileName
-    svcDialogVisible.value = true
-  }
-
-  // 服务安装完成回调：安装后刷新该配置的服务状态
-  const handleServiceInstalled = async (configName: string, serviceOptions: any) => {
-    try {
-      // 服务会以当前内核启动该配置：存在版本错误时先提示，避免装完即失败
-      const errors = (await getConfigCompatIssues(`${configName}.toml`)).filter(
-        (i) => i.level === 'error'
-      )
-      if (errors.length) {
-        const confirmed = await options.confirm(
-          t('newConfig.compatBlockTitle'),
-          t('newConfig.compatBlockMsg', {
-            name: configName,
-            issues: formatCompatIssues(errors)
-          })
-        )
-        if (!confirmed) return
-      }
-      // 安装方式参数随当前内核版本适配（v2.7.0+ 使用 --core-args），避免重复探测
-      const ok = await installService(configName, {
-        ...serviceOptions,
-        coreVersion: easyTierStore.detectedCoreVersion
-      })
-      if (ok) {
-        toast(t('newConfig.svcInstallSuccess'), 'success')
-      } else {
-        toast(t('newConfig.svcInstallFail'), 'error')
-      }
-      await loadServiceStatus(configName, true)
-    } catch {
-      toast(t('newConfig.svcInstallFail'), 'error')
-    }
-  }
-
-  // 启动 Windows 服务
-  const handleStartService = async () => {
-    if (!selectedConfig.value) return
-    try {
-      const ok = await startService(selectedConfig.value.configFileName)
-      toast(
-        ok ? t('newConfig.svcStartSuccess') : t('newConfig.svcStartFail'),
-        ok ? 'success' : 'error'
-      )
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
-      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
-      await updateRunningList({ force: true })
-    } catch {
-      toast(t('newConfig.svcStartFail'), 'error')
-    }
-  }
-
-  // 停止 Windows 服务（停止后提示内核已断开）
-  const handleStopService = async () => {
-    if (!selectedConfig.value) return
-    try {
-      const ok = await stopService(selectedConfig.value.configFileName)
-      toast(
-        ok ? t('newConfig.svcStopSuccess') : t('newConfig.svcStopFail'),
-        ok ? 'success' : 'error'
-      )
-      // 仅在真正停止后提示；失败时不再补一条“已停止”的成功 toast
-      if (ok) toast(t('newConfig.svcStopHint'), 'success', 3000)
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
-      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
-      await updateRunningList({ force: true })
-    } catch {
-      toast(t('newConfig.svcStopFail'), 'error')
-    }
-  }
-
-  // 卸载 Windows 服务（二次确认后执行）
-  const handleUninstallService = async () => {
-    if (!selectedConfig.value) return
-    const ok = await options.confirm(
-      t('newConfig.uninstallTitle'),
-      t('newConfig.uninstallMsg', { name: selectedConfig.value.configFileName })
-    )
-    if (!ok) return
-    try {
-      const result = await uninstallService(selectedConfig.value.configFileName)
-      toast(
-        result ? t('newConfig.svcUninstallSuccess') : t('newConfig.svcUninstallFail'),
-        result ? 'success' : 'error'
-      )
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
-    } catch {
-      toast(t('newConfig.svcUninstallFail'), 'error')
     }
   }
 

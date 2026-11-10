@@ -142,10 +142,10 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtSwitch } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { injectRequired } from '@/shared/lib/inject'
 import { GITHUB_EASYTIER, MANAGER_REPO_HOME } from '@/shared/constants/easytier'
 import { SETTINGS_UPDATE_KEY } from './context'
 import { UPDATE_CHECK_ENABLED } from '../../composables/useSettingsUpdate'
@@ -177,7 +177,7 @@ const {
   handleDownloadManagerUpdate,
   handleRunManagerInstaller,
   mirrorProbing
-} = inject(SETTINGS_UPDATE_KEY)!
+} = injectRequired(SETTINGS_UPDATE_KEY, 'AboutSection')
 </script>
 
 <style scoped lang="less">

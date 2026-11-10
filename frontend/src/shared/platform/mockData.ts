@@ -9,7 +9,10 @@
  */
 import { ref } from 'vue'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
-import type { FormWebData } from '@/entities/config/formTypes'
+import type { FormWebData, ServiceInstallConfig } from '@/entities/config/formTypes'
+
+/** 服务安装参数：表单字段 + 当前内核版本（官方 CLI 分支据此适配参数格式） */
+type ServiceInstallOptions = ServiceInstallConfig & { coreVersion?: string | null }
 
 // ===== Mock 持久化（浏览器预览刷新后保留配置与恢复结果） =====
 const MOCK_TOML_FILES_KEY = 'lighttier.mock.tomlFiles'
@@ -317,7 +320,11 @@ export const useMockData = () => {
     return mockServiceMap.value.get(_configFileName) || 'notInstalled'
   }
 
-  const mockInstallService = async (_configFileName: string, _options?: any): Promise<boolean> => {
+  // Mock 复用给 Web 服务安装：那条路径的第二个参数是启动参数串而非安装选项
+  const mockInstallService = async (
+    _configFileName: string,
+    _options?: ServiceInstallOptions | string
+  ): Promise<boolean> => {
     mockServiceMap.value.set(_configFileName, 'stopped')
     return true
   }
@@ -464,7 +471,7 @@ export const useMockData = () => {
 
   const getInstallService = () => {
     if (isMock) return mockInstallService
-    return async (configFileName: string, options?: any) => {
+    return async (configFileName: string, options?: ServiceInstallOptions) => {
       const { PREFIX_SVC } = await import('@/shared/constants/easytier')
       const { join, resourceDir } = await import('@tauri-apps/api/path')
       const { CONFIG_PATH } = await import('@/shared/constants/easytier')

@@ -290,6 +290,7 @@ import DataSection from './DataSection.vue'
 import SecuritySection from './SecuritySection.vue'
 import AboutSection from './AboutSection.vue'
 import { LtButton, LtInput } from '@/shared/ui'
+import { usePageConfirm } from '@/shared/ui/usePageConfirm'
 import { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { isAndroid } from '@/shared/platform/platformUtil'
@@ -354,32 +355,14 @@ const isDesktopRuntime =
   })()
 
 // 确认弹窗（替代原生 confirm）：将面板内确认操作 Promise 化，
-// resolveConfirm 返回用户选择；被其它方式关闭时按“取消”处理
-const cfmVisible = ref(false)
-const cfmTitle = ref('')
-const cfmMessage = ref('')
-let cfmResolve: ((val: boolean) => void) | null = null
-const showConfirm = (title: string, message: string): Promise<boolean> => {
-  cfmTitle.value = title
-  cfmMessage.value = message
-  cfmVisible.value = true
-  return new Promise<boolean>((resolve) => {
-    cfmResolve = resolve
-  })
-}
-// 用户点击确认/取消按钮时结算 Promise
-const resolveConfirm = (val: boolean) => {
-  cfmVisible.value = false
-  cfmResolve?.(val)
-  cfmResolve = null
-}
-// 弹窗被遮罩等其它方式关闭时兜底按“取消”结算，避免 Promise 悬挂
-watch(cfmVisible, (v) => {
-  if (!v && cfmResolve) {
-    cfmResolve(false)
-    cfmResolve = null
-  }
-})
+// 被其它方式关闭时按“取消”处理
+const {
+  visible: cfmVisible,
+  title: cfmTitle,
+  message: cfmMessage,
+  show: showConfirm,
+  resolve: resolveConfirm
+} = usePageConfirm()
 
 // 各分类状态：单实例创建后 provide 给分类面板，关闭弹窗时统一清理
 const mirror = useMirrorProbe()
@@ -518,15 +501,6 @@ watch(visible, async (v) => {
     // 打开时让当前分类在窄屏横向 tab 中自动可见
     scrollActiveTabIntoView()
     preferences.syncRefreshInput()
-    // 恢复持久化的自动运行设置
-    const savedAutoRun = localStorage.getItem('settings.autoRunNetwork')
-    if (savedAutoRun !== null) {
-      store.autoRunNetworkSetting = savedAutoRun === 'true'
-    }
-    const savedConfigName = localStorage.getItem('settings.autoRunConfigName')
-    if (savedConfigName) {
-      store.autoRunConfigName = savedConfigName
-    }
     await update.loadAppVersion()
     // 快捷入口“检查更新”：版本号就绪后再发起一次检查，先通知父组件消费标记避免重复触发
     if (props.checkUpdateOnOpen) {

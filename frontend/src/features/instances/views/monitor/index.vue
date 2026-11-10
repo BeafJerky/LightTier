@@ -407,6 +407,14 @@ const visibilityHandler = () => {
   startPolling()
 }
 
+// 清除已消费的 ?name=，避免后续刷新或再次进入时被旧目标覆盖
+const clearRequestedName = () => {
+  if (typeof route.query.name !== 'string') return
+  const query = { ...route.query }
+  delete query.name
+  void router.replace({ query })
+}
+
 // --- 数据获取 ---
 // 初始化：加载配置列表与运行状态；桌面端自动选中上次运行配置（窄屏保持清单视图）
 const loadConfigs = async () => {
@@ -432,12 +440,7 @@ const loadConfigs = async () => {
         displayList.value[0]
       const target = requested || (window.innerWidth > 900 ? fallback : undefined)
       if (target) selectConfig(target)
-      // 消费后清除目标，避免后续刷新/再次进入被旧目标覆盖
-      if (requestedName) {
-        const query = { ...route.query }
-        delete query.name
-        void router.replace({ query })
-      }
+      if (requestedName) clearRequestedName()
     }
   } catch (e) {
     console.error('加载监控配置失败:', e)
@@ -501,6 +504,17 @@ const syncAndroidSelection = async () => {
   }
   selectConfig(running)
 }
+
+// 已在监控页时再次下发 ?name=：桌面端跟随目标切换实例（Android 单实例由运行态自动跟随）
+watch(
+  () => route.query.name,
+  (name) => {
+    if (isAndroidPlatform || typeof name !== 'string' || !name) return
+    const target = displayList.value.find((c) => c.configFileName === name)
+    if (target) selectConfig(target)
+    clearRequestedName()
+  }
+)
 
 // 运行实例集合变化（启动 / 停止 / 切换）时重新对齐选中项
 watch(

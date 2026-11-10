@@ -52,11 +52,12 @@
  * 本组件只负责整体布局（master-detail 容器）、编辑/服务弹窗挂载与页面级确认弹窗。
  * 平台差异由 useConfigList 提供：桌面宽屏左右分栏，Android 列表与详情互斥展示。
  */
-import { onMounted, provide, ref, watch } from 'vue'
+import { onMounted, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import { LtButton } from '@/shared/ui'
+import { usePageConfirm } from '@/shared/ui/usePageConfirm'
 import { useConfigList } from '@/features/configs/composables/useConfigList'
 import ConfigList from './ConfigList.vue'
 import ConfigDetail from './ConfigDetail.vue'
@@ -71,29 +72,13 @@ const route = useRoute()
 const router = useRouter()
 
 // ===== 页面级确认弹窗 =====
-const cfmVisible = ref(false)
-const cfmTitle = ref('')
-const cfmMessage = ref('')
-let cfmResolve: ((val: boolean) => void) | null = null
-const showConfirm = (title: string, message: string): Promise<boolean> => {
-  cfmTitle.value = title
-  cfmMessage.value = message
-  cfmVisible.value = true
-  return new Promise<boolean>((resolve) => {
-    cfmResolve = resolve
-  })
-}
-const resolveConfirm = (val: boolean) => {
-  cfmVisible.value = false
-  cfmResolve?.(val)
-  cfmResolve = null
-}
-watch(cfmVisible, (v) => {
-  if (!v && cfmResolve) {
-    cfmResolve(false)
-    cfmResolve = null
-  }
-})
+const {
+  visible: cfmVisible,
+  title: cfmTitle,
+  message: cfmMessage,
+  show: showConfirm,
+  resolve: resolveConfirm
+} = usePageConfirm()
 
 const listApi = useConfigList({ confirm: showConfirm })
 provide(CONFIG_LIST_KEY, listApi)

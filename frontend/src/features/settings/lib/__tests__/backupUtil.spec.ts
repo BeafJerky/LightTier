@@ -11,6 +11,7 @@ import {
   countRestoreSelection,
   createBackupItem,
   createDefaultChoices,
+  extractLegacyAutoRunSettings,
   isValidBackupConfigName,
   parseBackupManifest,
   parseWebConfigValue,
@@ -499,5 +500,27 @@ describe('buildBackupFileName', () => {
     expect(buildBackupFileName('diff', new Date(2026, 9, 21, 9, 5, 3))).toBe(
       'LightTier-diff-20261021-090503.json'
     )
+  })
+})
+
+describe('extractLegacyAutoRunSettings（旧备份兼容）', () => {
+  it('把旧版 settings.* 本地键映射为 store 字段', () => {
+    expect(
+      extractLegacyAutoRunSettings({
+        'settings.autoRunNetwork': 'true',
+        'settings.autoRunConfigName': '家庭'
+      })
+    ).toEqual({ autoRunNetworkSetting: true, autoRunConfigName: '家庭' })
+    expect(extractLegacyAutoRunSettings({ 'settings.autoRunNetwork': 'false' })).toEqual({
+      autoRunNetworkSetting: false
+    })
+  })
+
+  it('空串表示上次运行配置；非法值忽略', () => {
+    expect(extractLegacyAutoRunSettings({ 'settings.autoRunConfigName': '' })).toEqual({
+      autoRunConfigName: ''
+    })
+    expect(extractLegacyAutoRunSettings({ 'settings.autoRunNetwork': 'yes' })).toEqual({})
+    expect(extractLegacyAutoRunSettings({ 'settings.autoRunConfigName': '../evil' })).toEqual({})
   })
 })

@@ -168,15 +168,16 @@
  * 核心职责：展示各配置的运行状态与监控摘要（5.2 monitorSummary），提供启动/停止入口。
  * 启动链路（与 config-view 的差异）：入队串行启动（useStartQueue）→ 端口冲突预检
  * → Android 单实例“停旧起新”→ autoMetric 记录 → 失败回滚兜底。
- * 自动运行：首次加载时按持久化设置（localStorage settings.autoRunNetwork）自动启动指定配置。
+ * 自动运行：首次加载时按持久化设置（store.autoRunNetworkSetting）自动启动指定配置。
  * 平台差异：Android 卡片展示虚拟 IP（无 PID）；桌面展示 PID。
  */
 import { useEasyTierStore } from '@/shared/store/easytier'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import LoadingOverlay from '@/shared/ui/LoadingOverlay.vue'
 import { LtButton } from '@/shared/ui'
+import { usePageConfirm } from '@/shared/ui/usePageConfirm'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useI18n } from 'vue-i18n'
 import { useStartQueue } from '@/features/instances/composables/useStartQueue'
@@ -222,29 +223,13 @@ const notifyExitRouteResult = (
 }
 
 // 自定义确认弹窗（替代原生 confirm，支持主题与键盘）
-const cfmVisible = ref(false)
-const cfmTitle = ref('')
-const cfmMessage = ref('')
-let cfmResolve: ((val: boolean) => void) | null = null
-const showConfirm = (title: string, message: string): Promise<boolean> => {
-  cfmTitle.value = title
-  cfmMessage.value = message
-  cfmVisible.value = true
-  return new Promise<boolean>((resolve) => {
-    cfmResolve = resolve
-  })
-}
-const resolveConfirm = (val: boolean) => {
-  cfmVisible.value = false
-  cfmResolve?.(val)
-  cfmResolve = null
-}
-watch(cfmVisible, (v) => {
-  if (!v && cfmResolve) {
-    cfmResolve(false)
-    cfmResolve = null
-  }
-})
+const {
+  visible: cfmVisible,
+  title: cfmTitle,
+  message: cfmMessage,
+  show: showConfirm,
+  resolve: resolveConfirm
+} = usePageConfirm()
 
 // 顶部统计：运行中 / 已停止 / 配置总数
 const runningCount = computed(() => easyTierStore.runningList.length)
@@ -409,16 +394,6 @@ onMounted(async () => {
   if (easyTierStore.isFirstLoad) {
     easyTierStore.isFirstLoad = false
     try {
-      // 恢复持久化设置
-      const savedAutoRun = localStorage.getItem('settings.autoRunNetwork')
-      if (savedAutoRun !== null) {
-        easyTierStore.autoRunNetworkSetting = savedAutoRun === 'true'
-      }
-      const savedConfigName = localStorage.getItem('settings.autoRunConfigName')
-      if (savedConfigName) {
-        easyTierStore.autoRunConfigName = savedConfigName
-      }
-
       if (!easyTierStore.autoRunNetworkSetting) return
       // 如果已有运行中的配置，不自动运行
       if (easyTierStore.runningList.length > 0) return

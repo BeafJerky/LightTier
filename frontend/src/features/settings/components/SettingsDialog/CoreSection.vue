@@ -235,15 +235,15 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton } from '@/shared/ui'
+import { injectRequired } from '@/shared/lib/inject'
 import { SETTINGS_ENV_KEY, SETTINGS_KERNEL_KEY } from './context'
 
 defineProps<{ single?: boolean }>()
 
 const { t } = useI18n()
-const { isDesktopRuntime, isAndroidPlatform } = inject(SETTINGS_ENV_KEY)!
+const { isDesktopRuntime, isAndroidPlatform } = injectRequired(SETTINGS_ENV_KEY, 'CoreSection')
 const {
   checkingCore,
   corePath,
@@ -281,7 +281,7 @@ const {
   currentMirrorLabel,
   downloadBtnText,
   openMirrorDialog
-} = inject(SETTINGS_KERNEL_KEY)!
+} = injectRequired(SETTINGS_KERNEL_KEY, 'CoreSection')
 </script>
 
 <style scoped lang="less">

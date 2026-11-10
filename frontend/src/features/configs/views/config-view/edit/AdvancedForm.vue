@@ -151,10 +151,10 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { injectRequired } from '@/shared/lib/inject'
 import { CONFIG_EDITOR_KEY } from './context'
 
 defineOptions({ name: 'ConfigAdvancedForm' })
@@ -181,7 +181,7 @@ const {
   toggleSecretVisible,
   pickCredentialFile,
   lockedEntries
-} = inject(CONFIG_EDITOR_KEY)!
+} = injectRequired(CONFIG_EDITOR_KEY, 'ConfigAdvancedForm')
 </script>
 
 <style scoped lang="less">

@@ -116,8 +116,13 @@ interface LightTierConfig {
   exit_route_enabled?: boolean // 启动后由 LightTier 接管退出节点流量（改写系统默认路由）
 }
 
-/** EasyTier 实例完整配置（与 .toml 字段语义一致） */
-interface EasyTierConfig {
+/**
+ * EasyTier 实例完整配置（与 .toml 字段语义一致）
+ *
+ * 用 type 别名而非 interface：对象类型别名自带隐式索引签名，
+ * 可直接传给以 Record<string, any> 接收的配置工具，无需逐处断言。
+ */
+type EasyTierConfig = {
   netns: string
   hostname: string
   instance_name: string
@@ -169,15 +174,4 @@ interface RunningItem {
 interface PortConflict {
   port: number
   conflictConfig: string // 正在占用该端口的运行中配置文件名（含 .toml 后缀）
-}
-
-/** 运行中的 Web 配置服务记录：protocol/host/port 为监听信息，status 为服务状态文案 */
-interface RunningWebItem {
-  protocol: string
-  host: string
-  port: number
-  userName: string
-  webStartMethod: number
-  configFileName: string
-  status: string
 }

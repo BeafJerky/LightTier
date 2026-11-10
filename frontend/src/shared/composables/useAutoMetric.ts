@@ -19,6 +19,13 @@ import { PS_ADAPTER_FILTER_CLAUSE } from '@/shared/platform/sysUtil'
 import { isExitRouteEnabled } from '@/entities/config/lighttierConfigUtil'
 import * as toml from 'smol-toml'
 
+declare global {
+  interface Window {
+    /** beforeunload 恢复钩子是否已注册（模块热更新时防止重复注册） */
+    __autoMetricUnloadRegistered?: boolean
+  }
+}
+
 // 最近一次被接管的网卡（供 beforeunload 兜底恢复）
 const disabledAutoMetricAdapter = ref<string | null>(null)
 // 配置文件名 → 其启动时接管的网卡名；同一网卡可有多个持有者
@@ -147,7 +154,7 @@ export function useAutoMetric() {
 // 全局 beforeunload 钩子：窗口关闭时尽力恢复网卡自动跃点
 // 只在模块首次加载时注册一次
 if (typeof window !== 'undefined' && !('__autoMetricUnloadRegistered' in window)) {
-  ;(window as any).__autoMetricUnloadRegistered = true
+  window.__autoMetricUnloadRegistered = true
   window.addEventListener('beforeunload', () => {
     const adapter = disabledAutoMetricAdapter.value
     if (adapter) {

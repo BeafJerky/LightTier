@@ -195,11 +195,11 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput } from '@/shared/ui'
 import LoadingOverlay from '@/shared/ui/LoadingOverlay.vue'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { injectRequired } from '@/shared/lib/inject'
 import { CONFIG_LIST_KEY } from './context'
 
 defineOptions({ name: 'ConfigList' })
@@ -218,7 +218,7 @@ const {
   openAdd,
   startAction,
   stopAction
-} = inject(CONFIG_LIST_KEY)!
+} = injectRequired(CONFIG_LIST_KEY, 'ConfigList')
 </script>
 
 <style scoped lang="less">

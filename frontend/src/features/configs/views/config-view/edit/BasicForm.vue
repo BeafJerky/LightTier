@@ -230,9 +230,9 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
+import { injectRequired } from '@/shared/lib/inject'
 import { CONFIG_EDITOR_KEY } from './context'
 
 defineOptions({ name: 'ConfigBasicForm' })
@@ -255,7 +255,7 @@ const {
   removePeer,
   addPeer,
   removeFlag
-} = inject(CONFIG_EDITOR_KEY)!
+} = injectRequired(CONFIG_EDITOR_KEY, 'ConfigBasicForm')
 </script>
 
 <style scoped lang="less">

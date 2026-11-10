@@ -119,17 +119,17 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtInput, LtSelect, LtSwitch } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { injectRequired } from '@/shared/lib/inject'
 import { SETTINGS_ENV_KEY, SETTINGS_PREFERENCES_KEY } from './context'
 
 defineProps<{ single?: boolean }>()
 
 const store = useEasyTierStore()
 const { t } = useI18n()
-const { isDesktopRuntime } = inject(SETTINGS_ENV_KEY)!
+const { isDesktopRuntime } = injectRequired(SETTINGS_ENV_KEY, 'GeneralSection')
 const {
   refreshInput,
   refreshError,
@@ -139,7 +139,7 @@ const {
   handleAutoRunConfigSelect,
   serviceMethodOptions,
   handleServiceMethodSelect
-} = inject(SETTINGS_PREFERENCES_KEY)!
+} = injectRequired(SETTINGS_PREFERENCES_KEY, 'GeneralSection')
 </script>
 
 <style scoped lang="less">

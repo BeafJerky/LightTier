@@ -15,7 +15,7 @@ import { downloadFile, listFiles } from '@/shared/platform/fileUtil'
 import { formatBytes } from '@/shared/lib/monitorFormat'
 import { getAppVersion, getOsType, compareVersions } from '@/shared/platform/sysUtil'
 import { UPDATE_PATH, MANAGER_REPO_URL, getMirrorUrl } from '@/shared/constants/easytier'
-import { pickManagerInstaller } from '@/shared/platform/updateUtil'
+import { pickManagerInstaller, type ReleaseAsset } from '@/shared/platform/updateUtil'
 import { invoke, isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
 import pkg from '../../../../../package.json'
@@ -87,7 +87,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     // 每次重新检查都丢弃上一次的资产与下载状态，避免拿旧版本的包安装
     resetManagerUpdateState()
     try {
-      const data = (await store.refreshManagerReleaseInfo(mirrorSelected.value)) as any[]
+      const data = await store.refreshManagerReleaseInfo(mirrorSelected.value)
       // 空列表是接口异常，不能误报“已是最新”
       if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
       // 默认只认正式版：nightly 等预发布只在该开关关闭时参与比较
@@ -137,7 +137,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const handleOpenManagerReleases = () => openExternalLink(MANAGER_REPO_URL)
 
   // === 应用内更新（5.11 的检查更新下载环节）
-  const latestManagerAssets = ref<any[] | null>(null)
+  const latestManagerAssets = ref<ReleaseAsset[] | null>(null)
   // 仅 Windows 桌面走应用内更新；浏览器预览按桌面 UI 展示，便于验证布局
   const isWindowsDesktop = (() => {
     if (isAndroidPlatform) return false

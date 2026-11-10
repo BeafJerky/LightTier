@@ -341,9 +341,9 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput } from '@/shared/ui'
+import { injectRequired } from '@/shared/lib/inject'
 import LogViewer from '@/features/configs/components/LogViewer.vue'
 import { CONFIG_LIST_KEY } from './context'
 
@@ -382,7 +382,7 @@ const {
   handleStartService,
   handleStopService,
   handleUninstallService
-} = inject(CONFIG_LIST_KEY)!
+} = injectRequired(CONFIG_LIST_KEY, 'ConfigDetail')
 </script>
 
 <style scoped lang="less">

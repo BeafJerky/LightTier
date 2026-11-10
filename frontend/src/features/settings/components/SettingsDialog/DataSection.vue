@@ -41,17 +41,17 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton } from '@/shared/ui'
+import { injectRequired } from '@/shared/lib/inject'
 import { SETTINGS_DATA_KEY, SETTINGS_ENV_KEY } from './context'
 
 defineProps<{ single?: boolean }>()
 
 const { t } = useI18n()
-const { isAndroidPlatform } = inject(SETTINGS_ENV_KEY)!
+const { isAndroidPlatform } = injectRequired(SETTINGS_ENV_KEY, 'DataSection')
 const { clearingCache, clearingLogs, backupDialogVisible, handleClearCache, handleClearLogs } =
-  inject(SETTINGS_DATA_KEY)!
+  injectRequired(SETTINGS_DATA_KEY, 'DataSection')
 </script>
 
 <style scoped lang="less">

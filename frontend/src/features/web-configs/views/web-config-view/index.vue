@@ -234,7 +234,7 @@ const isStarting = ref(false)
 const selectedConfig = ref<FormWebData | null>(null)
 
 // 类型化的 Web 配置列表
-const webConfigList = computed(() => easyTierStore.configWebList as unknown as FormWebData[])
+const webConfigList = computed(() => easyTierStore.configWebList)
 
 // 空列表（加载完成且无配置）：横屏分栏下右栏没有可展示内容，避免与左侧空态重复
 const isListEmpty = computed(

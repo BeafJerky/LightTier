@@ -143,10 +143,10 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { injectRequired } from '@/shared/lib/inject'
 import { SETTINGS_SECURITY_KEY } from './context'
 
 defineProps<{ single?: boolean }>()
@@ -164,7 +164,7 @@ const {
   cancelLockEdit,
   commitLockPassword,
   handleClearLockPassword
-} = inject(SETTINGS_SECURITY_KEY)!
+} = injectRequired(SETTINGS_SECURITY_KEY, 'SecuritySection')
 </script>
 
 <style scoped lang="less">

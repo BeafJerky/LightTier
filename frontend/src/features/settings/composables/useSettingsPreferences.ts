@@ -30,13 +30,11 @@ export function useSettingsPreferences() {
     refreshInput.value = String(val)
   }
 
-  // 自动运行设置：开关写回 store，关闭时同步清除已选配置，并持久化到 localStorage
+  // 自动运行设置：写回 store（Pinia 持久化为唯一真源），关闭时同步清除已选配置
   const handleAutoRunToggle = (value: boolean) => {
     store.autoRunNetworkSetting = value
-    localStorage.setItem('settings.autoRunNetwork', String(value))
     if (!value) {
       store.autoRunConfigName = ''
-      localStorage.removeItem('settings.autoRunConfigName')
     }
   }
 
@@ -52,11 +50,6 @@ export function useSettingsPreferences() {
   // 选择/清除自动运行的默认配置（空字符串表示“上次运行的配置”）
   const handleAutoRunConfigChange = (val: string) => {
     store.autoRunConfigName = val
-    if (val) {
-      localStorage.setItem('settings.autoRunConfigName', val)
-    } else {
-      localStorage.removeItem('settings.autoRunConfigName')
-    }
   }
   const handleAutoRunConfigSelect = (value: string | number | null) => {
     handleAutoRunConfigChange(value == null ? '' : String(value))
