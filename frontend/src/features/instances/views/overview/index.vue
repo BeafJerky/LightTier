@@ -185,6 +185,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { applyExitRouteFromFile } from '@/shared/platform/routeUtil'
 import { useInstanceActions } from '@/shared/composables/useInstanceActions'
 import { useRunningListSync } from '@/shared/composables/useRunningListSync'
+import { pickAutoRunTarget } from '@/features/instances/lib/autoRunTarget'
 import OverviewHeader from './OverviewHeader.vue'
 import OverviewHero from './OverviewHero.vue'
 import ConfigCard from './ConfigCard.vue'
@@ -396,6 +397,9 @@ const goCreateConfig = () => {
 onMounted(async () => {
   // 注册当前页刷新回调（悬浮快捷菜单调用）
   easyTierStore.registerPageRefresh(refreshRuntimeState)
+  // 会话结束时仍在运行的配置：updateRunningList 会用实际扫描结果覆盖持久化列表，
+  // 重启后扫描为空，需在覆盖前取快照作为「上次运行的配置」
+  const lastSessionRunning = easyTierStore.runningList.map((i) => i.configFileName)
   // 如果 store 尚未加载，先加载
   if (!easyTierStore.configListLoaded) {
     await easyTierStore.loadConfigFiles()
@@ -419,8 +423,13 @@ onMounted(async () => {
       // 如果已有运行中的配置，不自动运行
       if (easyTierStore.runningList.length > 0) return
 
-      // 确定要自动运行的配置
-      const targetFileName = easyTierStore.autoRunConfigName || easyTierStore.getLastRunConfigName()
+      // 确定要自动运行的配置：显式指定 > 会话结束时仍在运行者 > 上次运行/选择/首项
+      const targetFileName =
+        pickAutoRunTarget({
+          configured: easyTierStore.autoRunConfigName,
+          lastSessionRunning,
+          available: easyTierStore.configList.map((c) => c.configFileName)
+        }) || easyTierStore.getLastRunConfigName()
       if (!targetFileName) return
 
       const target = easyTierStore.configList.find((c) => c.configFileName === targetFileName)
