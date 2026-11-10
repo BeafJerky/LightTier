@@ -12,6 +12,8 @@
         "silent": true
       },
       "nsis": {
+        // bundle.icon 只作用于应用 exe；安装器图标需单独指定，否则回退 NSIS 默认图标
+        "installerIcon": "icons/icon.ico",
         "displayLanguageSelector": true,
         "installMode": "perMachine",
         "languages": ["SimpChinese", "English"],

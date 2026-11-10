@@ -12,20 +12,7 @@
         <div :key="step" class="og-body">
           <!-- 第 1 步：欢迎 -->
           <div v-if="step === 1" class="og-welcome">
-            <div class="og-logo">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-              >
-                <circle cx="6" cy="6" r="2.6" />
-                <circle cx="18" cy="6" r="2.6" />
-                <circle cx="12" cy="18" r="2.6" />
-                <path d="M8.4 7.3l3.3 8.3M15.6 7.3l-3.3 8.3" />
-              </svg>
-            </div>
+            <img class="og-logo" src="/logo.png" alt="" />
             <h2 id="og-title" class="og-title">{{ t('newOnboarding.welcomeTitle') }}</h2>
             <p class="og-desc">{{ t('newOnboarding.welcomeDesc') }}</p>
           </div>
@@ -455,7 +442,6 @@ onBeforeUnmount(() => {
 
 .og-card {
   display: flex;
-  flex-direction: column;
   width: 520px;
   max-width: calc(100vw - 64px);
   min-height: 380px;
@@ -464,7 +450,12 @@ onBeforeUnmount(() => {
   border: 1px solid var(--theme-border-light, #f5ede6);
   border-radius: var(--theme-radius-xl, 18px);
   box-shadow: var(--theme-shadow-md, 0 12px 36px rgb(74 55 40 / 7%));
+
+  /* 全局 reset 仅对表单控件设 border-box；此处 width/max-width 需含 padding/border，
+     否则窄屏下 100vw-64px 的上限只约束内容盒，卡片被撑到贴边 */
+  box-sizing: border-box;
   animation: og-card-in var(--theme-duration-slow) var(--theme-ease-out);
+  flex-direction: column;
 }
 
 /* 容器仅作为程序化焦点落点，不显示焦点环 */
@@ -524,20 +515,10 @@ onBeforeUnmount(() => {
 }
 
 .og-logo {
-  display: flex;
   width: 64px;
   height: 64px;
   margin-bottom: 20px;
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.12);
-  border-radius: var(--theme-radius-round, 50%);
-  align-items: center;
-  justify-content: center;
-}
-
-.og-logo svg {
-  width: 34px;
-  height: 34px;
+  object-fit: contain;
 }
 
 /* 第 2 步：功能简介 */
@@ -780,5 +761,25 @@ onBeforeUnmount(() => {
   color: var(--theme-text-secondary, #7a6e5e);
   cursor: pointer;
   user-select: none;
+}
+
+/* 窄屏（含 Android）：收窄内边距、功能改单列、底栏允许换行，避免横向溢出 */
+@media (width <= 640px) {
+  .og-card {
+    padding: 28px 24px 20px;
+  }
+
+  .og-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .og-footer {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .og-footer-actions {
+    margin-left: auto;
+  }
 }
 </style>
