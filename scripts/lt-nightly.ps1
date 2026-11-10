@@ -77,6 +77,24 @@ Write-Host "=== commit $shortCommit on $branch$(if ($dirtyCount -gt 0) { ", dirt
 Write-Host "=== tag: $Tag ==="
 Write-Host "=== output: $stage ==="
 
+# ---------- 文档预检 ----------
+# 仓库内 CHANGELOG / README 随版本维护：缺失或口径漂移只警告，不阻断构建
+$changelogPath = Join-Path $root "CHANGELOG.md"
+if ((Test-Path $changelogPath) -and -not (Select-String -Path $changelogPath -Pattern "^## $([regex]::Escape($BaseVersion))(\s|$)" -Quiet)) {
+    Write-Host "WARN: CHANGELOG.md 缺少 $BaseVersion 小节，正式版发布前需补记"
+}
+$compatPath = Join-Path $root "frontend\src\entities\kernel\kernelCompat.ts"
+$readmePath = Join-Path $root "README.md"
+if ((Test-Path $compatPath) -and (Test-Path $readmePath)) {
+    $compatText = Get-Content $compatPath -Raw -Encoding UTF8
+    $readmeText = Get-Content $readmePath -Raw -Encoding UTF8
+    $baseline = if ($compatText -match "CORE_VERSION_BASELINE\s*=\s*'([^']+)'") { $Matches[1] } else { "" }
+    $latest = if ($compatText -match "CORE_VERSION_LATEST_KNOWN\s*=\s*'([^']+)'") { $Matches[1] } else { "" }
+    if ($baseline -and $latest -and -not $readmeText.Contains("$baseline–$latest")) {
+        Write-Host "WARN: README 内核兼容范围与 kernelCompat.ts 不一致（应为 $baseline–$latest）"
+    }
+}
+
 if ($DryRun) {
     Write-Host ""
     Write-Host "desktop: pnpm tauri build --config $cfgPath --bundles nsis"
