@@ -720,10 +720,13 @@ export default {
     downloadUpdate: 'Download update',
     updateSavePath: 'The installer will be saved to {path}',
     updatePackageReady: 'Installer ready at {path}',
+    updateSavePathAndroid: 'Downloads via the selected mirror, then installs directly',
+    updatePackageReadyAndroid: 'Installer ready, tap "Install now"',
     updateProgressLabel: 'Update download progress',
     updateAssetMissing: 'No installer available for this platform, use "Go download" instead',
     updatePackageNotDownloaded: 'Download the installer first',
     updateDownloadSuccess: 'Installer downloaded to {path}',
+    updateDownloadSuccessAndroid: 'Installer downloaded, tap "Install now"',
     updateDownloadFail: 'Update download failed, try another mirror',
     runInstaller: 'Install now',
     runInstallerTitle: 'Run installer and quit the app?',
@@ -731,6 +734,9 @@ export default {
       'The installer will overwrite the current version and this app will quit automatically. Restart it manually after the install; running instances may be interrupted.',
     installingUpdate: 'Installing…',
     installerLaunched: 'Installer started, the app will quit',
+    installerLaunchedAndroid: 'System installer opened, follow the prompts to finish',
+    installPermissionNeeded: 'Allow LightTier to install apps, then tap "Install now" again',
+    installPackageMissing: 'Installer package missing, download it again',
     installLaunchFail: 'Failed to start the installer'
   },
   newBackup: {

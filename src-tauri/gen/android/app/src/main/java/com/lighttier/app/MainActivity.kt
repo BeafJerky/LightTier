@@ -1,15 +1,21 @@
 package com.lighttier.app
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import java.io.File
 
 class MainActivity : TauriActivity() {
   private var webViewRef: WebView? = null
@@ -34,6 +40,7 @@ class MainActivity : TauriActivity() {
     super.onWebViewCreate(webView)
     webViewRef = webView
     webView.addJavascriptInterface(InsetsBridge(), "LTAndroidInsets")
+    webView.addJavascriptInterface(InstallerBridge(), "LTAndroidInstaller")
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       // 语言/主题切换会整页 reload；新文档启动时立即写回安全区，避免首帧压在状态栏下
       WebViewCompat.addDocumentStartJavaScript(webView, SAFE_AREA_BOOTSTRAP, setOf("*"))
@@ -81,6 +88,53 @@ class MainActivity : TauriActivity() {
 
     @JavascriptInterface
     fun getBottom(): Int = lastBottomInset
+  }
+
+  /**
+   * 应用内更新：把下载目录里的 APK 交给系统安装器。
+   * 返回 started（已拉起安装器）/ permission（缺“安装未知应用”授权，已打开设置页）/
+   * missing（文件不存在）/ invalid（文件名非法）/ error。
+   */
+  private inner class InstallerBridge {
+    private val apkNamePattern = Regex("^[A-Za-z0-9._-]+\\.apk$")
+
+    @JavascriptInterface
+    fun installApk(fileName: String): String {
+      if (!apkNamePattern.matches(fileName)) return "invalid"
+      // Tauri 的 AppData 在 Android 映射为 dataDir（不是 filesDir）
+      val apk = File(File(dataDir, "resource/update"), fileName)
+      if (!apk.isFile) return "missing"
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !packageManager.canRequestPackageInstalls()
+      ) {
+        mainHandler.post {
+          runCatching {
+            startActivity(
+              Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+          }
+        }
+        return "permission"
+      }
+      // FileProvider 只暴露 cache/files 等标准目录，先复制到 cacheDir 再共享
+      val shared = File(File(cacheDir, "update"), "update.apk")
+      try {
+        shared.parentFile?.mkdirs()
+        apk.copyTo(shared, overwrite = true)
+      } catch (e: Exception) {
+        return "error"
+      }
+      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", shared)
+      val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      mainHandler.post {
+        runCatching { startActivity(intent) }
+      }
+      return "started"
+    }
   }
 
   companion object {

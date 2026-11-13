@@ -2,4 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
   <external-path name="my_images" path="." />
   <cache-path name="my_cache_images" path="." />
+  <!-- 应用内更新的 APK 先复制到 cacheDir/update，再通过 FileProvider 交给系统安装器 -->
+  <cache-path name="update" path="update/" />
 </paths>

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Android 13+ 通知权限（VPN 常驻通知） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 应用内更新：拉起系统安装器安装下载的 APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

@@ -41,6 +41,29 @@ describe('pickManagerInstaller', () => {
     ).toBe('LightTier_1.9.2-nightly.20261025_x64-setup.exe')
   })
 
+  it('Android 只选 arm64 APK，不会误取 exe / msi', () => {
+    expect(pickManagerInstaller(assets, 'android')).toEqual({
+      fileName: 'LightTier_1.9.2_arm64-release-signed.apk',
+      url: `${BASE}/LightTier_1.9.2_arm64-release-signed.apk`,
+      size: 31622272
+    })
+  })
+
+  it('Android nightly 的 _arm64.apk 同样命中', () => {
+    expect(
+      pickManagerInstaller(
+        [
+          {
+            name: 'LightTier_2.1.2-nightly.20261114_arm64.apk',
+            size: 33e6,
+            browser_download_url: 'https://github.com/x/y/releases/download/t/a.apk'
+          }
+        ],
+        'android'
+      )?.fileName
+    ).toBe('LightTier_2.1.2-nightly.20261114_arm64.apk')
+  })
+
   it('非 Windows 平台与缺失资产返回 null，由调用方回退外链下载', () => {
     expect(pickManagerInstaller(assets, 'other')).toBeNull()
     expect(

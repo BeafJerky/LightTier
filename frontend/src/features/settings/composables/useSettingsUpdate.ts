@@ -31,6 +31,21 @@ interface SettingsUpdateOptions {
   isAndroidPlatform: boolean
 }
 
+type AndroidInstallStatus =
+  | 'started'
+  | 'permission'
+  | 'missing'
+  | 'invalid'
+  | 'error'
+  | 'unavailable'
+
+declare global {
+  interface Window {
+    /** MainActivity 注入的系统安装器桥（仅 Android） */
+    LTAndroidInstaller?: { installApk: (fileName: string) => string }
+  }
+}
+
 export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const { confirm, mirror, isDesktopRuntime, isAndroidPlatform } = options
   const store = useEasyTierStore()
@@ -138,7 +153,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
 
   // === 应用内更新（5.11 的检查更新下载环节）
   const latestManagerAssets = ref<ReleaseAsset[] | null>(null)
-  // 仅 Windows 桌面走应用内更新；浏览器预览按桌面 UI 展示，便于验证布局
+  // 仅 Windows 桌面走 exe 应用内更新；浏览器预览按桌面 UI 展示，便于验证布局
   const isWindowsDesktop = (() => {
     if (isAndroidPlatform) return false
     if (!isDesktopRuntime) return true
@@ -148,6 +163,12 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       return false
     }
   })()
+  // Android 走 APK 应用内下载 + 系统安装器
+  const updatePlatform: 'windows' | 'android' | 'other' = isAndroidPlatform
+    ? 'android'
+    : isWindowsDesktop
+      ? 'windows'
+      : 'other'
   const updating = ref(false)
   const launchingInstaller = ref(false)
   // 是否进入实际下载阶段（自动测速阶段不展示 0% 进度条）
@@ -159,7 +180,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   let autoUpdateProbeAttempted = false
 
   const managerInstaller = computed(() =>
-    pickManagerInstaller(latestManagerAssets.value, isWindowsDesktop ? 'windows' : 'other')
+    pickManagerInstaller(latestManagerAssets.value, updatePlatform)
   )
   const canInAppUpdate = computed(() => hasManagerUpdate.value && !!managerInstaller.value)
   const updatePercent = computed<number | null>(() => {
@@ -181,11 +202,17 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     if (mirrorProbing.value) return t('newSettings.mirrorProbing')
     return updating.value ? t('newSettings.downloading') : t('newSettings.downloadUpdate')
   })
-  const inAppUpdateDesc = computed(() =>
-    updateDownloaded.value
+  const inAppUpdateDesc = computed(() => {
+    // Android 的文件落在私有目录，路径对用户无意义，改用流程说明
+    if (updatePlatform === 'android') {
+      return updateDownloaded.value
+        ? t('newSettings.updatePackageReadyAndroid')
+        : t('newSettings.updateSavePathAndroid')
+    }
+    return updateDownloaded.value
       ? t('newSettings.updatePackageReady', { path: UPDATE_PATH })
       : t('newSettings.updateSavePath', { path: UPDATE_PATH })
-  )
+  })
 
   const resetManagerUpdateState = () => {
     latestManagerAssets.value = null
@@ -200,7 +227,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   // 复用应用目录里已有的同版本安装包（上次下载后未安装即可直接安装，无需重复下载）
   const restoreManagerUpdatePackage = async () => {
     const asset = managerInstaller.value
-    if (!asset || !isDesktopRuntime) return
+    if (!asset || !isTauriRuntime()) return
     const names = await listFiles(UPDATE_PATH, true)
     if (!names.includes(asset.fileName)) return
     updateDownloaded.value = true
@@ -215,7 +242,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       return
     }
     // 浏览器预览写不了本地目录：走新标签页下载，保证入口不静默失败
-    if (!isDesktopRuntime) {
+    if (!isTauriRuntime()) {
       openExternalLink(asset.url)
       return
     }
@@ -237,11 +264,16 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
           updateReceived.value = progress.received
           updateTotal.value = progress.total ?? asset.size
         },
-        { dir: UPDATE_PATH }
+        // 以官方包体长度兜底校验：半包（浏览器中断、镜像截断）不落盘
+        { dir: UPDATE_PATH, expectedSize: asset.size }
       )
       if (ok) {
         updateDownloaded.value = true
-        toast.success(t('newSettings.updateDownloadSuccess', { path: UPDATE_PATH }))
+        toast.success(
+          isAndroidPlatform
+            ? t('newSettings.updateDownloadSuccessAndroid')
+            : t('newSettings.updateDownloadSuccess', { path: UPDATE_PATH })
+        )
       } else {
         toast.error(t('newSettings.updateDownloadFail'))
       }
@@ -254,10 +286,43 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     }
   }
 
+  // Android：APK 已下载到应用数据目录（Tauri AppData → dataDir/resource/update），
+  // 交系统安装器（桥内复制到 cacheDir 后经 FileProvider 共享）。
+  // 没有“安装未知应用”权限时，桥会先拉起系统设置页，用户授权后再点一次即可。
+  const runAndroidInstaller = (fileName: string) => {
+    let status: AndroidInstallStatus
+    try {
+      status =
+        (window.LTAndroidInstaller?.installApk(fileName) as AndroidInstallStatus) ?? 'unavailable'
+    } catch (e) {
+      console.error('启动安卓安装器失败:', e)
+      status = 'error'
+    }
+    if (status === 'started') {
+      toast.success(t('newSettings.installerLaunchedAndroid'))
+      return
+    }
+    if (status === 'permission') {
+      toast.warning(t('newSettings.installPermissionNeeded'))
+      return
+    }
+    if (status === 'missing') {
+      // 本地包被清理/删除：回到“下载更新”态，避免按钮一直可点却装不上
+      updateDownloaded.value = false
+      toast.error(t('newSettings.installPackageMissing'))
+      return
+    }
+    toast.error(t('newSettings.installLaunchFail'))
+  }
+
   const handleRunManagerInstaller = async () => {
     const asset = managerInstaller.value
     if (!asset || !updateDownloaded.value) {
       toast.warning(t('newSettings.updatePackageNotDownloaded'))
+      return
+    }
+    if (updatePlatform === 'android') {
+      runAndroidInstaller(asset.fileName)
       return
     }
     if (!(await confirm(t('newSettings.runInstallerTitle'), t('newSettings.runInstallerMsg')))) {

@@ -693,10 +693,13 @@ export default {
     downloadUpdate: '下载更新',
     updateSavePath: '安装包将保存到应用目录 {path}',
     updatePackageReady: '安装包已就绪：{path}',
+    updateSavePathAndroid: '通过所选加速源下载，完成后可直接安装',
+    updatePackageReadyAndroid: '安装包已就绪，点击“立即安装”',
     updateProgressLabel: '更新包下载进度',
     updateAssetMissing: '未找到当前平台可用的安装包，请使用“前往下载”',
     updatePackageNotDownloaded: '请先下载安装包',
     updateDownloadSuccess: '安装包已下载到 {path}',
+    updateDownloadSuccessAndroid: '安装包已下载完成，点击“立即安装”',
     updateDownloadFail: '下载更新失败，可更换加速源后重试',
     runInstaller: '立即安装',
     runInstallerTitle: '运行安装并退出应用？',
@@ -704,6 +707,9 @@ export default {
       '安装器将覆盖当前版本，应用随后自动退出；安装完成后需手动重新启动应用，已运行的实例可能中断。',
     installingUpdate: '安装中…',
     installerLaunched: '安装器已启动，应用即将退出',
+    installerLaunchedAndroid: '已打开系统安装器，请按提示完成安装',
+    installPermissionNeeded: '请先允许 LightTier 安装应用，然后再次点击“立即安装”',
+    installPackageMissing: '安装包不存在，请重新下载',
     installLaunchFail: '启动安装器失败'
   },
   newBackup: {

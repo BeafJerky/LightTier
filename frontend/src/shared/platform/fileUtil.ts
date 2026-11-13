@@ -434,6 +434,8 @@ const readBodyWithProgress = async (
 export interface DownloadOptions {
   /** 保存目录（相对 BaseDirectory 的相对路径），默认 CORE_PATH */
   dir?: string
+  /** 官方标注的包体字节数：实际长度不符即判为半包（镜像截断/中断），不落盘 */
+  expectedSize?: number | null
 }
 
 /**
@@ -522,6 +524,13 @@ export async function downloadFile(
     // 流式读取响应体并回报进度，同时做实际包体上限复核
     const uint8Array = await readBodyWithProgress(response, total, onProgress)
     if (!uint8Array) return false
+
+    // 包体长度复核：镜像站截断或连接中断时不落盘，避免把半包交给安装器
+    const expectedSize = options?.expectedSize
+    if (expectedSize && uint8Array.byteLength !== expectedSize) {
+      error(`下载包体不完整(${uint8Array.byteLength}/${expectedSize}):${fileUrl}`)
+      return false
+    }
 
     // 文件头校验：镜像站可能返回 HTML 错误页，必须按包类型验魔数，避免污染本地安装包
     // zip（内核包/APK）为 "PK"，PE 可执行（Windows 安装包）为 "MZ"
