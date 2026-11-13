@@ -242,6 +242,9 @@ const refreshList = async () => {
     ...base,
     ...external.map((t) => ({ name: t.name, label: t.label, color: t.color }))
   ]
+  // 外部主题扫描为异步：首帧可能早于扫描完成（Android 二级页 onMounted 即打开），
+  // 完成后再渲染一次，让预览用上真实的外部主题 CSS
+  if (visible.value) renderPreview(previewName.value)
 }
 
 const toast = useCreamToast()
@@ -361,7 +364,9 @@ const renderPreview = (name: string) => {
     styleEl.textContent = builtinStyle
   } else {
     const ext = externalThemes.value.find((t) => t.name === name)
-    if (ext) styleEl.textContent = getExternalPreviewStyle(ext.cssText)
+    // 外部主题尚未扫描完成时先注入缺省变量与骨架样式：
+    // 空样式会让预览裸奔（SVG 按 300×150 原生尺寸撑满整块），扫描完成后 refreshList 会再次渲染
+    styleEl.textContent = getExternalPreviewStyle(ext?.cssText ?? '')
   }
 }
 

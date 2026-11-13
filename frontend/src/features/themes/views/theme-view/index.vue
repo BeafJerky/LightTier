@@ -42,17 +42,22 @@ watch(visible, (v) => {
 /* 壳层已提供页面级留白，内容区不再叠加，保证与其他二级页左缘一致 */
 .ntv-page :deep(.cd-body) {
   padding: 0;
+  overflow: hidden;
 }
 
+/* 页面内自行分配高度：主题列表滚动，预览固定在底部操作栏上方 */
 .ntv-page :deep(.td-body) {
   display: flex;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
-  gap: var(--theme-space-4);
+  gap: var(--theme-space-3);
 }
 
 .ntv-page :deep(.td-sidebar) {
   width: 100%;
+  min-height: 0;
+  flex: 1;
   gap: var(--theme-space-3);
 }
 
@@ -77,15 +82,17 @@ watch(visible, (v) => {
   border-radius: var(--theme-radius-pill);
 }
 
-/* 主题选择：分组卡片行 */
+/* 主题选择：分组卡片行；列表独立滚动，预览与底部按钮始终可见 */
 .ntv-page :deep(.td-list) {
   display: block;
+  min-height: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto;
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-lg, 14px);
-  gap: 0;
+  overscroll-behavior: contain;
+  flex: 1;
 }
 
 .ntv-page :deep(.td-item) {
@@ -187,7 +194,7 @@ watch(visible, (v) => {
   background: var(--theme-bg-hover);
 }
 
-/* 预览区 */
+/* 预览区：固定高度贴底，不随主题列表滚动 */
 .ntv-page :deep(.td-preview-block) {
   flex: none;
 }
@@ -203,10 +210,18 @@ watch(visible, (v) => {
 }
 
 .ntv-page :deep(.td-preview-wrap) {
+  /* 移动端预览骨架的自然高度约 293px：定高 300 保证整块预览完整可见 */
   height: 300px;
   border-width: 1px;
   border-radius: var(--theme-radius-lg, 14px);
   flex: none;
+}
+
+/* 矮屏（小屏手机 / 分屏）：压缩预览，给主题列表保留可滚动空间 */
+@media (height <= 720px) {
+  .ntv-page :deep(.td-preview-wrap) {
+    height: 200px;
+  }
 }
 
 .ntv-page :deep(.td-preview) {
@@ -230,5 +245,53 @@ watch(visible, (v) => {
   width: 100%;
   grid-template-columns: 1fr 1.35fr;
   gap: 10px;
+}
+
+/* 宽屏 / 横屏 / 平板：左右布局（主题列表在左、预览在右），与桌面弹窗一致；
+   竖屏手机维持上下布局，列表滚动、预览固定贴底 */
+@media (width >= 641px) {
+  .ntv-page :deep(.td-body) {
+    flex-direction: row;
+  }
+
+  .ntv-page :deep(.td-sidebar) {
+    width: 220px;
+    min-height: 0;
+    flex: none;
+  }
+
+  /* 侧栏变窄：导入 / 指南改为单列，避免按钮文案挤压 */
+  .ntv-page :deep(.td-tools) {
+    grid-template-columns: 1fr;
+  }
+
+  .ntv-page :deep(.td-tool-btn) {
+    height: 44px;
+    justify-content: flex-start;
+  }
+
+  .ntv-page :deep(.td-preview-block) {
+    height: 100%;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* 预览占满右侧剩余高度（覆盖上下的定高与矮屏压缩） */
+  .ntv-page :deep(.td-preview-wrap) {
+    height: auto;
+    min-height: 0;
+    flex: 1;
+  }
+}
+
+/* 横屏手机（矮屏）：侧栏放宽、工具恢复双列，给主题列表留下可见行 */
+@media (width >= 641px) and (height <= 520px) {
+  .ntv-page :deep(.td-sidebar) {
+    width: 300px;
+  }
+
+  .ntv-page :deep(.td-tools) {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

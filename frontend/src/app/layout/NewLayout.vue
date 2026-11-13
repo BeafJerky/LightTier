@@ -282,7 +282,8 @@
           class="nl-content"
           :class="{
             'nl-content-android': isAndroidPlatform,
-            'nl-content-full': isAndroidPlatform && isFullBleed
+            'nl-content-full': isAndroidPlatform && isFullBleed,
+            'nl-content-fill': isAndroidPlatform && isFillHeight
           }"
         >
           <router-view />
@@ -497,6 +498,8 @@ const isSubPage = computed(() => Boolean(route.meta?.subPage))
 const showTabBar = computed(() => isAndroidPlatform && Boolean(route.meta?.tabRoot))
 // 全屏内容：编辑器由页面自行管理内边距，壳层不再留白
 const isFullBleed = computed(() => Boolean(route.meta?.fullBleed))
+// 定高内容：页面占满内容区高度（如主题设置：列表滚动、预览固定贴底）
+const isFillHeight = computed(() => Boolean(route.meta?.fillHeight))
 // Android 一级页只留大标题；二级页展示小标题 + 说明
 const showSubtitle = computed(() => !isAndroidPlatform || isSubPage.value)
 
@@ -1338,6 +1341,19 @@ onBeforeUnmount(() => {
 }
 
 .nl-content-full > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 定高页（主题设置）：页面撑满内容区，内部自行分配滚动区与固定区；
+   块级容器的百分比高度无法解析到 flex 撑开后的实际高度，故由壳层设为 flex 列 */
+.nl-content-fill {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.nl-content-fill > * {
   flex: 1;
   min-height: 0;
 }

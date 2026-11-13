@@ -146,7 +146,9 @@ const routeChildren: AppRouteRecordRaw[] = [
     meta: {
       titleKey: 'newLayout.theme',
       subtitleKey: 'newSettings.themeDesc',
-      subPage: true
+      subPage: true,
+      // 占满内容区：主题列表滚动，预览与底部按钮固定可见
+      fillHeight: true
     }
   },
   {
