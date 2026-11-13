@@ -1,6 +1,6 @@
 {
   "name": "lighttier",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "LightTier 是 EasyTier 的桌面端可视化管理器：管理组网配置、启停内核，并实时查看节点与连接状态。",
   "displayName": "LightTier",
   "author": {

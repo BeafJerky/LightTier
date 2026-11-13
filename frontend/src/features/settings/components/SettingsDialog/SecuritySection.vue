@@ -254,7 +254,7 @@ const {
 
 /* 自定义眼睛按钮悬浮在右侧，输入文字避开该区域 */
 .sd-lock-input-bar .sd-lock-input :deep(.n-input__input-el) {
-  padding-right: 26px;
+  padding-right: 32px;
 }
 
 /* 确认密码没有眼睛按钮，右侧留白收窄 */
@@ -276,11 +276,13 @@ const {
   color: var(--theme-accent-primary, #e8a0a0);
 }
 
-.sd-lock-eye {
+/* 触屏下 LtButton 为承载扩展命中区会把 .lt-btn 改成 position: relative，
+   用带父级的更高权重确保眼睛始终绝对定位在输入框内；用 top 而非 transform
+   居中，避免按压态的 scale 覆盖位移导致眼睛跳动 */
+.sd-lock-input-bar > .sd-lock-eye {
   position: absolute;
-  top: 50%;
+  top: calc(50% - var(--lt-btn-height, 24px) / 2);
   right: 6px;
-  transform: translateY(-50%);
 }
 
 /* 密码双输入在窄屏改为单列，避免字段被压缩 */
