@@ -262,6 +262,7 @@
  */
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { formatBytes, routeCost } from '@/shared/lib/monitorFormat'
+import { useIslandStore } from '@/shared/store/island'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as coreApi from '@/shared/platform/coreApi'
 import { isAndroid } from '@/shared/platform/platformUtil'
@@ -287,6 +288,7 @@ import PeerTable from './PeerTable.vue'
 defineOptions({ name: 'NewMonitor' })
 
 const easyTierStore = useEasyTierStore()
+const islandStore = useIslandStore()
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
@@ -360,6 +362,23 @@ const handleSnapshotSuccess = (configName: string, snapshot: MonitorSnapshot) =>
     nodeCount: snapshot.peerList.length,
     avgLatency: snapshot.avgLatency
   })
+  // 灵动岛连接质量采样：只看远端 peer，空值不当作 0
+  const qualityPeers = snapshot.peerList.filter((peer) => peer.cost !== routeCost('Local'))
+  const latencies = qualityPeers
+    .filter((peer) => peer.lat_ms.trim() !== '')
+    .map((peer) => Number(peer.lat_ms))
+    .filter((value) => Number.isFinite(value))
+  const losses = qualityPeers
+    .filter((peer) => peer.loss_rate.trim() !== '')
+    .map((peer) => Number(peer.loss_rate))
+    .filter((value) => Number.isFinite(value))
+  if (latencies.length) {
+    islandStore.reportQuality(configName, {
+      avgLatencyMs: latencies.reduce((sum, value) => sum + value, 0) / latencies.length,
+      lossRate: losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : 0,
+      peerCount: qualityPeers.length
+    })
+  }
   // 5.4：全部远端 Peer 均 P2P 直连时一次性通知（排除本机项，去重复用 p2pNotify 标志位）
   if (!easyTierStore.p2pNotifySetting || !easyTierStore.p2pNotify) return
   const remotePeers = snapshot.peerList.filter((p) => p.cost !== routeCost('Local'))

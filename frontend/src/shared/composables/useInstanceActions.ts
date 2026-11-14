@@ -13,6 +13,7 @@
  */
 import { useI18n } from 'vue-i18n'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { useIslandStore } from '@/shared/store/island'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useAutoMetric } from '@/shared/composables/useAutoMetric'
 import { useTrendBuffer } from '@/shared/composables/useTrendBuffer'
@@ -49,6 +50,9 @@ export function useInstanceActions(options: InstanceActionsOptions) {
   const { beforeStart: autoMetricBeforeStart, afterStop: autoMetricAfterStop } = useAutoMetric()
   const { clearTrend } = useTrendBuffer()
   const isAndroidPlatform = isAndroid()
+  const island = useIslandStore()
+  // 灵动岛只在桌面布局挂载，Android 只保留原有 toast
+  const reportIsland = !isAndroidPlatform
   const compatMessageKey = options.compatMessageKey ?? 'newConfig.compatBlockMsg'
 
   const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
@@ -89,6 +93,14 @@ export function useInstanceActions(options: InstanceActionsOptions) {
         ].join(', ')
         const ports = [...new Set(conflicts.map((c) => c.port))].join(', ')
         toast(t('newOverview.portConflict', { config: configNames, port: ports }), 'error', 4000)
+        if (reportIsland) {
+          island.notify({
+            type: 'error',
+            title: t('newIsland.portConflict', { name: item.configFileName }),
+            detail: t('newIsland.portConflictDesc', { port: ports, conflict: configNames }),
+            sourceKey: `feedback:port:${item.configFileName}`
+          })
+        }
         throw new Error('port-conflict')
       }
     }
@@ -107,6 +119,7 @@ export function useInstanceActions(options: InstanceActionsOptions) {
           })
         )
         if (!confirmed) throw new Error('switch-cancelled')
+        if (reportIsland) island.expectStop(current.configFileName)
         const stopped = await coreApi.stopConfig(current)
         if (!stopped) {
           toast(t('newCommon.stoppedFail'), 'error')
@@ -124,6 +137,12 @@ export function useInstanceActions(options: InstanceActionsOptions) {
       easyTierStore.setLastRunConfigName(item)
       await updateRunningList({ force: true })
       toast(t('newCommon.startSuccess'), 'success')
+      if (reportIsland) {
+        island.notify({
+          type: 'feedback',
+          title: t('newIsland.startOk', { name: item.configFileName })
+        })
+      }
     } catch (e: any) {
       // 失败自动回滚该配置的 AutoMetric 状态（不影响其他配置的持有计数）
       await autoMetricAfterStop(fileName)
@@ -133,6 +152,14 @@ export function useInstanceActions(options: InstanceActionsOptions) {
         ? t('newOverview.startFailAndroid')
         : t('newOverview.startFailCore')
       toast(detail ? `${base}（${detail}）` : base, 'error', 6000)
+      if (reportIsland) {
+        island.notify({
+          type: 'error',
+          title: t('newIsland.startFailed', { name: item.configFileName }),
+          detail,
+          sourceKey: `feedback:start:${item.configFileName}`
+        })
+      }
       throw new Error('start-failed', { cause: e })
     }
 
@@ -149,6 +176,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
   const stopInstance = async (item: RunningItem): Promise<boolean> => {
     const running = easyTierStore.runningList.find((r) => r.configFileName === item.configFileName)
     let stopped = true
+    // 主动停止是预期行为：先登记，运行态差集才不会误报为掉线
+    if (reportIsland) island.expectStop(item.configFileName)
     // Android：停 VPN + 内核实例（无 pid）；桌面：结束子进程
     if (isAndroidPlatform || running?.pid) {
       const ok = await coreApi.stopConfig(running ?? item)
@@ -156,9 +185,22 @@ export function useInstanceActions(options: InstanceActionsOptions) {
         easyTierStore.stopLoop = true
         easyTierStore.removeRunningList(item.configFileName)
         toast(t('newCommon.stoppedSuccess'), 'success')
+        if (reportIsland) {
+          island.notify({
+            type: 'feedback',
+            title: t('newIsland.stopOk', { name: item.configFileName })
+          })
+        }
       } else {
         stopped = false
         toast(t('newCommon.stoppedFail'), 'error')
+        if (reportIsland) {
+          island.notify({
+            type: 'error',
+            title: t('newIsland.stopFailed', { name: item.configFileName }),
+            sourceKey: `feedback:stop:${item.configFileName}`
+          })
+        }
       }
     } else {
       easyTierStore.removeRunningList(item.configFileName)

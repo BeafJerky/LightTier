@@ -37,7 +37,13 @@ const compat = vi.hoisted(() => ({
 
 const platform = vi.hoisted(() => ({ android: false }))
 
+const islandMock = vi.hoisted(() => ({
+  notify: vi.fn(),
+  expectStop: vi.fn()
+}))
+
 vi.mock('@/shared/store/easytier', () => ({ useEasyTierStore: () => storeMock }))
+vi.mock('@/shared/store/island', () => ({ useIslandStore: () => islandMock }))
 vi.mock('@/shared/platform/coreApi', () => api)
 vi.mock('@/shared/composables/useAutoMetric', () => ({ useAutoMetric: () => metric }))
 vi.mock('@/shared/platform/routeUtil', () => route)
@@ -84,6 +90,11 @@ describe('useInstanceActions.startInstance', () => {
     expect(api.getRunningList).toHaveBeenCalledWith(['home.toml'])
     expect(afterStart).toHaveBeenCalledWith(item, false)
     expect(confirm).not.toHaveBeenCalled()
+    // 灵动岛收到启动成功的操作反馈
+    expect(islandMock.notify).toHaveBeenCalledWith({
+      type: 'feedback',
+      title: 'newIsland.startOk:{"name":"home.toml"}'
+    })
   })
 
   it('兼容错误确认取消时不启动', async () => {
@@ -191,6 +202,12 @@ describe('useInstanceActions.stopInstance', () => {
     expect(storeMock.removeRunningList).toHaveBeenCalledWith('home.toml')
     expect(metric.afterStop).toHaveBeenCalledWith('home.toml')
     expect(route.clearExitRoute).toHaveBeenCalledWith('home.toml')
+    // 主动停止先登记预期停止，避免灵动岛误报掉线
+    expect(islandMock.expectStop).toHaveBeenCalledWith('home.toml')
+    expect(islandMock.notify).toHaveBeenCalledWith({
+      type: 'feedback',
+      title: 'newIsland.stopOk:{"name":"home.toml"}'
+    })
   })
 
   it('停止失败：保留运行记录且不清理路由', async () => {
