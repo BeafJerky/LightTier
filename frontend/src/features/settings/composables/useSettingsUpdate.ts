@@ -9,6 +9,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { useIslandStore } from '@/shared/store/island'
+import { pickLatestManagerRelease } from '@/shared/lib/releaseUtil'
 import type { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { MIRROR_SOURCE_KEY } from '@/shared/composables/useMirrorProbe'
 import { downloadFile, listFiles } from '@/shared/platform/fileUtil'
@@ -49,6 +51,7 @@ declare global {
 export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const { confirm, mirror, isDesktopRuntime, isAndroidPlatform } = options
   const store = useEasyTierStore()
+  const island = useIslandStore()
   const toast = useCreamToast()
   const { t } = useI18n()
   const { selected: mirrorSelected, probing: mirrorProbing, probeAllWith, waitForProbe } = mirror
@@ -93,6 +96,9 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     store.updateStableOnly = value
     latestManagerVersion.value = ''
     updateCheckError.value = false
+    // 切换通道后让灵动岛的 24h 缓存一并失效，避免旧通道结果继续提示
+    island.invalidateManagerUpdate()
+    island.dismissSource('update:manager')
     resetManagerUpdateState()
   }
 
@@ -106,22 +112,32 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       // 空列表是接口异常，不能误报“已是最新”
       if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
       // 默认只认正式版：nightly 等预发布只在该开关关闭时参与比较
-      const releases = data.filter((r) => !r.draft)
-      const latest = store.updateStableOnly ? releases.find((r) => !r.prerelease) : releases[0]
+      const latest = pickLatestManagerRelease(data, store.updateStableOnly)
       if (!latest) {
         latestManagerVersion.value = ''
+        island.absorbManagerRelease('')
+        island.dismissSource('update:manager')
         toast.success(t('newSettings.upToDate'))
         return
       }
       const latestVersion = latest.tag_name || ''
       if (!latestVersion) throw new Error('missing tag_name')
       latestManagerVersion.value = latestVersion
+      island.absorbManagerRelease(latestVersion)
       latestManagerAssets.value = Array.isArray(latest.assets) ? latest.assets : null
       if (hasManagerUpdate.value) {
+        island.notify({
+          type: 'update',
+          title: t('newIsland.managerUpdate', { version: latestVersion }),
+          detail: t('newIsland.managerUpdateDesc'),
+          sourceKey: 'update:manager',
+          action: { kind: 'open-settings', tab: 'about' }
+        })
         toast.info(t('newSettings.updateAvailable', { version: latestManagerVersion.value }))
         // 应用目录里已有同版本安装包时直接进入“立即安装”，不必重复下载
         void restoreManagerUpdatePackage()
       } else {
+        island.dismissSource('update:manager')
         toast.success(t('newSettings.upToDate'))
       }
     } catch (e) {
