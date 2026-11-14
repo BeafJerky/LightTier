@@ -18,6 +18,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   close: []
+  dismiss: []
   action: [action: IslandAction]
   overview: []
 }>()
@@ -156,7 +157,7 @@ const onPrimary = () => {
           <LtButton v-if="primaryLabel" variant="soft" size="xs" @click="onPrimary">
             {{ primaryLabel }}
           </LtButton>
-          <LtButton variant="text" size="xs" @click="emit('close')">
+          <LtButton variant="text" size="xs" @click="emit('dismiss')">
             {{ t('newIsland.dismiss') }}
           </LtButton>
         </template>

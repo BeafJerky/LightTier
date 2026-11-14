@@ -40,6 +40,7 @@ const systemReduced = ref(false)
 
 let mediaQuery: MediaQueryList | null = null
 let collapseTimer = 0
+let feedbackTimer = 0
 let removeOutsideListener: (() => void) | null = null
 
 const onResize = () => {
@@ -193,6 +194,23 @@ watch(
 )
 
 watch(
+  () => [island.current?.id, island.current?.updatedAt] as const,
+  ([id]) => {
+    window.clearTimeout(feedbackTimer)
+    feedbackTimer = 0
+    const notice = island.current
+    if (!id || !notice || notice.type !== 'feedback' || island.expanded) return
+    // 反馈即使处于静默/点状模式也会自行退场，不把确认信息留成常驻角标
+    feedbackTimer = window.setTimeout(() => {
+      feedbackTimer = 0
+      if (island.expanded || island.current?.id !== id) return
+      island.dismiss(id)
+    }, noticeDuration('feedback'))
+  },
+  { immediate: true }
+)
+
+watch(
   () => island.settings.silent,
   (silent) => {
     if (!silent) return
@@ -252,9 +270,12 @@ function activate() {
 
 function collapse() {
   const hadFocus = Boolean(rootRef.value?.contains(document.activeElement))
+  const notice = island.current
   island.setExpanded(false)
   peek.value = false
   clearCollapse()
+  // 操作反馈是一次性确认：收起即清除；其余类型保留角标等待处理或忽略
+  if (notice?.type === 'feedback') island.dismiss(notice.id)
   if (hadFocus) {
     void nextTick(() => hitRef.value?.focus())
   }
@@ -263,6 +284,13 @@ function collapse() {
 function dismissCurrent() {
   const id = island.current?.id
   if (id) island.dismiss(id)
+}
+
+// “忽略”会真正清除当前通知；队列里还有下一条就继续展示
+function dismissAndAdvance() {
+  dismissCurrent()
+  if (island.current) open()
+  else collapse()
 }
 
 function onEsc() {
@@ -317,6 +345,7 @@ onBeforeUnmount(() => {
   mediaQuery?.removeEventListener('change', onMotionChange)
   removeOutsideListener?.()
   clearCollapse()
+  window.clearTimeout(feedbackTimer)
 })
 </script>
 
@@ -390,6 +419,7 @@ onBeforeUnmount(() => {
         :summary="easy.monitorSummaryMap"
         :pending-count="island.pendingCount"
         @close="collapse"
+        @dismiss="dismissAndAdvance"
         @action="handleAction"
         @overview="openOverview"
       />
