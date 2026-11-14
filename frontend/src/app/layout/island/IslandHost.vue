@@ -172,7 +172,8 @@ watch(
       clearCollapse()
       return
     }
-    if (island.settings.silent || island.expanded) {
+    // quiet：失败详情已由 toast 给出，岛上只留角标，不再重复展开
+    if (island.settings.silent || island.expanded || island.current?.quiet) {
       peek.value = false
       return
     }

@@ -19,8 +19,6 @@ export function createPreferencesDomain() {
   const isFirstLoad = ref(true)
   // 锁定密码：加盐 SHA-256 校验串（sha256$salt$hash），旧版明文由启动迁移升级
   const lockPassword = ref('')
-  // 启动直接报错提示
-  const errRunNotify = ref(true)
   // 检查更新只认正式版（忽略 nightly 等预发布），默认开启
   const updateStableOnly = ref(true)
   // 当前选择的列（存储prop值）
@@ -42,7 +40,6 @@ export function createPreferencesDomain() {
     refreshInterval,
     isFirstLoad,
     lockPassword,
-    errRunNotify,
     updateStableOnly,
     selectedColumns,
     defaultServiceInstallMethod,

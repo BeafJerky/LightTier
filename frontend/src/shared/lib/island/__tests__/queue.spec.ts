@@ -33,6 +33,26 @@ describe('island queue', () => {
     expect(state.queue.map((n) => n.id)).toEqual(['a'])
   })
 
+  it('静默通知保留 quiet 标记', () => {
+    const state = enqueueNotice(empty(), make('a', 'error', { quiet: true }))
+    expect(state.current?.quiet).toBe(true)
+  })
+
+  it('静默当前项不阻塞新的可展示通知', () => {
+    let state = enqueueNotice(empty(), make('quiet', 'error', { quiet: true }))
+    state = enqueueNotice(state, make('loud', 'quality'))
+    expect(state.current?.id).toBe('loud')
+    expect(state.current?.quiet).toBe(false)
+    expect(state.queue.map((n) => n.id)).toEqual(['quiet'])
+  })
+
+  it('可展示当前项不会被静默通知顶掉', () => {
+    let state = enqueueNotice(empty(), make('loud', 'error'))
+    state = enqueueNotice(state, make('quiet', 'update', { quiet: true }))
+    expect(state.current?.id).toBe('loud')
+    expect(state.queue.map((n) => n.id)).toEqual(['quiet'])
+  })
+
   it('同级反馈用新消息替换当前项，不排队', () => {
     let state = enqueueNotice(empty(), make('a', 'feedback'))
     state = enqueueNotice(state, make('b', 'feedback'))

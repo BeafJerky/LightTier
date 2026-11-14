@@ -98,7 +98,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
             type: 'error',
             title: t('newIsland.portConflict', { name: item.configFileName }),
             detail: t('newIsland.portConflictDesc', { port: ports, conflict: configNames }),
-            sourceKey: `feedback:port:${item.configFileName}`
+            sourceKey: `feedback:port:${item.configFileName}`,
+            quiet: true
           })
         }
         throw new Error('port-conflict')
@@ -136,13 +137,14 @@ export function useInstanceActions(options: InstanceActionsOptions) {
       easyTierStore.p2pNotify = true
       easyTierStore.setLastRunConfigName(item)
       await updateRunningList({ force: true })
-      toast(t('newCommon.startSuccess'), 'success')
-      if (reportIsland) {
+      // 同一事件只走一条通道：岛可用时由岛确认，否则回退 toast
+      const handledByIsland =
+        reportIsland &&
         island.notify({
           type: 'feedback',
           title: t('newIsland.startOk', { name: item.configFileName })
         })
-      }
+      if (!handledByIsland) toast(t('newCommon.startSuccess'), 'success')
     } catch (e: any) {
       // 失败自动回滚该配置的 AutoMetric 状态（不影响其他配置的持有计数）
       await autoMetricAfterStop(fileName)
@@ -153,11 +155,13 @@ export function useInstanceActions(options: InstanceActionsOptions) {
         : t('newOverview.startFailCore')
       toast(detail ? `${base}（${detail}）` : base, 'error', 6000)
       if (reportIsland) {
+        // 失败详情必须留在 toast；岛上只补一个不展开的角标
         island.notify({
           type: 'error',
           title: t('newIsland.startFailed', { name: item.configFileName }),
           detail,
-          sourceKey: `feedback:start:${item.configFileName}`
+          sourceKey: `feedback:start:${item.configFileName}`,
+          quiet: true
         })
       }
       throw new Error('start-failed', { cause: e })
@@ -184,13 +188,13 @@ export function useInstanceActions(options: InstanceActionsOptions) {
       if (ok) {
         easyTierStore.stopLoop = true
         easyTierStore.removeRunningList(item.configFileName)
-        toast(t('newCommon.stoppedSuccess'), 'success')
-        if (reportIsland) {
+        const handledByIsland =
+          reportIsland &&
           island.notify({
             type: 'feedback',
             title: t('newIsland.stopOk', { name: item.configFileName })
           })
-        }
+        if (!handledByIsland) toast(t('newCommon.stoppedSuccess'), 'success')
       } else {
         stopped = false
         toast(t('newCommon.stoppedFail'), 'error')
@@ -198,7 +202,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
           island.notify({
             type: 'error',
             title: t('newIsland.stopFailed', { name: item.configFileName }),
-            sourceKey: `feedback:stop:${item.configFileName}`
+            sourceKey: `feedback:stop:${item.configFileName}`,
+            quiet: true
           })
         }
       }

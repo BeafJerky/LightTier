@@ -31,6 +31,7 @@ export function createNotice(
     sourceKey: input.sourceKey,
     action: input.action,
     sticky: input.sticky ?? input.type === 'error',
+    quiet: input.quiet ?? false,
     createdAt: now,
     updatedAt: now,
     repeat: 0
@@ -75,6 +76,11 @@ export function enqueueNotice(
 
   if (!current) {
     return { current: incoming, queue: sorted(state.queue).slice(0, limit) }
+  }
+
+  // 静默角标不阻塞主动展示：新的可展示通知先占当前位，静默项退居队列
+  if (current.quiet && !incoming.quiet) {
+    return { current: incoming, queue: sorted([current, ...state.queue]).slice(0, limit) }
   }
 
   const incomingPriority = priorityOf(incoming)

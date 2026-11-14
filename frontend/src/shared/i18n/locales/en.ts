@@ -637,8 +637,6 @@ export default {
     defaultServiceMethodDesc: 'Method used when installing Windows service',
     defaultAutostart: 'Default auto-start on boot',
     defaultAutostartDesc: 'Default setting for auto-start when installing service',
-    errorNotify: 'Error Notification',
-    errorNotifyDesc: 'Show notification when configuration run fails',
     p2pNotify: 'P2P Direct Notification',
     p2pNotifyDesc: 'Notify when all peers are directly connected via P2P',
     coreVersion: 'Kernel version',

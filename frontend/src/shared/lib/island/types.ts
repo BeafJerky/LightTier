@@ -12,11 +12,14 @@ export interface IslandNoticeInput {
   sourceKey?: string
   action?: IslandAction
   sticky?: boolean
+  /** 只留角标、不自动展开：用于 toast 已给出即时结果的失败类事件 */
+  quiet?: boolean
 }
 
 export interface IslandNotice extends IslandNoticeInput {
   id: string
   sticky: boolean
+  quiet: boolean
   createdAt: number
   updatedAt: number
   repeat: number

@@ -169,7 +169,6 @@ const collectPreferencesPayload = (): PreferencesPayload => {
     version: 1,
     store: {
       p2pNotifySetting: store.p2pNotifySetting,
-      errRunNotify: store.errRunNotify,
       refreshInterval: store.refreshInterval,
       selectedColumns: [...store.selectedColumns],
       defaultServiceInstallMethod: store.defaultServiceInstallMethod,

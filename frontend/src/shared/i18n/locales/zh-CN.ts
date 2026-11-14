@@ -615,8 +615,6 @@ export default {
     defaultServiceMethodDesc: '安装 Windows 服务时使用的方式',
     defaultAutostart: '默认开机自启动',
     defaultAutostartDesc: '安装服务时默认设置开机自启动',
-    errorNotify: '运行出错提示',
-    errorNotifyDesc: '运行配置出错时弹出通知',
     p2pNotify: 'P2P 直连通知',
     p2pNotifyDesc: '所有对等节点均通过 P2P 直连时弹出通知',
     coreVersion: '内核版本',

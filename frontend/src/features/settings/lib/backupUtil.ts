@@ -393,7 +393,6 @@ export interface PreferencesPayload {
   version: 1
   store: {
     p2pNotifySetting?: boolean
-    errRunNotify?: boolean
     refreshInterval?: number
     selectedColumns?: string[]
     defaultServiceInstallMethod?: 'nssm' | 'official'
@@ -425,7 +424,6 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
     if (!isRecord(rawStore)) return null
     const booleans = [
       'p2pNotifySetting',
-      'errRunNotify',
       'defaultEnableAutostart',
       'autoRunNetworkSetting'
     ] as const

@@ -91,18 +91,6 @@
       />
     </label>
 
-    <label class="sd-row" @click="store.errRunNotify = !store.errRunNotify">
-      <div class="sd-row-info">
-        <span class="sd-row-title">{{ t('newSettings.errorNotify') }}</span>
-        <span class="sd-row-desc">{{ t('newSettings.errorNotifyDesc') }}</span>
-      </div>
-      <LtSwitch
-        v-model="store.errRunNotify"
-        :aria-label="t('newSettings.errorNotify')"
-        @click.stop
-      />
-    </label>
-
     <!-- P2P 直连通知（5.4） -->
     <label class="sd-row" @click="store.p2pNotifySetting = !store.p2pNotifySetting">
       <div class="sd-row-info">

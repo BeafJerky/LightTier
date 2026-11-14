@@ -126,12 +126,14 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       island.absorbManagerRelease(latestVersion)
       latestManagerAssets.value = Array.isArray(latest.assets) ? latest.assets : null
       if (hasManagerUpdate.value) {
+        // 手动检查由 toast 给出即时结果，岛上只补角标；后台发现更新时才主动展开
         island.notify({
           type: 'update',
           title: t('newIsland.managerUpdate', { version: latestVersion }),
           detail: t('newIsland.managerUpdateDesc'),
           sourceKey: 'update:manager',
-          action: { kind: 'open-settings', tab: 'about' }
+          action: { kind: 'open-settings', tab: 'about' },
+          quiet: true
         })
         toast.info(t('newSettings.updateAvailable', { version: latestManagerVersion.value }))
         // 应用目录里已有同版本安装包时直接进入“立即安装”，不必重复下载

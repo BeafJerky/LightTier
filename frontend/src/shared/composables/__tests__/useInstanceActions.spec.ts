@@ -42,6 +42,15 @@ const islandMock = vi.hoisted(() => ({
   expectStop: vi.fn()
 }))
 
+const cream = vi.hoisted(() => ({
+  show: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn()
+}))
+
+vi.mock('@/shared/ui/useCreamToast', () => ({ useCreamToast: () => cream }))
 vi.mock('@/shared/store/easytier', () => ({ useEasyTierStore: () => storeMock }))
 vi.mock('@/shared/store/island', () => ({ useIslandStore: () => islandMock }))
 vi.mock('@/shared/platform/coreApi', () => api)
@@ -78,6 +87,7 @@ describe('useInstanceActions.startInstance', () => {
   it('正常启动：记录自动跃点、刷新运行列表并触发启动后处理', async () => {
     const confirm = vi.fn(async () => true)
     const afterStart = vi.fn(async () => {})
+    islandMock.notify.mockReturnValueOnce(true)
     const { startInstance } = useInstanceActions({ confirm, afterStart })
 
     await startInstance(item)
@@ -95,6 +105,17 @@ describe('useInstanceActions.startInstance', () => {
       type: 'feedback',
       title: 'newIsland.startOk:{"name":"home.toml"}'
     })
+    // 岛已接管确认，不再重复弹 toast
+    expect(cream.show).not.toHaveBeenCalled()
+  })
+
+  it('岛不可用时启动成功回退 toast', async () => {
+    islandMock.notify.mockReturnValueOnce(false)
+    const { startInstance } = useInstanceActions({ confirm: async () => true })
+
+    await startInstance(item)
+
+    expect(cream.show).toHaveBeenCalledWith('newCommon.startSuccess', 'success')
   })
 
   it('兼容错误确认取消时不启动', async () => {
@@ -140,6 +161,11 @@ describe('useInstanceActions.startInstance', () => {
 
     expect(onPortConflict).toHaveBeenCalledWith({ office: [11000], home2: [15888] })
     expect(api.startConfig).not.toHaveBeenCalled()
+    // 详情留在 toast，岛上只补不展开的角标
+    expect(cream.show).toHaveBeenCalled()
+    expect(islandMock.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', quiet: true })
+    )
   })
 
   it('启动失败：回滚自动跃点并抛出 start-failed', async () => {
@@ -154,6 +180,10 @@ describe('useInstanceActions.startInstance', () => {
 
     expect(metric.afterStop).toHaveBeenCalledWith('home.toml')
     expect(afterStart).not.toHaveBeenCalled()
+    expect(cream.show).toHaveBeenCalled()
+    expect(islandMock.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', quiet: true })
+    )
   })
 
   it('Android 单实例：确认后停旧起新', async () => {
@@ -190,6 +220,7 @@ describe('useInstanceActions.stopInstance', () => {
   })
 
   it('停止成功：结束进程、恢复跃点并清理出口路由', async () => {
+    islandMock.notify.mockReturnValueOnce(true)
     const { stopInstance } = useInstanceActions({
       confirm: async () => true,
       exitRouteGuard: () => true
@@ -208,6 +239,7 @@ describe('useInstanceActions.stopInstance', () => {
       type: 'feedback',
       title: 'newIsland.stopOk:{"name":"home.toml"}'
     })
+    expect(cream.show).not.toHaveBeenCalled()
   })
 
   it('停止失败：保留运行记录且不清理路由', async () => {
@@ -222,5 +254,9 @@ describe('useInstanceActions.stopInstance', () => {
     expect(storeMock.removeRunningList).not.toHaveBeenCalled()
     expect(metric.afterStop).not.toHaveBeenCalled()
     expect(route.clearExitRoute).not.toHaveBeenCalled()
+    expect(cream.show).toHaveBeenCalled()
+    expect(islandMock.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', quiet: true })
+    )
   })
 })
