@@ -173,6 +173,7 @@ const onPrimary = () => {
   height: 100%;
   padding: 12px 14px;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .island-card-head {

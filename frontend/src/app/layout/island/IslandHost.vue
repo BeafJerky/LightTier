@@ -494,9 +494,28 @@ onBeforeUnmount(() => {
 }
 
 .island-chevron {
-  flex: 0 0 auto;
-  margin-left: auto;
+  position: absolute;
+  top: 50%;
+  right: 12px;
   color: var(--theme-text-muted, #c8bdb2);
+  opacity: 0;
+  transform: translateY(-50%) translateX(-2px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 悬停箭头：与原型一致，默认让位给“运行中”文案 */
+.island-root:hover .island-chevron,
+.island-root:focus-within .island-chevron {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island-chevron {
+    transition-duration: 120ms;
+  }
 }
 
 .island-title {
@@ -597,6 +616,10 @@ onBeforeUnmount(() => {
 
   .island-bar {
     padding: 0 10px;
+  }
+
+  .island-chevron {
+    right: 10px;
   }
 }
 
