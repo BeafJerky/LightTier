@@ -8,6 +8,10 @@
  * 设置页在打开加速源弹窗或开始下载时自动触发测速；选择结果以 MIRROR_SOURCE_KEY
  * 持久化（设置弹窗下载内核时读取同一状态）。
  *
+ * 下载与展示分离：延迟徽标来自 HEAD 探针，但 HEAD 快不等于下载快（存在 HEAD 1s、
+ * GET 零字节的镜像）。真正开始下载前会用 GET 采样真实吞吐排序并逐源重试，
+ * 停滞/低速/半包自动换下一个源（downloadFromMirrors）。
+ *
  * 加速源管理：
  * - 官方源固定保留，不可删除；
  * - 内置镜像可删除（记录到 MIRROR_HIDDEN_KEY，可一键恢复）；
@@ -22,7 +26,8 @@ import {
   USER_AGENT,
   getCoreDownloadUrl
 } from '@/shared/constants/easytier'
-import { normalizeMirrorPrefix } from '@/shared/lib/mirrorUtil'
+import { measureDownloadSpeed } from '@/shared/platform/fileUtil'
+import { normalizeMirrorPrefix, orderMirrorCandidates } from '@/shared/lib/mirrorUtil'
 
 /** 镜像源条目（latency 为测速结果，null 表示未测/失败） */
 export interface MirrorSourceItem {
@@ -49,6 +54,10 @@ export const MIRROR_CUSTOM_KEY = 'mirror-custom-sources'
 export const MIRROR_HIDDEN_KEY = 'mirror-hidden-sources'
 /** 单源测速超时（ms）：需覆盖 DNS/TLS、镜像重定向与 GitHub 资源跳转 */
 const PROBE_TIMEOUT_MS = 8000
+/** 下载前吞吐采样：窗口与单源上限（区分“能用/极慢/不通”即可） */
+const SPEED_SAMPLE_WINDOW_MS = 1800
+const SPEED_SAMPLE_MAX_BYTES = 256 * 1024
+const SPEED_SAMPLE_RESPONSE_TIMEOUT_MS = 5000
 /** 延迟徽标阈值：<100ms 优、≥200ms 劣 */
 export const LATENCY_GOOD = 100
 export const LATENCY_BAD = 200
@@ -331,6 +340,68 @@ export const useMirrorProbe = () => {
         )
       : Promise.resolve()
 
+  /**
+   * 下载前按真实吞吐排序：GET 真实资源采样，避免 HEAD 很快但 GET 不动的镜像被选中。
+   * 结果同时用于展示（延迟徽标仍为 HEAD 结果，此处只决定下载顺序）。
+   */
+  const rankByThroughput = async (
+    buildUrl: (base: string) => string
+  ): Promise<Array<{ item: MirrorSourceItem; speed: number }>> => {
+    const snapshot = [...sources.value]
+    probing.value = true
+    const task = (async () => {
+      const measured = await Promise.all(
+        snapshot.map(async (item) => ({
+          item,
+          speed: await measureDownloadSpeed(buildUrl(item.value), {
+            windowMs: SPEED_SAMPLE_WINDOW_MS,
+            maxBytes: SPEED_SAMPLE_MAX_BYTES,
+            responseTimeoutMs: SPEED_SAMPLE_RESPONSE_TIMEOUT_MS
+          })
+        }))
+      )
+      const speeds = new Map(measured.map((m) => [m.item.value, m.speed]))
+      const ordered = orderMirrorCandidates(
+        snapshot,
+        speeds,
+        localStorage.getItem(MIRROR_SOURCE_KEY)
+      )
+      return ordered.map((item) => ({ item, speed: speeds.get(item.value) ?? 0 }))
+    })()
+    probeTask = task
+    try {
+      return await task
+    } finally {
+      probing.value = false
+      probeTask = null
+    }
+  }
+
+  /**
+   * 按实测吞吐排序后逐个尝试下载，失败/停滞自动换下一个源。
+   * buildUrl 负责把源前缀拼成完整资源地址；run 执行一次下载并返回是否成功，
+   * lastAttempt 为 true 表示最后一个候选（慢速源也允许下完，避免全部失败）。
+   * 成功后把可用源记为当前选择，失败源不会覆盖已有选择。
+   */
+  const downloadFromMirrors = async (
+    buildUrl: (base: string) => string,
+    run: (url: string, context: { lastAttempt: boolean }) => Promise<boolean>,
+    hooks?: { onSwitch?: (from: string, to: string) => void }
+  ): Promise<boolean> => {
+    const ranked = await rankByThroughput(buildUrl)
+    for (let i = 0; i < ranked.length; i++) {
+      const item = ranked[i].item
+      if (i > 0) hooks?.onSwitch?.(ranked[i - 1].item.value, item.value)
+      const lastAttempt = i === ranked.length - 1
+      if (await run(buildUrl(item.value), { lastAttempt })) {
+        if (selected.value !== item.value) selectSource(item.value)
+        return true
+      }
+      console.warn(`加速源下载失败，尝试下一个:${item.value}`)
+    }
+    return false
+  }
+
   return {
     sources,
     probing,
@@ -340,6 +411,8 @@ export const useMirrorProbe = () => {
     probeAllWith,
     probeSource,
     waitForProbe,
+    rankByThroughput,
+    downloadFromMirrors,
     selectSource,
     addSource,
     removeSource,

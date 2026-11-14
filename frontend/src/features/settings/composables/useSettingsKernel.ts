@@ -39,7 +39,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     selected: mirrorSelected,
     probeAll,
     probeSource,
-    waitForProbe,
+    downloadFromMirrors,
     selectSource: mirrorSelect,
     addSource: mirrorAddSource,
     removeSource: mirrorRemoveSource,
@@ -408,7 +408,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     }
     downloadingCore.value = true
     try {
-      // 未指定加速源：先测速并自动选用最快源，再按该源下载
+      // 未指定加速源时提示自动选源；实际按真实吞吐采样排序（HEAD 快≠下载快）
       if (
         !localStorage.getItem(MIRROR_SOURCE_KEY) &&
         coreFileName.value &&
@@ -416,19 +416,30 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
       ) {
         autoMirrorProbeAttempted = true
         toast.info(t('newSettings.mirrorAutoSelecting'))
-        await probeAll(coreVerSelect.value, coreFileName.value)
-        await waitForProbe()
       }
       // 镜像前缀需要拼接完整 GitHub URL（官方源直链），与测速使用同一拼接规则
-      const url = getCoreDownloadUrl(mirrorSelected.value, coreVerSelect.value, coreFileName.value)
       downloadReceived.value = 0
       downloadTotal.value = null
       downloadActive.value = true
-      // 进度条已常驻展示，不再重复弹“正在下载”提示
-      const ok = await downloadFile(url, (progress) => {
-        downloadReceived.value = progress.received
-        downloadTotal.value = progress.total
-      })
+      // 逐源尝试：停滞/低速或半包时自动换下一个，全部失败才提示下载失败
+      const ok = await downloadFromMirrors(
+        (base) => getCoreDownloadUrl(base, coreVerSelect.value, coreFileName.value),
+        (url, { lastAttempt }) =>
+          downloadFile(
+            url,
+            (progress) => {
+              downloadReceived.value = progress.received
+              downloadTotal.value = progress.total
+            },
+            {
+              responseTimeoutMs: 15000,
+              stallTimeoutMs: 15000,
+              // 最后一个候选不再按速度放弃：慢也比下载失败好
+              minSpeedBps: lastAttempt ? 0 : 40 * 1024
+            }
+          ),
+        { onSwitch: () => toast.info(t('newSettings.mirrorSwitching')) }
+      )
       if (ok) {
         toast.success(t('newSettings.downloadSuccess'))
         // 安装包保留在 core 目录，立即刷新“已下载”状态

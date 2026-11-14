@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeMirrorPrefix } from '@/shared/lib/mirrorUtil'
+import { normalizeMirrorPrefix, orderMirrorCandidates } from '@/shared/lib/mirrorUtil'
 
 describe('normalizeMirrorPrefix（自定义加速源归一化）', () => {
   it('省略协议时补全 https，并统一末尾斜杠', () => {
@@ -34,5 +34,75 @@ describe('normalizeMirrorPrefix（自定义加速源归一化）', () => {
     expect(normalizeMirrorPrefix('https://example.com/?a=1')).toBeNull()
     expect(normalizeMirrorPrefix('https://example.com/#x')).toBeNull()
     expect(normalizeMirrorPrefix('https://user:pass@example.com/')).toBeNull()
+  })
+})
+
+describe('orderMirrorCandidates（按真实吞吐排序下载源）', () => {
+  const sources = [
+    { value: 'https://official/', latency: 200 },
+    { value: 'https://boki/', latency: 100 },
+    { value: 'https://proxy/', latency: 400 },
+    { value: 'https://slow/', latency: 900 }
+  ]
+  const speeds = (entries: Record<string, number>) => new Map(Object.entries(entries))
+
+  it('HEAD 最快但 GET 零字节的源排到最后', () => {
+    const ordered = orderMirrorCandidates(
+      sources,
+      speeds({
+        'https://official/': 46_000,
+        'https://boki/': 0,
+        'https://proxy/': 350_000,
+        'https://slow/': 12_000
+      }),
+      null
+    )
+    expect(ordered.map((s) => s.value)).toEqual([
+      'https://proxy/',
+      'https://official/',
+      'https://slow/',
+      'https://boki/'
+    ])
+  })
+
+  it('无吞吐数据时退回 HEAD 延迟顺序', () => {
+    const ordered = orderMirrorCandidates(sources, speeds({}), null)
+    expect(ordered.map((s) => s.value)).toEqual([
+      'https://boki/',
+      'https://official/',
+      'https://proxy/',
+      'https://slow/'
+    ])
+  })
+
+  it('显式选择且吞吐达标时优先，但明显慢于最快源则不优先', () => {
+    const preferred = orderMirrorCandidates(
+      sources,
+      speeds({ 'https://official/': 300_000, 'https://proxy/': 350_000 }),
+      'https://official/'
+    )
+    expect(preferred[0].value).toBe('https://official/')
+
+    const demoted = orderMirrorCandidates(
+      sources,
+      speeds({ 'https://official/': 5_000, 'https://proxy/': 350_000 }),
+      'https://official/'
+    )
+    expect(demoted[0].value).toBe('https://proxy/')
+  })
+
+  it('显式选择为假活源（0 字节）时不再优先', () => {
+    const ordered = orderMirrorCandidates(
+      sources,
+      speeds({
+        'https://boki/': 0,
+        'https://proxy/': 300_000,
+        'https://official/': 40_000,
+        'https://slow/': 12_000
+      }),
+      'https://boki/'
+    )
+    expect(ordered[0].value).toBe('https://proxy/')
+    expect(ordered[ordered.length - 1].value).toBe('https://boki/')
   })
 })

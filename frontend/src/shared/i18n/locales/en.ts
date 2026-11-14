@@ -658,6 +658,7 @@ export default {
     mirrorSourceDesc:
       'Probes and downloads use the real package of the selected version; when no source is chosen, mirrors are tested and the fastest reachable one is selected automatically',
     mirrorAutoSelecting: 'No source selected; testing mirrors and choosing the fastest…',
+    mirrorSwitching: 'Current mirror is too slow; switching to another source…',
     mirrorProbe: '⟳ Re-test',
     mirrorProbing: 'Probing…',
     mirrorOfficial: 'GitHub Official',

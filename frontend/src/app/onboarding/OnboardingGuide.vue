@@ -187,7 +187,7 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { getCoreDownloadUrl, getCoreFileName } from '@/shared/constants/easytier'
 import { DEFAULT_CORE_VERSION } from '@/entities/kernel/kernelCompat'
 import { useCoreInstall } from '@/shared/composables/useCoreInstall'
-import { MIRROR_SOURCE_KEY, useMirrorProbe } from '@/shared/composables/useMirrorProbe'
+import { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { LtButton, LtSwitch } from '@/shared/ui'
 import { formatBytes } from '@/shared/lib/monitorFormat'
@@ -226,7 +226,7 @@ const quickInstallError = ref('newOnboarding.quickInstallDownloadFail')
 const quickReceived = ref(0)
 const quickTotal = ref<number | null>(null)
 const { installCore } = useCoreInstall()
-const { selected: mirrorSelected, probeAll, waitForProbe } = useMirrorProbe()
+const { downloadFromMirrors } = useMirrorProbe()
 
 const quickBusy = computed(() =>
   ['probing', 'downloading', 'installing'].includes(quickInstallState.value)
@@ -265,17 +265,24 @@ const quickInstallCore = async () => {
   quickTotal.value = null
   try {
     quickInstallState.value = 'probing'
-    // 未显式选择加速源时先测速，自动选用最快可用源再下载（与设置页同一规则）
-    if (!localStorage.getItem(MIRROR_SOURCE_KEY)) {
-      await probeAll(version, filename)
-      await waitForProbe()
-    }
-    quickInstallState.value = 'downloading'
-    const downloaded = await downloadFile(
-      getCoreDownloadUrl(mirrorSelected.value, version, filename),
-      (progress) => {
-        quickReceived.value = progress.received
-        quickTotal.value = progress.total
+    // 按真实吞吐选源并逐源重试（与设置页同一规则：HEAD 快≠下载快）
+    const downloaded = await downloadFromMirrors(
+      (base) => getCoreDownloadUrl(base, version, filename),
+      async (url, { lastAttempt }) => {
+        quickInstallState.value = 'downloading'
+        return downloadFile(
+          url,
+          (progress) => {
+            quickReceived.value = progress.received
+            quickTotal.value = progress.total
+          },
+          {
+            responseTimeoutMs: 15000,
+            stallTimeoutMs: 15000,
+            // 最后一个候选不再按速度放弃：慢也比下载失败好
+            minSpeedBps: lastAttempt ? 0 : 40 * 1024
+          }
+        )
       }
     )
     if (!downloaded) {

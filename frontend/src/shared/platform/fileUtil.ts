@@ -56,6 +56,14 @@ const MAX_EXTRACT_ENTRIES = 500 // 解压条目数上限
 const MAX_EXTRACT_TOTAL_BYTES = 500 * 1024 * 1024 // 解压后总大小上限 500MB
 // 下载进度上报节流：避免大包逐块触发高频 UI 更新
 const DOWNLOAD_PROGRESS_INTERVAL_MS = 80
+// 下载中止阈值：响应头超时、连续无数据（卡死）与低速中止（镜像能连上却几乎不动）
+const DEFAULT_RESPONSE_TIMEOUT_MS = 20000
+const DEFAULT_STALL_TIMEOUT_MS = 15000
+const DEFAULT_SLOW_GRACE_MS = 10000
+// 下载前吞吐采样：窗口与单源上限（只需区分“能用/极慢/不通”，不追求精确带宽）
+const SPEED_SAMPLE_WINDOW_MS = 1800
+const SPEED_SAMPLE_MAX_BYTES = 256 * 1024
+const SPEED_SAMPLE_RESPONSE_TIMEOUT_MS = 5000
 
 /** 下载进度：total 为 null 表示服务端未返回 Content-Length，只能展示已下载字节数 */
 export interface DownloadProgress {
@@ -359,15 +367,56 @@ export const cleanCoreDirExceptPackages = async (): Promise<boolean> => {
   return ok
 }
 
+/** 单次读取结果：超时表示对端长时间没有任何数据（连接假活） */
+type ChunkReadResult = ReadableStreamReadResult<Uint8Array> | 'timeout'
+
+/** 读取一块数据，超过 ms 没有返回即判定停滞 */
+const readChunkWithTimeout = (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  ms: number
+): Promise<ChunkReadResult> => {
+  if (ms <= 0) return reader.read()
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve('timeout'), ms)
+    reader.read().then(
+      (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      },
+      (cause) => {
+        clearTimeout(timer)
+        reject(cause)
+      }
+    )
+  })
+}
+
+/** 读取失败原因：超限、停滞、低速；调用方据此提示或换源 */
+type BodyReadFailure = 'limit' | 'stall' | 'slow'
+
+type BodyReadOutcome = { ok: true; data: Uint8Array } | { ok: false; reason: BodyReadFailure }
+
+interface BodyReadLimits {
+  /** 连续无数据超时（ms），0 关闭 */
+  stallTimeoutMs: number
+  /** 起步宽限（ms）：超过后才判定平均速度 */
+  slowGraceMs: number
+  /** 最低平均速度（字节/秒），0 关闭 */
+  minSpeedBps: number
+}
+
 /**
  * 读取响应体并回报下载进度：优先流式读取（边下边校验大小上限），
- * 环境不支持 ReadableStream 时退回一次性读取。返回 null 表示超出大小上限。
+ * 环境不支持 ReadableStream 时退回一次性读取。
+ * 流式读取期间做停滞与低速检测：镜像会返回 200 却长期不吐数据或只有几 KB/s，
+ * 不设上限会让下载无限挂起，调用方也无法换源。
  */
 const readBodyWithProgress = async (
   response: Response,
   total: number | null,
-  onProgress?: DownloadProgressCallback
-): Promise<Uint8Array | null> => {
+  onProgress: DownloadProgressCallback | undefined,
+  limits: BodyReadLimits
+): Promise<BodyReadOutcome> => {
   let lastReportAt = 0
   const emit = (received: number, force = false) => {
     if (!onProgress) return
@@ -387,30 +436,48 @@ const readBodyWithProgress = async (
     const buffer = new Uint8Array(await response.arrayBuffer())
     if (buffer.byteLength > MAX_DOWNLOAD_BYTES) {
       error(`下载文件超过大小上限:${buffer.byteLength}`)
-      return null
+      return { ok: false, reason: 'limit' }
     }
     emit(buffer.byteLength, true)
-    return buffer
+    return { ok: true, data: buffer }
   }
 
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let received = 0
+  const startedAt = Date.now()
   emit(0, true)
   try {
     for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-      received += value.byteLength
+      const step = await readChunkWithTimeout(reader, limits.stallTimeoutMs)
+      if (step === 'timeout') {
+        error(`下载停滞：${limits.stallTimeoutMs}ms 未收到数据`)
+        await reader.cancel().catch(() => {})
+        return { ok: false, reason: 'stall' }
+      }
+      if (step.done) break
+      if (!step.value) continue
+      received += step.value.byteLength
       // 实际包体上限边下边复核，避免无 Content-Length 时先落盘超大文件
       if (received > MAX_DOWNLOAD_BYTES) {
         error(`下载文件超过大小上限:${received}`)
         await reader.cancel().catch(() => {})
-        return null
+        return { ok: false, reason: 'limit' }
       }
-      chunks.push(value)
+      chunks.push(step.value)
       emit(received)
+      // 低速检测：镜像能连上但只有几 KB/s 时，按平均速度及时中止并换源
+      if (limits.minSpeedBps > 0) {
+        const elapsed = Date.now() - startedAt
+        if (elapsed >= limits.slowGraceMs) {
+          const avgSpeed = received / (elapsed / 1000)
+          if (avgSpeed < limits.minSpeedBps) {
+            error(`下载速度过低(${Math.round(avgSpeed)}B/s < ${limits.minSpeedBps}B/s)`)
+            await reader.cancel().catch(() => {})
+            return { ok: false, reason: 'slow' }
+          }
+        }
+      }
     }
   } finally {
     try {
@@ -427,15 +494,103 @@ const readBodyWithProgress = async (
     offset += chunk.byteLength
   }
   emit(received, true)
-  return merged
+  return { ok: true, data: merged }
 }
 
-/** 下载可选参数：目前只有保存目录，默认内核目录 */
+/**
+ * 实测下载吞吐（字节/秒）：GET 真实资源，采样窗口结束后主动断开。
+ * 用于下载前选源——HEAD 延迟无法反映镜像的真实带宽（存在“HEAD 很快、GET 不动”的源）。
+ * 失败或没有任何数据时返回 0。
+ */
+export interface SpeedSampleOptions {
+  /** 采样窗口（ms），默认 1800 */
+  windowMs?: number
+  /** 单源采样字节上限，默认 256KB */
+  maxBytes?: number
+  /** 等待响应头的超时（ms），默认 5000 */
+  responseTimeoutMs?: number
+}
+
+export async function measureDownloadSpeed(
+  url: string,
+  options: SpeedSampleOptions = {}
+): Promise<number> {
+  const windowMs = options.windowMs ?? SPEED_SAMPLE_WINDOW_MS
+  const maxBytes = options.maxBytes ?? SPEED_SAMPLE_MAX_BYTES
+  const responseTimeoutMs = options.responseTimeoutMs ?? SPEED_SAMPLE_RESPONSE_TIMEOUT_MS
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let received = 0
+  let startedAt = 0
+  try {
+    // 响应头超时：坏源可能连 HEAD 都回但 GET 永远不返回
+    if (responseTimeoutMs > 0) timer = setTimeout(() => controller.abort(), responseTimeoutMs)
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: '*/*',
+        'Cache-Control': 'no-cache'
+      },
+      connectTimeout: responseTimeoutMs,
+      maxRedirections: 5,
+      signal: controller.signal
+    })
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (!response.ok) return 0
+    if (!response.body || typeof response.body.getReader !== 'function') return 0
+
+    const startedAtMs = Date.now()
+    startedAt = startedAtMs
+    // 采样窗口到点即断开，不把整包下完
+    timer = setTimeout(() => controller.abort(), windowMs)
+    const reader = response.body.getReader()
+    try {
+      for (;;) {
+        if (received >= maxBytes) break
+        const remaining = windowMs - (Date.now() - startedAtMs)
+        if (remaining <= 0) break
+        const step = await readChunkWithTimeout(reader, Math.min(remaining, 1000))
+        if (step === 'timeout') {
+          if (Date.now() - startedAtMs >= windowMs) break
+          continue
+        }
+        if (step.done) break
+        if (step.value) received += step.value.byteLength
+      }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
+    const elapsed = Math.max(1, Date.now() - startedAtMs)
+    return Math.round((Math.min(received, maxBytes) / elapsed) * 1000)
+  } catch {
+    // 采样窗口主动 abort 视为正常结束：按已收到的数据折算速度
+    if (received <= 0) return 0
+    const elapsed = Math.max(1, Date.now() - startedAt)
+    return Math.round((received / elapsed) * 1000)
+  } finally {
+    if (timer) clearTimeout(timer)
+    controller.abort()
+  }
+}
+
+/** 下载可选参数：保存目录与中止阈值 */
 export interface DownloadOptions {
   /** 保存目录（相对 BaseDirectory 的相对路径），默认 CORE_PATH */
   dir?: string
   /** 官方标注的包体字节数：实际长度不符即判为半包（镜像截断/中断），不落盘 */
   expectedSize?: number | null
+  /** 等待响应头超时（ms），0 关闭；默认 20s */
+  responseTimeoutMs?: number
+  /** 连续无数据中止阈值（ms），0 关闭；默认 15s */
+  stallTimeoutMs?: number
+  /** 起步宽限（ms）：超过后才判定平均速度；默认 10s */
+  slowGraceMs?: number
+  /** 最低平均速度（字节/秒），0 关闭（默认关闭） */
+  minSpeedBps?: number
 }
 
 /**
@@ -457,6 +612,13 @@ export async function downloadFile(
   options?: DownloadOptions
 ): Promise<boolean> {
   const targetDir = options?.dir || CORE_PATH
+  const responseTimeoutMs = options?.responseTimeoutMs ?? DEFAULT_RESPONSE_TIMEOUT_MS
+  const stallTimeoutMs = options?.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS
+  const slowGraceMs = options?.slowGraceMs ?? DEFAULT_SLOW_GRACE_MS
+  const minSpeedBps = options?.minSpeedBps ?? 0
+  // 响应头超时用 abort 真正掐断连接；进入读流后由停滞/低速检测接管
+  const controller = new AbortController()
+  let responseTimer: ReturnType<typeof setTimeout> | null = null
   try {
     // 协议层防线：仅允许 http/https（镜像源可自定义，不做域名白名单）
     let url: URL
@@ -473,6 +635,9 @@ export async function downloadFile(
 
     info(`开始下载:${fileUrl}`)
     // 使用 Tauri 的 http plugin
+    if (responseTimeoutMs > 0) {
+      responseTimer = setTimeout(() => controller.abort(), responseTimeoutMs)
+    }
     const response = await fetch(fileUrl, {
       method: 'GET',
       headers: {
@@ -484,8 +649,13 @@ export async function downloadFile(
       // 增加超时时间
       connectTimeout: 30000,
       // GitHub release 下载会重定向到 objects.githubusercontent.com（可能多次），适当放宽使下载稳定
-      maxRedirections: 5
+      maxRedirections: 5,
+      signal: controller.signal
     })
+    if (responseTimer) {
+      clearTimeout(responseTimer)
+      responseTimer = null
+    }
     if (!response.ok) {
       // 失败交由调用方统一提示
       return false
@@ -522,8 +692,17 @@ export async function downloadFile(
     await checkDir(targetDir)
 
     // 流式读取响应体并回报进度，同时做实际包体上限复核
-    const uint8Array = await readBodyWithProgress(response, total, onProgress)
-    if (!uint8Array) return false
+    const body = await readBodyWithProgress(response, total, onProgress, {
+      stallTimeoutMs,
+      slowGraceMs,
+      minSpeedBps
+    })
+    if (!body.ok) {
+      // 停滞/低速时掐断 Rust 侧连接，避免后台继续占用带宽
+      controller.abort()
+      return false
+    }
+    const uint8Array = body.data
 
     // 包体长度复核：镜像站截断或连接中断时不落盘，避免把半包交给安装器
     const expectedSize = options?.expectedSize
@@ -562,6 +741,8 @@ export async function downloadFile(
   } catch (e: any) {
     error(`下载文件时出错:${JSON.stringify(e)}`)
     return false
+  } finally {
+    if (responseTimer) clearTimeout(responseTimer)
   }
 }
 

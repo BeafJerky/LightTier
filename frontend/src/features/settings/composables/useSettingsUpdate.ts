@@ -54,7 +54,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const island = useIslandStore()
   const toast = useCreamToast()
   const { t } = useI18n()
-  const { selected: mirrorSelected, probing: mirrorProbing, probeAllWith, waitForProbe } = mirror
+  const { selected: mirrorSelected, probing: mirrorProbing, downloadFromMirrors } = mirror
 
   // 应用版本：getAppVersion() 为权威值，浏览器预览回退构建期版本号
   const appVersion = ref('...')
@@ -269,21 +269,32 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       if (!localStorage.getItem(MIRROR_SOURCE_KEY) && !autoUpdateProbeAttempted) {
         autoUpdateProbeAttempted = true
         toast.info(t('newSettings.mirrorAutoSelecting'))
-        // 与内核下载同一规则：对真实安装包地址测速，自动选用最快可用加速源
-        await probeAllWith((base) => getMirrorUrl(base, asset.url))
-        await waitForProbe()
       }
       updateReceived.value = 0
       updateTotal.value = asset.size
       updateActive.value = true
-      const ok = await downloadFile(
-        getMirrorUrl(mirrorSelected.value, asset.url),
-        (progress) => {
-          updateReceived.value = progress.received
-          updateTotal.value = progress.total ?? asset.size
-        },
-        // 以官方包体长度兜底校验：半包（浏览器中断、镜像截断）不落盘
-        { dir: UPDATE_PATH, expectedSize: asset.size }
+      // 下载前按真实吞吐选源并逐个尝试：HEAD 很快但 GET 不动的镜像会被排到后面，
+      // 停滞/低速/半包会自动换下一个源，不再一次失败就结束
+      const ok = await downloadFromMirrors(
+        (base) => getMirrorUrl(base, asset.url),
+        (url, { lastAttempt }) =>
+          downloadFile(
+            url,
+            (progress) => {
+              updateReceived.value = progress.received
+              updateTotal.value = progress.total ?? asset.size
+            },
+            // 以官方包体长度兜底校验：半包（浏览器中断、镜像截断）不落盘
+            {
+              dir: UPDATE_PATH,
+              expectedSize: asset.size,
+              responseTimeoutMs: 15000,
+              stallTimeoutMs: 15000,
+              // 最后一个候选不再按速度放弃：慢也比下载失败好
+              minSpeedBps: lastAttempt ? 0 : 40 * 1024
+            }
+          ),
+        { onSwitch: () => toast.info(t('newSettings.mirrorSwitching')) }
       )
       if (ok) {
         updateDownloaded.value = true

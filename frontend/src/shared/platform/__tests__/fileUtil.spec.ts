@@ -58,6 +58,7 @@ import {
   fileExists,
   isCorePackageFile,
   isSafeZipEntryPath,
+  measureDownloadSpeed,
   readFileContent,
   resolveKernelLogFile,
   writeFileWithBackup,
@@ -232,6 +233,82 @@ describe('downloadFile（流式进度）', () => {
 
     await expect(downloadFile(fileUrl)).resolves.toBe(false)
     expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it('连接假活（长时间无数据）时按停滞中止，不落盘', async () => {
+    const headers = new Headers({ 'content-length': '10' })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers,
+      body: new ReadableStream<Uint8Array>({ start() {} })
+    } as unknown as Response)
+
+    await expect(
+      downloadFile(fileUrl, undefined, { stallTimeoutMs: 60, responseTimeoutMs: 0 })
+    ).resolves.toBe(false)
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it('速度低于下限时中止，避免几 KB/s 的源长期占用', async () => {
+    const headers = new Headers({ 'content-length': '1000' })
+    const slowBody = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        controller.enqueue(new Uint8Array([0x50]))
+      }
+    })
+    vi.mocked(fetch).mockResolvedValue({ ok: true, headers, body: slowBody } as unknown as Response)
+
+    await expect(
+      downloadFile(fileUrl, undefined, {
+        responseTimeoutMs: 0,
+        stallTimeoutMs: 500,
+        minSpeedBps: 1024,
+        slowGraceMs: 80
+      })
+    ).resolves.toBe(false)
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('measureDownloadSpeed（下载前吞吐采样）', () => {
+  const fileUrl = 'https://example.com/app.apk'
+
+  it('采样窗口内读到数据时返回正速度，并主动断开', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024))
+        controller.enqueue(new Uint8Array(1024))
+        controller.close()
+      }
+    })
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      body
+    } as unknown as Response)
+
+    await expect(
+      measureDownloadSpeed(fileUrl, { windowMs: 200, maxBytes: 4096, responseTimeoutMs: 0 })
+    ).resolves.toBeGreaterThan(0)
+  })
+
+  it('响应建立后无任何数据时返回 0', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      body: new ReadableStream<Uint8Array>({ start() {} })
+    } as unknown as Response)
+
+    await expect(
+      measureDownloadSpeed(fileUrl, { windowMs: 60, responseTimeoutMs: 0 })
+    ).resolves.toBe(0)
+  })
+
+  it('请求失败时返回 0', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('network down'))
+
+    await expect(measureDownloadSpeed(fileUrl)).resolves.toBe(0)
   })
 })
 

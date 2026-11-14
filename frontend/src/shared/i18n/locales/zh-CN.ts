@@ -636,6 +636,7 @@ export default {
     mirrorSourceDesc:
       '测速与下载均使用所选版本的真实内核包；未指定加速源时自动测速并选用最快可用源',
     mirrorAutoSelecting: '未指定加速源，正在测速并选择最快源…',
+    mirrorSwitching: '当前加速源响应过慢，正在切换其他源…',
     mirrorProbe: '⟳ 重新测速',
     mirrorProbing: '测速中…',
     mirrorOfficial: 'GitHub 官方',
