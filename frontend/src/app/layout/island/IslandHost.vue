@@ -280,6 +280,12 @@ function handleAction(action: IslandAction) {
   collapse()
 }
 
+// 概览卡“打开总览”：先交给布局跳转，再收起卡片
+function openOverview() {
+  emit('open-overview')
+  collapse()
+}
+
 function onOutsidePointer(event: PointerEvent) {
   if (!island.expanded) return
   if (rootRef.value?.contains(event.target as Node)) return
@@ -385,10 +391,7 @@ onBeforeUnmount(() => {
         :pending-count="island.pendingCount"
         @close="collapse"
         @action="handleAction"
-        @overview="
-          emit('open-overview')
-          collapse()
-        "
+        @overview="openOverview"
       />
     </div>
 
