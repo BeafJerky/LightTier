@@ -87,6 +87,19 @@
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
             <svg
+              v-else-if="tab.key === 'island'"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="7" width="18" height="10" rx="5" />
+              <circle cx="8.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+              <path d="M13 12h4" />
+            </svg>
+            <svg
               v-else
               width="15"
               height="15"
@@ -106,6 +119,7 @@
       <!-- 右侧内容区（唯一纵向滚动容器） -->
       <div ref="contentRef" class="sd-content">
         <GeneralSection v-if="panelTab === 'general'" :single="!!section" />
+        <IslandSection v-if="panelTab === 'island'" />
         <CoreSection v-if="panelTab === 'core'" :single="!!section" />
         <DataSection v-if="panelTab === 'data'" :single="!!section" />
         <SecuritySection v-if="panelTab === 'security'" :single="!!section" />
@@ -285,6 +299,7 @@ import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import BackupDialog from './BackupDialog.vue'
 import GeneralSection from './GeneralSection.vue'
+import IslandSection from './IslandSection.vue'
 import CoreSection from './CoreSection.vue'
 import DataSection from './DataSection.vue'
 import SecuritySection from './SecuritySection.vue'
@@ -309,7 +324,7 @@ import {
   SETTINGS_SECURITY_KEY
 } from './context'
 
-type SettingsSection = 'general' | 'core' | 'data' | 'security' | 'about'
+type SettingsSection = 'general' | 'island' | 'core' | 'data' | 'security' | 'about'
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
@@ -427,6 +442,7 @@ watch(visible, (v) => {
 const activeTab = ref('general')
 const tabs = [
   { key: 'general', label: t('newSettings.general') },
+  { key: 'island', label: t('newSettings.island') },
   { key: 'core', label: t('newSettings.coreMgmt') },
   { key: 'data', label: t('newSettings.dataMgmt') },
   { key: 'security', label: t('newSettings.security') },
