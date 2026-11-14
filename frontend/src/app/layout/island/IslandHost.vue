@@ -619,10 +619,11 @@ onBeforeUnmount(() => {
   border: 0;
 }
 
+/* 减弱档尺寸走 160ms 补间，圆角与淡入淡出必须同速，避免形状先行突变 */
 .island-root[data-motion='reduced'] {
   transition:
-    border-radius 120ms ease-out,
-    opacity 120ms ease-out;
+    border-radius 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease-out;
 }
 
 .island-root[data-motion='reduced'] .island-face,
@@ -633,7 +634,7 @@ onBeforeUnmount(() => {
 .island-root[data-motion='reduced'] .island-bar,
 .island-root[data-motion='reduced'] .island-card-fade-enter-active,
 .island-root[data-motion='reduced'] .island-card-fade-leave-active {
-  transition-duration: 120ms;
+  transition-duration: 160ms;
 }
 
 @media (width <= 560px) {
@@ -655,7 +656,7 @@ onBeforeUnmount(() => {
   .island-bar,
   .island-card-fade-enter-active,
   .island-card-fade-leave-active {
-    transition-duration: 120ms;
+    transition-duration: 160ms;
   }
 }
 </style>
