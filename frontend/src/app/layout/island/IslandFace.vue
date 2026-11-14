@@ -14,9 +14,9 @@ withDefaults(
     :class="[`mood-${mood}`, { 'is-animated': animate }]"
     aria-hidden="true"
   >
-    <span class="island-face-eye left" />
-    <span class="island-face-eye right" />
-    <span class="island-face-mouth" />
+    <span class="island-face-eye left"></span>
+    <span class="island-face-eye right"></span>
+    <span class="island-face-mouth"></span>
   </span>
 </template>
 
