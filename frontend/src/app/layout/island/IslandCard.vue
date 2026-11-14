@@ -192,7 +192,7 @@ const onPrimary = () => {
   height: 28px;
   color: var(--theme-accent-primary, #e8a0a0);
   background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.14);
-  border-radius: 10px;
+  border-radius: var(--theme-radius-sm, 10px);
 }
 
 .tone-error .island-card-icon {
@@ -255,7 +255,7 @@ const onPrimary = () => {
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--theme-radius-sm, 8px);
 }
 
 /* 视觉 24px，透明热区补到 44×44 */

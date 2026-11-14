@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
     rgb(var(--theme-bg-rgb, 253, 248, 244), 0.94)
   );
   border: 1px solid var(--theme-border, #ede4db);
-  border-radius: 999px;
+  border-radius: var(--theme-radius-pill, 999px);
   box-shadow:
     0 10px 30px rgb(var(--theme-text-primary-rgb, 74, 55, 40), 0.08),
     inset 0 1px 0 rgb(255 255 255, 90%);
@@ -444,7 +444,7 @@ onBeforeUnmount(() => {
 }
 
 .island-root.is-card-shape {
-  border-radius: 18px;
+  border-radius: var(--theme-radius-xl, 18px);
 }
 
 /* 内容层按目标尺寸固定排版，外壳只负责裁切，避免形变时文字逐帧重排 */
@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
   color: var(--theme-text-secondary, #756a5b);
   background: var(--theme-bg-hover, rgb(232 160 160 / 6%));
-  border-radius: 999px;
+  border-radius: var(--theme-radius-pill, 999px);
 }
 
 .island-badge {
@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
   color: #fff;
   background: var(--theme-color-error, #d97b7b);
   border: 1.5px solid var(--theme-bg-card, #fff);
-  border-radius: 999px;
+  border-radius: var(--theme-radius-pill, 999px);
   place-items: center;
   font-variant-numeric: tabular-nums;
 }

@@ -197,7 +197,7 @@ const handleMotionSelect = (value: string | number | null) => {
   cursor: pointer;
   background: var(--theme-bg-card, #fff);
   border: 1px solid var(--theme-border, #ede4db);
-  border-radius: 999px;
+  border-radius: var(--theme-radius-pill, 999px);
   transition:
     color 150ms ease,
     border-color 150ms ease,
