@@ -64,15 +64,12 @@ const initialIdleWidth =
       ? IDLE_NARROW_WIDTH
       : IDLE_WIDTH
 
-const { widthValue, heightValue, exiting, setTarget } = useIslandMorph(
-  rootRef,
-  reducedMotion,
-  initialIdleWidth,
-  BAR_HEIGHT
-)
+const { setTarget } = useIslandMorph(rootRef, reducedMotion, initialIdleWidth, BAR_HEIGHT)
 
 const narrow = computed(() => viewportWidth.value < 560)
 const maxWidth = computed(() => Math.max(160, viewportWidth.value - 96))
+const cardWidth = computed(() => Math.min(CARD_WIDTH, maxWidth.value))
+const barWidth = computed(() => Math.min(COMPACT_WIDTH, maxWidth.value))
 
 const idleWidth = computed(() => {
   if (island.settings.idle === 'dot') return DOT_WIDTH
@@ -80,7 +77,7 @@ const idleWidth = computed(() => {
 })
 
 const targetWidth = computed(() => {
-  if (isCardMode.value) return Math.min(CARD_WIDTH, maxWidth.value)
+  if (isCardMode.value) return cardWidth.value
   if (mode.value === 'compact') return Math.min(COMPACT_WIDTH, maxWidth.value)
   return Math.min(idleWidth.value, maxWidth.value)
 })
@@ -120,18 +117,10 @@ const faceMood = computed<'calm' | 'sleepy' | 'happy' | 'worried' | 'excited' | 
 
 const faceAnimate = computed(() => island.settings.face && !reducedMotion.value)
 
-const progress = computed(() => {
-  const from = idleWidth.value
-  const to = targetWidth.value
-  if (to <= from + 4) return 1
-  return Math.min(1, Math.max(0, (widthValue.value - from) / (to - from)))
-})
-
-const cardOpacity = computed(() => (!exiting.value ? Math.min(1, progress.value * 1.5) : 0))
-
 const shellStyle = computed(() => ({
-  width: `${widthValue.value}px`,
-  height: `${heightValue.value}px`
+  '--island-card-width': `${cardWidth.value}px`,
+  '--island-card-height': `${CARD_HEIGHT}px`,
+  '--island-bar-width': `${barWidth.value}px`
 }))
 
 const ariaLabel = computed(() => {
@@ -354,11 +343,7 @@ onBeforeUnmount(() => {
     v-if="island.settings.enabled && !props.suspended"
     ref="rootRef"
     class="island-root"
-    :class="[
-      `is-${mode}`,
-      `health-${health}`,
-      { 'is-exiting': exiting, 'is-card-shape': isCardMode }
-    ]"
+    :class="[`is-${mode}`, `health-${health}`, { 'is-card-shape': isCardMode }]"
     :style="shellStyle"
     :data-motion="reducedMotion ? 'reduced' : 'full'"
     @pointerenter="pauseTimers"
@@ -377,53 +362,52 @@ onBeforeUnmount(() => {
       @click="activate"
     ></button>
 
-    <div
-      v-if="!isCardMode"
-      class="island-bar"
-      :class="{ 'is-visible': !exiting }"
-      aria-hidden="true"
-    >
+    <div class="island-bar" :class="{ 'is-visible': !isCardMode }" aria-hidden="true">
       <IslandFace :mood="faceMood" :animate="faceAnimate" />
       <template v-if="mode === 'idle'">
         <span class="island-count">{{ runningCount }}</span>
         <span v-if="!narrow && island.settings.idle === 'count'" class="island-label">
           {{ t('newIsland.running') }}
         </span>
-        <svg
-          class="island-chevron"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <path d="M9 6l6 6-6 6" />
-        </svg>
       </template>
       <template v-else>
         <span class="island-title">{{ island.current?.title }}</span>
         <span v-if="island.queueLength" class="island-more">+{{ island.queueLength }}</span>
       </template>
-      <span v-if="badge" class="island-badge" :class="`badge-${badge}`">
-        {{ island.pendingCount }}
-      </span>
     </div>
 
-    <div v-else class="island-card-wrap" :style="{ opacity: cardOpacity }">
-      <IslandCard
-        :kind="mode === 'overview' ? 'overview' : 'notice'"
-        :notice="island.current"
-        :instances="easy.runningList"
-        :summary="easy.monitorSummaryMap"
-        :pending-count="island.pendingCount"
-        @close="collapse"
-        @dismiss="dismissAndAdvance"
-        @action="handleAction"
-        @overview="openOverview"
-      />
-    </div>
+    <svg
+      v-if="mode === 'idle'"
+      class="island-chevron"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+    >
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+    <span v-if="badge" class="island-badge" :class="`badge-${badge}`">
+      {{ island.pendingCount }}
+    </span>
+
+    <Transition name="island-card-fade">
+      <div v-if="isCardMode" class="island-card-wrap">
+        <IslandCard
+          :kind="mode === 'overview' ? 'overview' : 'notice'"
+          :notice="island.current"
+          :instances="easy.runningList"
+          :summary="easy.monitorSummaryMap"
+          :pending-count="island.pendingCount"
+          @close="collapse"
+          @dismiss="dismissAndAdvance"
+          @action="handleAction"
+          @overview="openOverview"
+        />
+      </div>
+    </Transition>
 
     <div class="island-sr" role="status" aria-live="polite">{{ politeAnnouncement }}</div>
     <div class="island-sr" role="alert" aria-live="assertive">
@@ -463,8 +447,25 @@ onBeforeUnmount(() => {
   border-radius: 18px;
 }
 
-.island-root.is-morphing {
-  will-change: width, height;
+/* 内容层按目标尺寸固定排版，外壳只负责裁切，避免形变时文字逐帧重排 */
+.island-bar {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: flex;
+  width: var(--island-bar-width, 280px);
+  height: 40px;
+  padding: 0 12px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+  gap: 7px;
+  align-items: center;
+}
+
+.island-bar.is-visible {
+  opacity: 1;
 }
 
 .island-hit {
@@ -488,22 +489,6 @@ onBeforeUnmount(() => {
 .island-hit:focus-visible {
   outline: 2px solid var(--theme-accent-primary, #e8a0a0);
   outline-offset: -3px;
-}
-
-.island-bar {
-  position: absolute;
-  display: flex;
-  padding: 0 12px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 140ms ease;
-  inset: 0;
-  gap: 7px;
-  align-items: center;
-}
-
-.island-bar.is-visible {
-  opacity: 1;
 }
 
 .island-count {
@@ -602,8 +587,20 @@ onBeforeUnmount(() => {
 
 .island-card-wrap {
   position: absolute;
-  inset: 0;
-  transition: opacity 140ms ease;
+  top: 0;
+  left: 0;
+  width: var(--island-card-width, 352px);
+  height: var(--island-card-height, 196px);
+}
+
+.island-card-fade-enter-active,
+.island-card-fade-leave-active {
+  transition: opacity 160ms ease;
+}
+
+.island-card-fade-enter-from,
+.island-card-fade-leave-to {
+  opacity: 0;
 }
 
 .island-health-error .island-badge {
@@ -634,7 +631,8 @@ onBeforeUnmount(() => {
 }
 
 .island-root[data-motion='reduced'] .island-bar,
-.island-root[data-motion='reduced'] .island-card-wrap {
+.island-root[data-motion='reduced'] .island-card-fade-enter-active,
+.island-root[data-motion='reduced'] .island-card-fade-leave-active {
   transition-duration: 120ms;
 }
 
@@ -655,7 +653,8 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .island-bar,
-  .island-card-wrap {
+  .island-card-fade-enter-active,
+  .island-card-fade-leave-active {
     transition-duration: 120ms;
   }
 }
