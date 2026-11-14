@@ -111,7 +111,20 @@ export default {
     stopOk: '{name} 已停止',
     stopFailed: '{name} 停止失败',
     portConflict: '{name} 端口冲突',
-    portConflictDesc: '端口 {port} 被 {conflict} 占用，请先停止冲突实例或修改端口。'
+    portConflictDesc: '端口 {port} 被 {conflict} 占用，请先停止冲突实例或修改端口。',
+    overviewTitle: '运行概览',
+    overviewSub: '{count} 个实例运行中',
+    noRunning: '当前没有运行中的实例',
+    openOverview: '打开总览',
+    viewMonitor: '查看监控',
+    openSettings: '去看看',
+    dismiss: '忽略',
+    close: '关闭',
+    queuePosition: '{current} / {total}',
+    typeError: '实例异常',
+    typeUpdate: '版本更新',
+    typeQuality: '连接质量',
+    typeFeedback: '操作反馈'
   },
   newOverview: {
     totalConfig: '配置总数',

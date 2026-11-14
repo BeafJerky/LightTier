@@ -115,7 +115,20 @@ export default {
     stopOk: '{name} stopped',
     stopFailed: '{name} failed to stop',
     portConflict: '{name} has a port conflict',
-    portConflictDesc: 'Port {port} is used by {conflict}. Stop that instance or change the port.'
+    portConflictDesc: 'Port {port} is used by {conflict}. Stop that instance or change the port.',
+    overviewTitle: 'Running overview',
+    overviewSub: '{count} instances running',
+    noRunning: 'No instances are running',
+    openOverview: 'Open overview',
+    viewMonitor: 'View monitor',
+    openSettings: 'Open settings',
+    dismiss: 'Dismiss',
+    close: 'Close',
+    queuePosition: '{current} / {total}',
+    typeError: 'Instance error',
+    typeUpdate: 'Update',
+    typeQuality: 'Connection quality',
+    typeFeedback: 'Action result'
   },
   newOverview: {
     totalConfig: 'Total configs',

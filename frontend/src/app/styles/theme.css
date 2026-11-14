@@ -21,6 +21,7 @@
   --theme-color-success: #7fba8a;
   --theme-color-success-dark: #6aaa78;
   --theme-color-danger: #e8a0a0;
+  --theme-color-error: #d97b7b;
   --theme-color-warning: #e6a23c;
   --theme-color-info: #e8a0a0;
 
@@ -46,6 +47,7 @@
   --theme-accent-secondary-rgb: 184, 169, 201;
   --theme-color-success-rgb: 127, 186, 138;
   --theme-color-danger-rgb: 232, 160, 160;
+  --theme-color-error-rgb: 217, 123, 123;
   --theme-color-warning-rgb: 230, 162, 60;
 
   /* ===== 阴影 ===== */
@@ -142,6 +144,7 @@
   --theme-color-success: #5ab08a;
   --theme-color-success-dark: #4a9a78;
   --theme-color-danger: #d48080;
+  --theme-color-error: #d48080;
   --theme-color-warning: #e6a23c;
   --theme-color-info: #6ba8e0;
 
@@ -164,6 +167,7 @@
   --theme-accent-secondary-rgb: 90, 138, 176;
   --theme-color-success-rgb: 90, 176, 138;
   --theme-color-danger-rgb: 212, 128, 128;
+  --theme-color-error-rgb: 212, 128, 128;
   --theme-color-warning-rgb: 230, 162, 60;
 
   /* ===== 阴影 ===== */
