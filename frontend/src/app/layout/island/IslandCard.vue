@@ -172,7 +172,7 @@ const onPrimary = () => {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  padding: 12px 14px;
+  padding: 16px 18px;
   overflow: hidden;
   box-sizing: border-box;
 }
