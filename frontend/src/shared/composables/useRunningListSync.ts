@@ -13,6 +13,8 @@ import { isTauri } from '@tauri-apps/api/core'
 export interface RunningListSyncOptions {
   /** 自定义失败处理（缺省：Tauri 环境 warn，浏览器静默） */
   onError?: (error: unknown) => void
+  /** 每次成功写回运行列表后调用 */
+  onSuccess?: () => void
 }
 
 export interface RunningListSyncRequest {
@@ -39,6 +41,7 @@ export function useRunningListSync(options: RunningListSyncOptions = {}) {
           const changed = await runtime.syncCatalog(names)
           if (changed || request.force) await runtime.refresh()
           else easyTierStore.setRunningList(runtime.toRunningList())
+          options.onSuccess?.()
           return
         }
       } catch (error) {
@@ -49,6 +52,7 @@ export function useRunningListSync(options: RunningListSyncOptions = {}) {
     try {
       const newList = await coreApi.getRunningList(names)
       easyTierStore.setRunningList(newList)
+      options.onSuccess?.()
     } catch (error) {
       handleError(error)
     }
