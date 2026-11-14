@@ -48,13 +48,15 @@ describe('discoverThemes', () => {
     const themes = await discoverThemes()
 
     const names = themes.map((theme) => theme.name)
-    expect(names).toHaveLength(12)
+    expect(names).toHaveLength(13)
     expect(names).toContain('cha-yan')
     expect(names).toContain('cyberpunk-2077')
     expect(names).toContain('famicom')
     expect(names).toContain('claude')
+    expect(names).toContain('neumorphism')
     expect(new Set(names).size).toBe(names.length)
     expect(themes.find((theme) => theme.name === 'cha-yan')?.label).toBe('茶烟')
+    expect(themes.find((theme) => theme.name === 'neumorphism')?.label).toBe('拟态')
   })
 
   it('资源目录中的同名主题覆盖内置版本，其余内置主题保留', async () => {
@@ -66,7 +68,7 @@ describe('discoverThemes', () => {
     const { discoverThemes } = useExternalThemes()
     const themes = await discoverThemes()
 
-    expect(themes).toHaveLength(12)
+    expect(themes).toHaveLength(13)
     const custom = themes.find((theme) => theme.name === 'cha-yan')
     expect(custom?.label).toBe('自定义茶烟')
     expect(custom?.color).toBe('#123456')

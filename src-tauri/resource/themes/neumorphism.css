@@ -1,0 +1,760 @@
+/* @theme-label: 拟态 */
+
+/* ============================================================
+   拟态（Neumorphism）— 奶油暖灰
+   预置主题：同色材质 + 双向光源阴影
+   - 全局变量写在 :root，主题预览会被改写为 :host
+   - 组件覆盖使用 html[data-theme='neumorphism']，仅作用于真实界面
+   - :host .pv-* 仅用于主题预览的迷你界面
+   ============================================================ */
+
+:root {
+  /* ---- 表面：同一材质的明暗两面 ---- */
+  --theme-bg: #e7e1d8;
+  --theme-bg-card: #eae4db;
+  --theme-bg-sidebar: linear-gradient(180deg, #efe9e1, #e2dbd1);
+  --theme-bg-toolbar: #eae4db;
+  --theme-bg-hover: rgba(127, 109, 92, 0.09);
+  --theme-bg-active: rgba(156, 95, 77, 0.14);
+  --theme-bg-tag: #e1d9ce;
+  --theme-surface-secondary: #e1d9ce;
+  --theme-surface-hover: #d9d0c4;
+
+  /* ---- 文字 ---- */
+  --theme-text-primary: #40382f;
+  --theme-text-secondary: #6b6154;
+  --theme-text-muted: #7d7164;
+  --theme-text-white: #fffdf8;
+  --theme-text-on-accent: #fffdf8;
+
+  /* ---- 强调色：陶土 / 鼠尾草 ---- */
+  --theme-accent-primary: #9c5f4d;
+  --theme-accent-secondary: #8f9c8a;
+  --theme-accent-hover: #8c4d3b;
+  --theme-color-success: #6f9c7c;
+  --theme-color-success-dark: #5b8769;
+  --theme-color-danger: #a94a44;
+  --theme-color-error: #9f4a43;
+  --theme-color-warning: #c69246;
+  --theme-color-info: #7d8fa6;
+  --theme-color-scrollbar: #c6bbac;
+
+  /* ---- 边界：拟态少用硬边，保留极淡的材质接缝 ---- */
+  --theme-border: #d5ccc0;
+  --theme-border-light: #ded5ca;
+
+  /* ---- 双光源阴影 ---- */
+  --theme-shadow-sm:
+    6px 6px 14px rgba(117, 100, 82, 0.22), -6px -6px 14px rgba(255, 252, 246, 0.85);
+  --theme-shadow-md:
+    10px 10px 24px rgba(117, 100, 82, 0.25), -10px -10px 24px rgba(255, 252, 246, 0.9);
+  --theme-shadow-toast:
+    8px 8px 20px rgba(117, 100, 82, 0.26), -8px -8px 20px rgba(255, 252, 246, 0.8);
+  --theme-overlay: rgba(64, 56, 47, 0.28);
+
+  /* ---- RGB 派生变量（Android 旧 WebView 用 rgb(var(--x-rgb), a)） ---- */
+  --theme-bg-rgb: 231, 225, 216;
+  --theme-bg-card-rgb: 234, 228, 219;
+  --theme-text-primary-rgb: 64, 56, 47;
+  --theme-text-muted-rgb: 125, 113, 100;
+  --theme-accent-primary-rgb: 156, 95, 77;
+  --theme-accent-secondary-rgb: 143, 156, 138;
+  --theme-color-success-rgb: 111, 156, 124;
+  --theme-color-danger-rgb: 169, 74, 68;
+  --theme-color-error-rgb: 159, 74, 67;
+  --theme-color-warning-rgb: 198, 146, 70;
+
+  /* ---- 更柔的圆角 ---- */
+  --theme-radius-xs: 6px;
+  --theme-radius-sm: 10px;
+  --theme-radius-md: 14px;
+  --theme-radius-lg: 16px;
+  --theme-radius-xl: 20px;
+  --theme-radius-xxl: 26px;
+
+  /* ---- 主题内部复用的光照分量与阴影档位 ---- */
+  --np-raised-xs: 3px 3px 8px rgba(117, 100, 82, 0.22), -3px -3px 8px rgba(255, 252, 246, 0.85);
+  --np-raised-sm: 6px 6px 14px rgba(117, 100, 82, 0.22), -6px -6px 14px rgba(255, 252, 246, 0.85);
+  --np-raised-md:
+    10px 10px 24px rgba(117, 100, 82, 0.25), -10px -10px 24px rgba(255, 252, 246, 0.9);
+  --np-inset-xs:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.18), inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+  --np-inset-sm:
+    inset 3px 3px 8px rgba(117, 100, 82, 0.16), inset -3px -3px 8px rgba(255, 252, 246, 0.8);
+  --np-inset-md:
+    inset 5px 5px 12px rgba(117, 100, 82, 0.16), inset -5px -5px 12px rgba(255, 252, 246, 0.72);
+}
+
+/* ============================================================
+   全局表面
+   ============================================================ */
+html[data-theme='neumorphism'],
+html[data-theme='neumorphism'] body {
+  background: var(--theme-bg);
+  color: var(--theme-text-primary);
+}
+
+/* 顶部工具栏与页面同材质，用一条柔和的投影代替硬分割线 */
+html[data-theme='neumorphism'] .nl-toolbar {
+  background: var(--theme-bg) !important;
+  border-bottom-color: transparent !important;
+  box-shadow: 0 4px 12px rgba(117, 100, 82, 0.1);
+}
+
+/* 侧栏：从材质里“浮起来” */
+html[data-theme='neumorphism'] .nl-sidebar {
+  background: var(--theme-bg-sidebar) !important;
+  border-right-color: transparent !important;
+  box-shadow:
+    8px 0 20px rgba(117, 100, 82, 0.16),
+    -4px 0 12px rgba(255, 252, 246, 0.55) !important;
+}
+
+html[data-theme='neumorphism'] .nl-sidebar-header {
+  border-bottom-color: transparent !important;
+}
+
+/* ============================================================
+   卡片：从同色底上凸起
+   ============================================================ */
+html[data-theme='neumorphism'] .nd-block {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-md);
+}
+
+html[data-theme='neumorphism'] .nd-stat-card,
+html[data-theme='neumorphism'] .nd-config-card,
+html[data-theme='neumorphism'] .nw-card,
+html[data-theme='neumorphism'] .nwc-card,
+html[data-theme='neumorphism'] .nm-card,
+html[data-theme='neumorphism'] .nm-traffic-card,
+html[data-theme='neumorphism'] .nm-peer-card,
+html[data-theme='neumorphism'] .sd-security-card {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm);
+}
+
+html[data-theme='neumorphism'] .nd-config-card:hover,
+html[data-theme='neumorphism'] .nw-card:hover,
+html[data-theme='neumorphism'] .nwc-card:hover {
+  box-shadow: var(--theme-shadow-md);
+}
+
+/* 统计图标：嵌进材质里的凹槽，保留状态色 */
+html[data-theme='neumorphism'] .nd-stat-icon {
+  background: var(--theme-bg-card) !important;
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.18),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+/* 选中配置：保留左强调条，去掉大面积粉色底 */
+html[data-theme='neumorphism'] .nw-card.active {
+  background: var(--theme-bg-card) !important;
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-sm) !important;
+}
+
+html[data-theme='neumorphism'] .nw-card.active:hover {
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-md) !important;
+}
+
+/* 左侧列表容器：凹槽 */
+html[data-theme='neumorphism'] .nw-left-scroll,
+html[data-theme='neumorphism'] .nm-left-scroll,
+html[data-theme='neumorphism'] .nwc-left-scroll {
+  background: var(--theme-bg) !important;
+  box-shadow:
+    inset 5px 5px 12px rgba(117, 100, 82, 0.16),
+    inset -5px -5px 12px rgba(255, 252, 246, 0.72);
+}
+
+/* 右侧详情：与列表同高度的大卡片，从底上浮起 */
+html[data-theme='neumorphism'] .nw-right,
+html[data-theme='neumorphism'] .nwc-right,
+html[data-theme='neumorphism'] .nm-right {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-md);
+}
+
+/* 监控页：选中配置保留左强调条 */
+html[data-theme='neumorphism'] .nm-card.active {
+  background: var(--theme-bg-card) !important;
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-sm) !important;
+}
+
+/* 监控页统计胶囊：凹槽 */
+html[data-theme='neumorphism'] .nm-peer-stat {
+  background: var(--theme-bg) !important;
+  box-shadow:
+    inset 3px 3px 8px rgba(117, 100, 82, 0.16),
+    inset -3px -3px 8px rgba(255, 252, 246, 0.8);
+}
+
+/* 监控页趋势图容器：凹槽 */
+html[data-theme='neumorphism'] .nm-trend-body {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow:
+    inset 4px 4px 10px rgba(117, 100, 82, 0.14),
+    inset -4px -4px 10px rgba(255, 252, 246, 0.7);
+}
+
+/* ============================================================
+   按钮：凸起；按下时凹陷
+   ============================================================ */
+html[data-theme='neumorphism'] .nd-add-btn,
+html[data-theme='neumorphism'] .lt-btn--secondary,
+html[data-theme='neumorphism'] .lt-btn--ghost {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+}
+
+html[data-theme='neumorphism'] .lt-btn--primary {
+  background: linear-gradient(145deg, #c98a75, #ae6c59) !important;
+  border-color: transparent !important;
+  box-shadow:
+    5px 5px 12px rgba(117, 100, 82, 0.3),
+    -5px -5px 12px rgba(255, 252, 246, 0.7) !important;
+}
+
+html[data-theme='neumorphism'] .lt-btn--success {
+  background: linear-gradient(145deg, #7fad8c, #628d70) !important;
+  border-color: transparent !important;
+  box-shadow:
+    4px 4px 10px rgba(117, 100, 82, 0.24),
+    -4px -4px 10px rgba(255, 252, 246, 0.65) !important;
+}
+
+/* 危险操作保持轻量：浅陶土底 + 凸起，不用整块重色 */
+html[data-theme='neumorphism'] .lt-btn--danger {
+  background: rgb(var(--theme-color-danger-rgb), 0.1) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+}
+
+html[data-theme='neumorphism'] .lt-btn:active {
+  box-shadow:
+    inset 3px 3px 8px rgba(117, 100, 82, 0.22),
+    inset -3px -3px 8px rgba(255, 252, 246, 0.8) !important;
+}
+
+/* 悬停只做轻微提亮，保持“同一材质”的观感 */
+html[data-theme='neumorphism'] .nd-add-btn:hover,
+html[data-theme='neumorphism'] .lt-btn--secondary:hover,
+html[data-theme='neumorphism'] .lt-btn--ghost:hover {
+  background: var(--theme-bg-card) !important;
+}
+
+html[data-theme='neumorphism'] .lt-btn--primary:hover,
+html[data-theme='neumorphism'] .lt-btn--success:hover,
+html[data-theme='neumorphism'] .lt-btn--danger:hover {
+  filter: brightness(0.97);
+}
+
+/* 禁用态不再凸起，避免看起来仍可点击 */
+html[data-theme='neumorphism'] .lt-btn:disabled {
+  color: var(--theme-text-muted) !important;
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  filter: none;
+}
+
+/* ============================================================
+   输入框：凹槽，保留焦点环
+   ============================================================ */
+html[data-theme='neumorphism'] .lt-input.n-input {
+  background-color: var(--theme-bg) !important;
+  box-shadow:
+    inset 3px 3px 8px rgba(117, 100, 82, 0.16),
+    inset -3px -3px 8px rgba(255, 252, 246, 0.8) !important;
+}
+
+html[data-theme='neumorphism'] .lt-input.n-input .n-input__border,
+html[data-theme='neumorphism'] .lt-input.n-input .n-input__state-border {
+  border-color: transparent !important;
+}
+
+html[data-theme='neumorphism'] .lt-input.n-input:focus-within {
+  box-shadow:
+    inset 3px 3px 8px rgba(117, 100, 82, 0.16),
+    inset -3px -3px 8px rgba(255, 252, 246, 0.8),
+    0 0 0 2px rgb(var(--theme-accent-primary-rgb), 0.35) !important;
+}
+
+/* 占位符在暖灰底上容易发虚：单独压深一档，正文仍保持轻盈 */
+html[data-theme='neumorphism'] .lt-input.n-input .n-input__placeholder {
+  color: #6f6457 !important;
+  opacity: 1;
+}
+
+/* ============================================================
+   导航、浮层
+   ============================================================ */
+html[data-theme='neumorphism'] .nl-menu-item.active {
+  background: var(--theme-bg) !important;
+  box-shadow:
+    inset 3px 3px 7px rgba(117, 100, 82, 0.18),
+    inset -3px -3px 7px rgba(255, 252, 246, 0.8) !important;
+}
+
+html[data-theme='neumorphism'] .fab-trigger {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+}
+
+/* ============================================================
+   主题选择器：列表凹槽、选中行凹陷、预览窗凹陷
+   ============================================================ */
+html[data-theme='neumorphism'] .td-list {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow:
+    inset 4px 4px 10px rgba(117, 100, 82, 0.14),
+    inset -4px -4px 10px rgba(255, 252, 246, 0.7);
+}
+
+html[data-theme='neumorphism'] .td-item.active {
+  background: var(--theme-bg) !important;
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.18),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+html[data-theme='neumorphism'] .td-item:hover:not(.active) {
+  background: var(--theme-bg-card) !important;
+  box-shadow:
+    2px 2px 5px rgba(117, 100, 82, 0.18),
+    -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+html[data-theme='neumorphism'] .td-preview-wrap {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow:
+    inset 4px 4px 10px rgba(117, 100, 82, 0.18),
+    inset -4px -4px 10px rgba(255, 252, 246, 0.72);
+}
+
+/* ============================================================
+   Android：底栏、分组列表与主卡
+   ============================================================ */
+html[data-theme='neumorphism'] .nl-tabbar {
+  background: var(--theme-bg) !important;
+  border-top-color: transparent !important;
+  box-shadow:
+    0 -6px 16px rgba(117, 100, 82, 0.12),
+    inset 0 1px 0 rgba(255, 252, 246, 0.65);
+}
+
+html[data-theme='neumorphism'] .nl-tab-indicator {
+  background: var(--theme-bg) !important;
+  box-shadow:
+    3px 3px 7px rgba(117, 100, 82, 0.2),
+    -3px -3px 7px rgba(255, 252, 246, 0.85);
+}
+
+/* 安卓左栏本身不承载表面，凹槽交给分组列表 */
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-left-scroll {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-card-list {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm);
+}
+
+html[data-theme='neumorphism'] .nwc-root.nwc-android .nwc-left-scroll {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='neumorphism'] .nwc-root.nwc-android .nwc-card-list {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm);
+}
+
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-row + .nw-row {
+  border-top-color: rgba(117, 100, 82, 0.08) !important;
+}
+
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-row-icon {
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.16),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+html[data-theme='neumorphism'] .nda-hero {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      rgb(var(--theme-accent-primary-rgb), 0.14),
+      transparent 62%
+    ),
+    var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm);
+}
+
+html[data-theme='neumorphism'] .nda-hero-on {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      rgb(var(--theme-color-success-rgb), 0.17),
+      transparent 62%
+    ),
+    var(--theme-bg-card) !important;
+}
+
+html[data-theme='neumorphism'] .nda-list {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm);
+}
+
+html[data-theme='neumorphism'] .nda-row + .nda-row {
+  border-top-color: rgba(117, 100, 82, 0.08) !important;
+}
+
+html[data-theme='neumorphism'] .nda-row-icon {
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.16),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+html[data-theme='neumorphism'] .nda-btn-connect {
+  box-shadow:
+    4px 4px 10px rgba(117, 100, 82, 0.28),
+    -4px -4px 10px rgba(255, 252, 246, 0.7) !important;
+}
+
+html[data-theme='neumorphism'] .lt-btn--soft,
+html[data-theme='neumorphism'] .lt-btn--success-soft {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--theme-shadow-sm) !important;
+}
+
+/* ============================================================
+   次级页面：编辑、设置、备份、监控与空态
+   ============================================================ */
+html[data-theme='neumorphism'] .ed-name-bar,
+html[data-theme='neumorphism'] .ed-form-section,
+html[data-theme='neumorphism'] .ed-adv-collapse,
+html[data-theme='neumorphism'] .ssv-group,
+html[data-theme='neumorphism'] .bk-cat,
+html[data-theme='neumorphism'] .bk-mode,
+html[data-theme='neumorphism'] .bk-base-file,
+html[data-theme='neumorphism'] .bk-file-card,
+html[data-theme='neumorphism'] .bk-item,
+html[data-theme='neumorphism'] .nm-hero,
+html[data-theme='neumorphism'] .nm-traffic-card,
+html[data-theme='neumorphism'] .nm-peer-grid,
+html[data-theme='neumorphism'] .tc-plot {
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-sm);
+}
+
+html[data-theme='neumorphism'] .td-refresh-btn,
+html[data-theme='neumorphism'] .td-tool-btn,
+html[data-theme='neumorphism'] .td-inline-reset {
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-xs);
+}
+
+html[data-theme='neumorphism'] .og-card,
+html[data-theme='neumorphism'] .lock-card {
+  border-color: transparent !important;
+}
+
+/* Android 的空态、主卡与详情头部同样是卡片 */
+html[data-theme='neumorphism'] .nm-root.nm-android .nm-empty-cards,
+html[data-theme='neumorphism'] .nm-root.nm-android .nm-state,
+html[data-theme='neumorphism'] .nm-root.nm-android .nm-empty,
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-empty,
+html[data-theme='neumorphism'] .nw-root.nw-android .nw-detail-header,
+html[data-theme='neumorphism'] .nwc-root.nwc-android .nwc-empty,
+html[data-theme='neumorphism'] .nwc-root.nwc-android .nwc-detail-header {
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-sm);
+}
+
+/* 浮层：菜单抬得更高 */
+html[data-theme='neumorphism'] .nl-lang-dropdown,
+html[data-theme='neumorphism'] .fab-menu,
+html[data-theme='neumorphism'] .ed-template-menu,
+html[data-theme='neumorphism'] .sd-core-version-menu {
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-md) !important;
+}
+
+html[data-theme='neumorphism'] .nl-lang-option.active {
+  background: var(--theme-bg) !important;
+  box-shadow: var(--np-inset-xs) !important;
+}
+
+/* 分段控件：轨道凹陷，选中项浮起 */
+html[data-theme='neumorphism'] .ed-tabs-track {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-inset-sm);
+}
+
+html[data-theme='neumorphism'] .ed-tab {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='neumorphism'] .ed-tab.active {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow:
+    var(--np-raised-xs),
+    inset 0 0 0 1px rgb(var(--theme-accent-primary-rgb), 0.25) !important;
+}
+
+html[data-theme='neumorphism'] .ed-template-trigger {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-inset-sm);
+}
+
+html[data-theme='neumorphism'] .ed-import-btn {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-xs);
+}
+
+/* 设置弹窗：导航凹槽，内容区回到弹窗表面 */
+html[data-theme='neumorphism'] .sd-nav {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-inset-sm);
+}
+
+html[data-theme='neumorphism'] .sd-content {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='neumorphism'] .sd-nav-item.active {
+  background: var(--theme-bg) !important;
+  box-shadow: var(--np-inset-xs) !important;
+}
+
+html[data-theme='neumorphism'] .sd-mirror-item {
+  background: var(--theme-bg-card) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-xs);
+}
+
+html[data-theme='neumorphism'] .sd-mirror-item.active {
+  box-shadow:
+    inset 0 0 0 1.5px rgb(var(--theme-color-success-rgb), 0.55),
+    var(--np-raised-xs) !important;
+}
+
+html[data-theme='neumorphism'] .bk-tab.active,
+html[data-theme='neumorphism'] .ssv-lang-option.active {
+  background: var(--theme-bg) !important;
+  box-shadow: var(--np-inset-xs) !important;
+}
+
+/* 选项胶囊：未选中凸起，选中压入材质 */
+html[data-theme='neumorphism'] .svc-radio,
+html[data-theme='neumorphism'] .wcf-radio {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow: var(--np-raised-xs);
+}
+
+html[data-theme='neumorphism'] .svc-radio.active,
+html[data-theme='neumorphism'] .wcf-radio.active {
+  background: var(--theme-bg) !important;
+  border-color: transparent !important;
+  box-shadow:
+    var(--np-inset-xs),
+    inset 0 0 0 1px rgb(var(--theme-accent-primary-rgb), 0.3) !important;
+}
+
+html[data-theme='neumorphism'] .bk-mode.active,
+html[data-theme='neumorphism'] .bk-cat.checked {
+  box-shadow:
+    var(--np-inset-xs),
+    inset 0 0 0 1.5px rgb(var(--theme-accent-primary-rgb), 0.4) !important;
+}
+
+/* 状态条与进度轨道：凹槽 */
+html[data-theme='neumorphism'] .nwc-svc-bar,
+html[data-theme='neumorphism'] .sd-download-progress-track {
+  border-color: transparent !important;
+  box-shadow: var(--np-inset-sm);
+}
+
+/* 开关与下拉：轨道凹槽、滑块凸起 */
+html[data-theme='neumorphism'] .lt-switch .n-switch__rail {
+  box-shadow: var(--np-inset-xs);
+}
+
+html[data-theme='neumorphism'] .lt-switch .n-switch__button {
+  box-shadow: var(--np-raised-xs) !important;
+}
+
+html[data-theme='neumorphism'] .lt-select .n-base-selection {
+  background: var(--theme-bg) !important;
+  box-shadow: var(--np-inset-sm);
+}
+
+html[data-theme='neumorphism'] .lt-select .n-base-selection-label {
+  background-color: transparent !important;
+}
+
+html[data-theme='neumorphism'] .lt-select .n-base-selection__border,
+html[data-theme='neumorphism'] .lt-select .n-base-selection__state-border {
+  border-color: transparent !important;
+}
+
+html[data-theme='neumorphism'] .lt-select .n-base-selection.n-base-selection--focus,
+html[data-theme='neumorphism'] .lt-select .n-base-selection.n-base-selection--active {
+  box-shadow:
+    var(--np-inset-sm),
+    0 0 0 2px rgb(var(--theme-accent-primary-rgb), 0.35) !important;
+}
+
+/* 图标块与标签：嵌入材质 */
+html[data-theme='neumorphism'] .nwc-row-icon,
+html[data-theme='neumorphism'] .ssv-icon,
+html[data-theme='neumorphism'] .nw-empty-icon,
+html[data-theme='neumorphism'] .nwc-empty-icon,
+html[data-theme='neumorphism'] .nm-empty-icon,
+html[data-theme='neumorphism'] .nm-state-icon,
+html[data-theme='neumorphism'] .sd-mirror-tag,
+html[data-theme='neumorphism'] .island-type-chip,
+html[data-theme='neumorphism'] .nw-badge,
+html[data-theme='neumorphism'] .nm-badge,
+html[data-theme='neumorphism'] .nwc-badge {
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.16),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+/* 分组列表分隔线弱化为材质接缝 */
+html[data-theme='neumorphism'] .ssv-row + .ssv-row,
+html[data-theme='neumorphism'] .nwc-row + .nwc-row,
+html[data-theme='neumorphism'] .nm-peer-card + .nm-peer-card {
+  border-top-color: rgba(117, 100, 82, 0.08) !important;
+}
+
+/* 详情字段网格：用材质接缝代替外框 */
+html[data-theme='neumorphism'] .nw-grid,
+html[data-theme='neumorphism'] .nwc-grid,
+html[data-theme='neumorphism'] .nm-grid {
+  background: rgba(117, 100, 82, 0.12) !important;
+  border-color: transparent !important;
+}
+
+/* ============================================================
+   主题预览（Shadow DOM 迷你界面）
+   ============================================================ */
+:host .pv-d-side {
+  border-right-color: transparent;
+  box-shadow:
+    5px 0 14px rgba(117, 100, 82, 0.16),
+    -3px 0 10px rgba(255, 252, 246, 0.5);
+}
+
+:host .pv-d-nav-item.active {
+  background: var(--theme-bg);
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.18),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+:host .pv-d-create {
+  background: linear-gradient(145deg, #c98a75, #ae6c59);
+  box-shadow:
+    2px 2px 6px rgba(117, 100, 82, 0.3),
+    -2px -2px 6px rgba(255, 252, 246, 0.7);
+}
+
+:host .pv-d-stat,
+:host .pv-d-card {
+  border-color: transparent;
+  box-shadow:
+    3px 3px 8px rgba(117, 100, 82, 0.22),
+    -3px -3px 8px rgba(255, 252, 246, 0.85);
+}
+
+:host .pv-d-card.on {
+  background: var(--theme-bg-card);
+  border-color: transparent;
+}
+
+:host .pv-d-btn.ghost {
+  background: var(--theme-bg);
+  border-color: transparent;
+  box-shadow:
+    2px 2px 5px rgba(117, 100, 82, 0.22),
+    -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+:host .pv-d-btn.run {
+  background: linear-gradient(145deg, #7fad8c, #628d70);
+  box-shadow:
+    2px 2px 5px rgba(117, 100, 82, 0.24),
+    -2px -2px 5px rgba(255, 252, 246, 0.65);
+}
+
+:host .pv-d-toast {
+  border-color: transparent;
+  box-shadow:
+    3px 3px 8px rgba(117, 100, 82, 0.22),
+    -3px -3px 8px rgba(255, 252, 246, 0.85);
+}
+
+:host .pv-m-hero,
+:host .pv-m-group {
+  background: var(--theme-bg-card);
+  border-color: transparent;
+  box-shadow:
+    3px 3px 8px rgba(117, 100, 82, 0.22),
+    -3px -3px 8px rgba(255, 252, 246, 0.85);
+}
+
+:host .pv-m-add {
+  background: var(--theme-bg);
+  box-shadow:
+    inset 2px 2px 5px rgba(117, 100, 82, 0.18),
+    inset -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+:host .pv-m-btn.ghost {
+  background: var(--theme-bg);
+  border-color: transparent;
+  box-shadow:
+    2px 2px 5px rgba(117, 100, 82, 0.22),
+    -2px -2px 5px rgba(255, 252, 246, 0.8);
+}
+
+:host .pv-m-tile {
+  background: var(--theme-bg);
+  box-shadow:
+    inset 2px 2px 4px rgba(117, 100, 82, 0.16),
+    inset -2px -2px 4px rgba(255, 252, 246, 0.8);
+}

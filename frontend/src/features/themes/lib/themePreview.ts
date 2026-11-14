@@ -255,19 +255,20 @@ export const getBuiltinPreviewStyle = (name: string): string | null => {
   if (name === 'cream') {
     return `
       :host { display: block; height: 100%;
-        --theme-bg: #fdf8f4; --theme-bg-card: #ffffff; --theme-bg-hover: rgba(232,160,160,0.06);
-        --theme-bg-active: rgba(232,160,160,0.1); --theme-bg-tag: #f5ede6;
+        --theme-bg: #fdf8f4; --theme-bg-card: #ffffff; --theme-bg-hover: rgba(208,132,132,0.06);
+        --theme-bg-active: rgba(208,132,132,0.1); --theme-bg-tag: #f5ede6;
         --theme-bg-sidebar: linear-gradient(180deg, #faf5f0, #f5efe8);
-        --theme-text-primary: #4a3728; --theme-text-secondary: #7a6e5e; --theme-text-muted: #c8bdb2;
+        --theme-text-primary: #4a3728; --theme-text-secondary: #756a5b; --theme-text-muted: #a19688;
         --theme-text-white: #fff; --theme-text-on-accent: #fff;
-        --theme-accent-primary: #e8a0a0; --theme-accent-secondary: #b8a9c9;
-        --theme-color-success: #7fba8a; --theme-color-success-dark: #6aaa78; --theme-color-danger: #e8a0a0;
-        --theme-border: #ede4db; --theme-border-light: #f5ede6;
+        --theme-accent-primary: #d08484; --theme-accent-secondary: #a394b6;
+        --theme-color-success: #68a476; --theme-color-success-dark: #5f9870; --theme-color-danger: #c77474;
+        --theme-color-warning: #c4852b; --theme-color-info: #7698b9; --theme-color-error: #c26868;
+        --theme-border: #e8dcd1; --theme-border-light: #f2eae1;
         --theme-bg-rgb: 253, 248, 244; --theme-bg-card-rgb: 255, 255, 255;
-        --theme-text-primary-rgb: 74, 55, 40; --theme-text-muted-rgb: 200, 189, 178;
-        --theme-accent-primary-rgb: 232, 160, 160; --theme-accent-secondary-rgb: 184, 169, 201;
-        --theme-color-success-rgb: 127, 186, 138; --theme-color-danger-rgb: 232, 160, 160;
-        --theme-color-warning-rgb: 230, 162, 60;
+        --theme-text-primary-rgb: 74, 55, 40; --theme-text-muted-rgb: 161, 150, 136;
+        --theme-accent-primary-rgb: 208, 132, 132; --theme-accent-secondary-rgb: 163, 148, 182;
+        --theme-color-success-rgb: 104, 164, 118; --theme-color-danger-rgb: 199, 116, 116;
+        --theme-color-warning-rgb: 196, 133, 43; --theme-color-error-rgb: 194, 104, 104;
         --theme-shadow-sm: 0 8px 28px rgba(74,55,40,0.06);
         --theme-radius-lg: 14px; --theme-radius-xl: 18px; --theme-radius-pill: 100px;
         --theme-font-body: 'Sora', sans-serif; --theme-font-display: 'Quicksand', sans-serif;
