@@ -97,6 +97,22 @@ export default {
     deleteBlockedChecking: '正在检测服务状态，请稍后再试',
     coreStartInvalidPid: '内核未返回有效的进程号，启动失败'
   },
+  newIsland: {
+    instanceStopped: '{name} 已停止运行',
+    instanceStoppedDesc: '进程已退出或连接中断，点击查看运行监控。',
+    qualityPoor: '{name} 连接质量下降',
+    qualityPoorDesc: '延迟或丢包持续升高，建议检查节点与网络。',
+    managerUpdate: 'LightTier {version} 可用',
+    managerUpdateDesc: '新版本已发布，前往设置查看更新。',
+    kernelUpdate: '内核 {version} 可升级',
+    kernelUpdateDesc: '当前内核版本落后，可在核心管理中升级。',
+    startOk: '{name} 已启动',
+    startFailed: '{name} 启动失败',
+    stopOk: '{name} 已停止',
+    stopFailed: '{name} 停止失败',
+    portConflict: '{name} 端口冲突',
+    portConflictDesc: '端口 {port} 被 {conflict} 占用，请先停止冲突实例或修改端口。'
+  },
   newOverview: {
     totalConfig: '配置总数',
     startFailCore: '启动失败，请检查内核配置或日志',

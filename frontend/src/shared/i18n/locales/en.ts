@@ -100,6 +100,23 @@ export default {
     deleteBlockedChecking: 'Service status is still being checked. Try again shortly',
     coreStartInvalidPid: 'The core did not return a valid process ID; start failed'
   },
+  newIsland: {
+    instanceStopped: '{name} stopped running',
+    instanceStoppedDesc:
+      'The process exited or the connection dropped. Open monitoring for details.',
+    qualityPoor: '{name} connection quality dropped',
+    qualityPoorDesc: 'Latency or packet loss stayed high. Check the node and network.',
+    managerUpdate: 'LightTier {version} is available',
+    managerUpdateDesc: 'A new version is available. Open settings to update.',
+    kernelUpdate: 'Kernel {version} is available',
+    kernelUpdateDesc: 'The installed kernel is behind. Upgrade it in Core management.',
+    startOk: '{name} started',
+    startFailed: '{name} failed to start',
+    stopOk: '{name} stopped',
+    stopFailed: '{name} failed to stop',
+    portConflict: '{name} has a port conflict',
+    portConflictDesc: 'Port {port} is used by {conflict}. Stop that instance or change the port.'
+  },
   newOverview: {
     totalConfig: 'Total configs',
     startFailCore: 'Start failed. Check the kernel configuration or logs',
