@@ -128,7 +128,10 @@ export default {
     typeError: 'Instance error',
     typeUpdate: 'Update',
     typeQuality: 'Connection quality',
-    typeFeedback: 'Action result'
+    typeFeedback: 'Action result',
+    ariaIdle: 'Status overview, {count} instances running',
+    ariaNotice: 'Status overview, {count} instances running. Pending: {title}',
+    running: 'running'
   },
   newOverview: {
     totalConfig: 'Total configs',

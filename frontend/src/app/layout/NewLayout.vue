@@ -396,6 +396,13 @@
     :check-update-on-open="settingsCheckUpdateOnOpen"
     @auto-checked="settingsCheckUpdateOnOpen = false"
   />
+  <IslandHost
+    v-if="!isAndroidPlatform"
+    :suspended="settingsDialogVisible || themeDialogVisible"
+    @open-monitor="openIslandMonitor"
+    @open-settings="openIslandSettings"
+    @open-overview="openIslandOverview"
+  />
   <FloatingMenu v-if="!isAndroidPlatform" @check-update="openCheckUpdate" />
 </template>
 
@@ -419,6 +426,7 @@ import { useCreamToast } from '@/shared/ui/useCreamToast'
 import ThemeDialog from '@/features/themes/components/ThemeDialog.vue'
 import SettingsDialog from '@/features/settings/components/SettingsDialog/index.vue'
 import FloatingMenu from '@/app/layout/FloatingMenu.vue'
+import IslandHost from '@/app/layout/island/IslandHost.vue'
 import { LtButton } from '@/shared/ui'
 import { restoreTheme } from '@/shared/composables/useExternalThemes'
 import { resolveDefaultTheme, useThemeLoader } from '@/shared/composables/useThemeLoader'
@@ -437,7 +445,7 @@ let stopSystemThemeWatch: (() => void) | null = null
 const themeDialogVisible = ref(false)
 const settingsDialogVisible = ref(false)
 // 快捷入口“检查更新”：打开设置时定位到“关于”，并自动触发一次检查
-const settingsInitialTab = ref<'about' | undefined>(undefined)
+const settingsInitialTab = ref<'about' | 'core' | undefined>(undefined)
 const settingsCheckUpdateOnOpen = ref(false)
 const settingsDialogRef = ref<{ focusAboutAndCheck: () => void } | null>(null)
 
@@ -584,6 +592,32 @@ const openCheckUpdate = () => {
   }
   settingsInitialTab.value = 'about'
   settingsCheckUpdateOnOpen.value = true
+  settingsDialogVisible.value = true
+}
+
+// 灵动岛动作：监控（可带配置名）、总览、设置定位
+const openIslandMonitor = (configFileName?: string) => {
+  sidebarOpen.value = false
+  if (!configFileName) {
+    void router.push('/new/monitor')
+    return
+  }
+  void router.push({ path: '/new/monitor', query: { name: configFileName } })
+}
+
+const openIslandOverview = () => {
+  sidebarOpen.value = false
+  void router.push('/new')
+}
+
+const openIslandSettings = (tab: 'about' | 'core') => {
+  sidebarOpen.value = false
+  if (tab === 'about') {
+    openCheckUpdate()
+    return
+  }
+  settingsInitialTab.value = 'core'
+  settingsCheckUpdateOnOpen.value = false
   settingsDialogVisible.value = true
 }
 

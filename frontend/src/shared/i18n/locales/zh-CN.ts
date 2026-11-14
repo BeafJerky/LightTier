@@ -124,7 +124,10 @@ export default {
     typeError: '实例异常',
     typeUpdate: '版本更新',
     typeQuality: '连接质量',
-    typeFeedback: '操作反馈'
+    typeFeedback: '操作反馈',
+    ariaIdle: '运行概览，{count} 个实例运行中',
+    ariaNotice: '运行概览，{count} 个实例运行中，待处理：{title}',
+    running: '运行中'
   },
   newOverview: {
     totalConfig: '配置总数',
