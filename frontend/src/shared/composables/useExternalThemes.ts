@@ -6,6 +6,7 @@
  * - 导入的主题写入 AppData/themes（两端可写），优先级高于 Resource 与内置版本；浏览器预览存 localStorage
  * - 至少含 3 个 --theme- 变量才视为合法主题
  * - 显示名优先取 CSS 内的 `@theme-label: <中文名>` 元数据，缺省回退文件名
+ * - 分类优先取 `@theme-category: color|style`，缺省时含 `html[data-theme=` 覆盖规则推定为风格化
  * - 主题色徽标从 --theme-accent-primary 或 --theme-color-success 提取
  */
 import { ref } from 'vue'
@@ -14,14 +15,21 @@ import { BaseDirectory } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { isAndroid } from '@/shared/platform/platformUtil'
-import { extractThemeLabel } from '@/shared/lib/themeLabel'
+import {
+  extractThemeCategory,
+  extractThemeLabel,
+  type ThemeCategory
+} from '@/shared/lib/themeLabel'
 import { useThemeLoader } from './useThemeLoader'
+
+export type { ThemeCategory }
 
 /** 外部主题元信息（cssText 为完整样式文本，供应用时注入） */
 export interface ExternalThemeInfo {
   name: string
   label: string
   color: string
+  category: ThemeCategory
   cssText: string
 }
 
@@ -37,8 +45,11 @@ const isValidThemeName = (name: string): boolean => THEME_NAME_PATTERN.test(name
 // 主题色徽标：优先主强调色，其次成功色
 const THEME_COLOR_PATTERN = /--theme-(?:accent-primary|color-success)\s*:\s*([^;]+)/
 
-// 显示名解析见 shared/lib/themeLabel（文件名始终作为稳定 ID）
-export { extractThemeLabel }
+// 元数据解析见 shared/lib/themeLabel（文件名始终作为稳定 ID）
+export { extractThemeCategory, extractThemeLabel }
+
+// 组件级覆盖是判断风格化的稳定信号：颜色主题只用 :root 变量，不会出现 html[data-theme] 规则
+const STYLE_OVERRIDE_PATTERN = /html\[data-theme/
 
 const toThemeInfo = (name: string, cssText: string): ExternalThemeInfo | null => {
   if (!isValidThemeName(name) || !isValidThemeCss(cssText)) return null
@@ -47,6 +58,8 @@ const toThemeInfo = (name: string, cssText: string): ExternalThemeInfo | null =>
     name,
     label: extractThemeLabel(cssText, name),
     color: match ? match[1].trim() : '#888',
+    category:
+      extractThemeCategory(cssText) ?? (STYLE_OVERRIDE_PATTERN.test(cssText) ? 'style' : 'color'),
     cssText
   }
 }

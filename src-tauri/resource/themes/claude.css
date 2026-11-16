@@ -1,4 +1,5 @@
 /* @theme-label: Claude */
+/* @theme-category: style */
 :root {
   --theme-bg: #f0eee6;
   --theme-bg-card: #faf9f5;
@@ -19,6 +20,7 @@
   --theme-color-success: #5e7a45;
   --theme-color-success-dark: #4f6839;
   --theme-color-danger: #b04a3e;
+  --theme-color-error: #b04a3e;
   --theme-color-warning: #8f641f;
   --theme-color-info: #526f8a;
 
@@ -28,6 +30,7 @@
 
   --theme-surface-secondary: #f0eee6;
   --theme-surface-hover: #e9e4d9;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #ffffff;
 
   --theme-shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.04), 0 4px 14px rgba(20, 20, 19, 0.04);

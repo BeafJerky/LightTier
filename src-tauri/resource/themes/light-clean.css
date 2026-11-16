@@ -11,7 +11,7 @@
 
   --theme-text-primary: #2c3e50;
   --theme-text-secondary: #5a6e7e;
-  --theme-text-muted: #9aabba;
+  --theme-text-muted: #8f9fb0;
   --theme-text-white: #ffffff;
 
   --theme-accent-primary: #638fc7;
@@ -20,7 +20,8 @@
   --theme-color-success: #5aad82;
   --theme-color-success-dark: #4a9a72;
   --theme-color-danger: #b07a8a;
-  --theme-color-warning: #e6a23c;
+  --theme-color-error: #b07a8a;
+  --theme-color-warning: #ca8a28;
   --theme-color-info: #6ba8e0;
 
   --theme-border: #d5dee8;
@@ -30,6 +31,7 @@
   /* 表面色 — 弹窗/卡片内部（缺失时会回退到奶油主题值，导致按钮不跟随本主题） */
   --theme-surface-secondary: #e8edf3;
   --theme-surface-hover: #dce3ec;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #ffffff;
 
   /* 阴影 — 冷色调 rgba */

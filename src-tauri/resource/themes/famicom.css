@@ -20,6 +20,7 @@
   --theme-color-success: #2f7d32;
   --theme-color-success-dark: #256b29;
   --theme-color-danger: #b3261e;
+  --theme-color-error: #b3261e;
   --theme-color-warning: #a85f00;
   --theme-color-info: #1e5f8a;
 
@@ -29,6 +30,7 @@
 
   --theme-surface-secondary: #efe6d3;
   --theme-surface-hover: #e5dac4;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #fffdf7;
 
   --theme-shadow-sm: 3px 3px 0 rgba(43, 36, 30, 0.18);

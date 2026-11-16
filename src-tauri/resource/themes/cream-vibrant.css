@@ -11,16 +11,17 @@
 
   --theme-text-primary: #4a3525;
   --theme-text-secondary: #7a6858;
-  --theme-text-muted: #c4b5a5;
+  --theme-text-muted: #b09c88;
   --theme-text-white: #ffffff;
 
   --theme-accent-primary: #e67e8a;
   --theme-accent-secondary: #7ecdc0;
   --theme-accent-hover: #d46a76;
-  --theme-color-success: #5ec49e;
-  --theme-color-success-dark: #4ab88a;
+  --theme-color-success: #4aa982;
+  --theme-color-success-dark: #3f9a74;
   --theme-color-danger: #e67e8a;
-  --theme-color-warning: #f0a848;
+  --theme-color-error: #e67e8a;
+  --theme-color-warning: #cb8a28;
   --theme-color-info: #68b8e0;
 
   --theme-border: #ede0d4;
@@ -30,6 +31,7 @@
   /* 表面色 — 弹窗/卡片内部 */
   --theme-surface-secondary: #f5ebe0;
   --theme-surface-hover: #efe0d2;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #ffffff;
 
   /* 阴影 — 暖色调 rgba */

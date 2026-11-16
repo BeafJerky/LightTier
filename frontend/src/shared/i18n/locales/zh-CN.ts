@@ -29,6 +29,8 @@ export default {
     resetDefault: '恢复默认',
     applyTheme: '应用主题',
     previewLabel: '主题预览',
+    categoryColor: '颜色主题',
+    categoryStyle: '风格化主题',
     cream: '奶油',
     dark: '暗色',
     importTheme: '导入主题',

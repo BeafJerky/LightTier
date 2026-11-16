@@ -27,6 +27,24 @@
 
 - 主题列表中的颜色圆点自动取自 `--theme-accent-primary` 的值。
 
+## 主题分类
+
+主题分为两类，主题列表按分类分组展示：
+
+- **颜色主题（`color`）**：只替换色板（含标题字体点缀），不改视觉骨架，与其它主题共用同一套圆角、描边与投影。
+- **风格化主题（`style`）**：改变圆角体系、描边、投影形态或加入组件级覆盖（如拟态材质、硬投影）时使用。
+
+在文件顶部、与 `@theme-label` 同级声明分类（可选）：
+
+```css
+/* @theme-label: 红白机 */
+/* @theme-category: style */
+```
+
+- 取值仅 `color` / `style`，大小写与首尾空白不敏感；其它取值视为未声明。
+- 未声明时自动推断：CSS 中出现 `html[data-theme=` 规则即归为风格化，否则归为颜色主题。只换了标题字体（如楷体、宋体）仍属颜色主题。
+- 显式声明优先于推断；导入的第三方主题同样适用。
+
 ## 完整变量列表
 
 ### 背景色
@@ -60,8 +78,11 @@
 | `--theme-color-success`      | 成功/运行状态色            | `#5aad82` |
 | `--theme-color-success-dark` | 成功色深色变体             | `#4a9a72` |
 | `--theme-color-danger`       | 危险/错误色                | `#b07a8a` |
+| `--theme-color-error`        | 错误提示色（文案/底纹）    | `#b07a8a` |
 | `--theme-color-warning`      | 警告色                     | `#e6a23c` |
 | `--theme-color-info`         | 信息色                     | `#6ba8e0` |
+
+> **错误色**：`--theme-color-error` 用于灵动岛错误文案与设置页错误提示，未声明时回退内置奶油的浅红。颜色主题通常直接取 `--theme-color-danger` 的值；暗色主题请在深底上选取仍可辨认的变体。
 
 ### 边框与滚动条
 
@@ -73,11 +94,14 @@
 
 ### 表面色（弹窗内部）
 
-| 变量                        | 用途                   | 示例      |
-| --------------------------- | ---------------------- | --------- |
-| `--theme-surface-secondary` | 取消按钮等次要元素背景 | `#f5ede4` |
-| `--theme-surface-hover`     | 表面元素悬停态         | `#efe5d9` |
-| `--theme-text-on-accent`    | 主色按钮上的文字色     | `#ffffff` |
+| 变量                        | 用途                   | 示例                  |
+| --------------------------- | ---------------------- | --------------------- |
+| `--theme-surface-secondary` | 取消按钮等次要元素背景 | `#f5ede4`             |
+| `--theme-surface-hover`     | 表面元素悬停态         | `#efe5d9`             |
+| `--theme-overlay`           | 弹窗遮罩层             | `rgba(0, 0, 0, 0.32)` |
+| `--theme-text-on-accent`    | 主色按钮上的文字色     | `#ffffff`             |
+
+> **遮罩层**：浅色主题建议 `rgba(0, 0, 0, 0.32)` 左右，暗色主题用 `0.55` 左右，未声明时回退奶油的 30% 黑遮罩。
 
 > **注意**：暗色主题或高饱和主题中，`--theme-text-on-accent` 应设为与背景反差大的颜色（如深色背景上的浅色文字，或霓虹色上的深色文字）。
 
@@ -125,7 +149,7 @@
 ### 暗色主题
 
 - `--theme-bg` 使用深蓝/深灰（`#0d1b2a`、`#1a1a2e`）
-- `--theme-bg-card` 比背景稍亮（`#1b2838`、`#12121f`）
+- `--theme-bg-card` 比背景稍亮（`#1b2838`、`#18192a`），与背景保持约 1.12–1.15 的亮度差，否则卡片会融进背景
 - 阴影使用低透明度浅色 rgba 或光晕效果
 - `--theme-text-on-accent` 通常为 `#ffffff`
 
@@ -173,6 +197,7 @@
   --theme-color-success: #52c41a;
   --theme-color-success-dark: #45a818;
   --theme-color-danger: #f5222d;
+  --theme-color-error: #f5222d;
   --theme-color-warning: #faad14;
   --theme-color-info: #1890ff;
 
@@ -182,6 +207,7 @@
 
   --theme-surface-secondary: #f0f0f0;
   --theme-surface-hover: #e8e8e8;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #ffffff;
 
   --theme-shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.06);
@@ -207,8 +233,9 @@
 
 ## 注意事项
 
-1. **所有变量必须写在 `:root {}` 块内**，不要使用 `[data-theme]` 选择器
-2. **不要定义 `data-theme` 属性** — 外部主题通过注入 `<style>` 标签生效，不依赖 `data-theme`
+1. **颜色主题的变量必须写在 `:root {}` 块内**；风格化主题可以追加 `html[data-theme='<主题 ID>']` 组件覆盖规则，主题 ID 即文件名（如 `html[data-theme='famicom']`），应用会自动写入 `data-theme` 属性
+2. **不要自行定义其它 `data-theme` 值或修改宿主属性** — 覆盖规则只对本主题生效，其它选择器一律无效
 3. **阴影 rgba 不要用纯黑** — 建议用与文字色同源的色调，视觉上更协调
-4. **圆角和字体建议保持默认值** — 除非你的主题有特殊的视觉风格需求
-5. **文件编码** — 使用 UTF-8 编码保存
+4. **颜色主题建议保持圆角与字体默认值** — 只有风格化主题才需要改变骨架
+5. **预览面板只呈现 `:root` 变量**：`html[data-theme=...]` 覆盖规则在主题预览的 Shadow DOM 内不会生效，请以应用后的真实界面为准
+6. **文件编码** — 使用 UTF-8 编码保存

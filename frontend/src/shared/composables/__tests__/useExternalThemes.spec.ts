@@ -4,6 +4,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import {
+  extractThemeCategory,
   extractThemeLabel,
   importThemeFile,
   loadThemeCss,
@@ -36,6 +37,19 @@ describe('extractThemeLabel', () => {
   })
 })
 
+describe('extractThemeCategory', () => {
+  it('读取 @theme-category，忽略大小写与空白', () => {
+    expect(extractThemeCategory('/* @theme-category: color */\n:root {}')).toBe('color')
+    expect(extractThemeCategory('/* @theme-category:  Style  */\n:root {}')).toBe('style')
+  })
+
+  it('缺省、空值或非法取值返回 null', () => {
+    expect(extractThemeCategory(':root { --theme-bg: #fff; }')).toBeNull()
+    expect(extractThemeCategory('/* @theme-category:   */')).toBeNull()
+    expect(extractThemeCategory('/* @theme-category: fancy */')).toBeNull()
+  })
+})
+
 describe('discoverThemes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -57,6 +71,25 @@ describe('discoverThemes', () => {
     expect(new Set(names).size).toBe(names.length)
     expect(themes.find((theme) => theme.name === 'cha-yan')?.label).toBe('茶烟')
     expect(themes.find((theme) => theme.name === 'neumorphism')?.label).toBe('拟态')
+  })
+
+  it('分类读取元数据，缺省按 html[data-theme] 规则推断', async () => {
+    mockedReadDir.mockRejectedValue(new Error('asset URI not enumerable'))
+
+    const { discoverThemes } = useExternalThemes()
+    const themes = await discoverThemes()
+    const categoryOf = (name: string) => themes.find((theme) => theme.name === name)?.category
+
+    // Claude 无色骨架规则，靠显式元数据归为风格化
+    expect(categoryOf('claude')).toBe('style')
+    // 红白机 / 拟态含 html[data-theme] 覆盖规则，自动推断为风格化
+    expect(categoryOf('famicom')).toBe('style')
+    expect(categoryOf('neumorphism')).toBe('style')
+    // 赛博朋克只改投影语言，靠显式元数据归为风格化
+    expect(categoryOf('cyberpunk')).toBe('style')
+    expect(categoryOf('cyberpunk-2077')).toBe('style')
+    expect(categoryOf('cha-yan')).toBe('color')
+    expect(categoryOf('cream-vibrant')).toBe('color')
   })
 
   it('资源目录中的同名主题覆盖内置版本，其余内置主题保留', async () => {

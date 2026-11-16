@@ -1,13 +1,14 @@
 /* @theme-label: 赛博朋克 2077 */
+/* @theme-category: style */
 :root {
   /* 赛博朋克2077主题 — 游戏UI风格，黄黑高对比 */
   --theme-bg: #0b0b0b;
-  --theme-bg-card: #141414;
+  --theme-bg-card: #1b1b1b;
   --theme-bg-sidebar: linear-gradient(180deg, #101010, #0a0a0a);
-  --theme-bg-toolbar: #141414;
+  --theme-bg-toolbar: #1b1b1b;
   --theme-bg-hover: rgba(252, 238, 9, 0.07);
   --theme-bg-active: rgba(252, 238, 9, 0.12);
-  --theme-bg-tag: #1a1a1a;
+  --theme-bg-tag: #262626;
 
   --theme-text-primary: #f0f0f0;
   --theme-text-secondary: #a0a0a0;
@@ -20,6 +21,7 @@
   --theme-color-success: #00e676;
   --theme-color-success-dark: #00c864;
   --theme-color-danger: #ff1744;
+  --theme-color-error: #ff1744;
   --theme-color-warning: #fcee09;
   --theme-color-info: #00e5ff;
 
@@ -30,6 +32,7 @@
   /* 表面色 — 弹窗/卡片内部 */
   --theme-surface-secondary: #1e1e1e;
   --theme-surface-hover: #262626;
+  --theme-overlay: rgba(0, 0, 0, 0.55);
   --theme-text-on-accent: #0b0b0b;
 
   /* 阴影 — 黄色光晕 */

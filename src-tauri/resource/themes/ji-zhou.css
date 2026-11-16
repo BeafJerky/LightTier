@@ -1,7 +1,7 @@
 /* @theme-label: 极昼 */
 :root {
   /* 极昼主题 — 高对比亮色，优先可读性与无障碍 */
-  --theme-bg: #ffffff;
+  --theme-bg: #edf2f8;
   --theme-bg-card: #ffffff;
   --theme-bg-sidebar: linear-gradient(180deg, #f2f4f7, #e7ebf0);
   --theme-bg-toolbar: #ffffff;
@@ -20,6 +20,7 @@
   --theme-color-success: #1b7f3b;
   --theme-color-success-dark: #14652f;
   --theme-color-danger: #b3261e;
+  --theme-color-error: #b3261e;
   --theme-color-warning: #8a5a00;
   --theme-color-info: #005fcc;
 
@@ -30,6 +31,7 @@
   /* 表面色 — 弹窗/卡片内部 */
   --theme-surface-secondary: #eef1f5;
   --theme-surface-hover: #e2e7ee;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #ffffff;
 
   /* 阴影 — 清晰但不过重 */

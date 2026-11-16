@@ -51,6 +51,7 @@ const RGB_SOURCE_VARS = [
   '--theme-accent-secondary',
   '--theme-color-success',
   '--theme-color-danger',
+  '--theme-color-error',
   '--theme-color-warning'
 ]
 

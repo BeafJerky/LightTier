@@ -20,6 +20,7 @@
   --theme-color-success: #4a7250;
   --theme-color-success-dark: #3d5c42;
   --theme-color-danger: #a95443;
+  --theme-color-error: #a95443;
   --theme-color-warning: #b8894c;
   --theme-color-info: #6f92a0;
 
@@ -30,6 +31,7 @@
   /* 表面色 — 弹窗/卡片内部 */
   --theme-surface-secondary: #eee7da;
   --theme-surface-hover: #e4dbc9;
+  --theme-overlay: rgba(0, 0, 0, 0.32);
   --theme-text-on-accent: #fbf8f1;
 
   /* 阴影 — 茶褐色调 */

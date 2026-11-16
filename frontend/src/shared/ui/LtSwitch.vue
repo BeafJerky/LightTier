@@ -39,4 +39,13 @@ const naiveSize = computed(() => (props.size === 'md' ? 'medium' : 'small'))
 .lt-switch {
   flex-shrink: 0;
 }
+
+/*
+ * 关闭态轨道原本只取 --theme-border，在多数主题里与卡片底仅 1.3:1，
+ * 轨道边界几乎不可见。用 1px 内描边补足轮廓，不改轨道底色与整体轻盈感。
+ */
+.lt-switch:not(.n-switch--active) :deep(.n-switch__rail) {
+  outline: 1px solid var(--theme-text-muted, #c8bdb2);
+  outline-offset: -1px;
+}
 </style>

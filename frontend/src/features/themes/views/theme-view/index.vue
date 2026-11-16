@@ -95,6 +95,25 @@ watch(visible, (v) => {
   flex: 1;
 }
 
+/* 分组标题：卡片内吸顶，背景取卡片色遮住滚动条目 */
+.ntv-page :deep(.td-group) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 14px 6px;
+  font-family: var(--theme-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--theme-text-muted);
+  background: var(--theme-bg-card);
+}
+
+/* 窄屏规则隐藏计数是为桌面横向条带降级，安卓纵向卡片列表保留计数 */
+.ntv-page :deep(.td-group-count) {
+  display: inline;
+}
+
 .ntv-page :deep(.td-item) {
   min-height: 60px;
   padding: 0 14px;

@@ -61,41 +61,47 @@
           @change="onThemeFilePicked"
         />
         <div class="td-list" role="radiogroup" :aria-label="t('newLayout.theme')">
-          <label
-            v-for="th in themes"
-            :key="th.name"
-            class="td-item"
-            :class="{ active: previewName === th.name }"
-          >
-            <input
-              class="lt-sr-only"
-              type="radio"
-              name="lt-theme"
-              :value="th.name"
-              :checked="previewName === th.name"
-              @change="selectTheme(th.name)"
-            />
-            <span class="td-item-dot" :style="{ background: th.color }"></span>
-            <span class="td-item-label">{{ th.label }}</span>
-            <span v-if="th.name === defaultThemeName" class="td-item-badge">{{
-              t('newTheme.default')
-            }}</span>
-            <svg
-              v-if="previewName === th.name"
-              class="td-item-check"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+          <template v-for="group in themeGroups" :key="group.key">
+            <div class="td-group" role="presentation">
+              <span class="td-group-label">{{ group.label }}</span>
+              <span class="td-group-count">{{ group.items.length }}</span>
+            </div>
+            <label
+              v-for="th in group.items"
+              :key="th.name"
+              class="td-item"
+              :class="{ active: previewName === th.name }"
             >
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-          </label>
+              <input
+                class="lt-sr-only"
+                type="radio"
+                name="lt-theme"
+                :value="th.name"
+                :checked="previewName === th.name"
+                @change="selectTheme(th.name)"
+              />
+              <span class="td-item-dot" :style="{ background: th.color }"></span>
+              <span class="td-item-label">{{ th.label }}</span>
+              <span v-if="th.name === defaultThemeName" class="td-item-badge">{{
+                t('newTheme.default')
+              }}</span>
+              <svg
+                v-if="previewName === th.name"
+                class="td-item-check"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </label>
+          </template>
         </div>
         <LtButton
           v-if="inline"
@@ -168,7 +174,7 @@
  * （不依赖全局 :root，避免全局已切暗色时奶油预览不生效），外部主题把 :root
  * 改写为 :host 后注入；点击“应用主题”经 useThemeLoader 应用并持久化。
  */
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -177,7 +183,8 @@ import { systemDefaultTheme, useThemeLoader } from '@/shared/composables/useThem
 import {
   downloadThemeGuide,
   importThemeFile,
-  useExternalThemes
+  useExternalThemes,
+  type ThemeCategory
 } from '@/shared/composables/useExternalThemes'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { isAndroid } from '@/shared/platform/platformUtil'
@@ -225,22 +232,39 @@ interface ThemeInfo {
   name: string
   label: string
   color: string
+  category: ThemeCategory
 }
 
 const themes = ref<ThemeInfo[]>([])
+
+// 分组展示：内置两项属颜色主题；空分组（如导入前无风格化主题）不渲染标题
+const themeGroups = computed(() => {
+  const defs: { key: ThemeCategory; label: string }[] = [
+    { key: 'color', label: t('newTheme.categoryColor') },
+    { key: 'style', label: t('newTheme.categoryStyle') }
+  ]
+  return defs
+    .map((def) => ({ ...def, items: themes.value.filter((th) => th.category === def.key) }))
+    .filter((group) => group.items.length > 0)
+})
 
 onMounted(() => refreshList())
 
 // 刷新主题列表：内置 cream / dark 两项 + 外部主题
 const refreshList = async () => {
   const base: ThemeInfo[] = [
-    { name: 'cream', label: t('newTheme.cream'), color: '#fdf8f4' },
-    { name: 'dark', label: t('newTheme.dark'), color: '#0d1b2a' }
+    { name: 'cream', label: t('newTheme.cream'), color: '#fdf8f4', category: 'color' },
+    { name: 'dark', label: t('newTheme.dark'), color: '#0d1b2a', category: 'color' }
   ]
   const external = await discoverThemes()
   themes.value = [
     ...base,
-    ...external.map((t) => ({ name: t.name, label: t.label, color: t.color }))
+    ...external.map((t) => ({
+      name: t.name,
+      label: t.label,
+      color: t.color,
+      category: t.category
+    }))
   ]
   // 外部主题扫描为异步：首帧可能早于扫描完成（Android 二级页 onMounted 即打开），
   // 完成后再渲染一次，让预览用上真实的外部主题 CSS
@@ -444,6 +468,25 @@ watch(locale, () => {
   gap: var(--theme-space-1);
 }
 
+/* 分组标题：不可选，仅作视觉分隔；桌面/安卓纵向列表滚动时吸顶 */
+.td-group {
+  display: flex;
+  padding: var(--theme-space-2) var(--theme-space-2) 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--theme-text-muted, #9a8f80);
+  background: var(--theme-bg, #fdf8f4);
+  align-items: baseline;
+  gap: 6px;
+}
+
+.td-group-count {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 /* 导入 / 指南入口：桌面侧栏为竖向工具组，Android 页由 theme-view 覆盖为分组卡片 */
 .td-tools {
   display: flex;
@@ -601,6 +644,13 @@ watch(locale, () => {
     background: var(--theme-border, #ede4db);
     border-radius: 10px;
   }
+
+  /* 纵向列表：分组标题吸顶，滚动时遮住下方条目 */
+  .td-group {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
 }
 
 /* 移动端（含 Android 二级页面）：上下堆叠，主题列表转横向滚动，预览保留合理高度 */
@@ -631,6 +681,19 @@ watch(locale, () => {
   .td-item {
     flex-shrink: 0;
     white-space: nowrap;
+  }
+
+  /* 横向条带无法吸顶：分组标题降级为行内小标签，隐藏计数 */
+  .td-group {
+    position: static;
+    padding: 0 2px;
+    background: transparent;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  .td-group-count {
+    display: none;
   }
 
   .td-preview {

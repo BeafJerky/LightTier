@@ -29,6 +29,8 @@ export default {
     resetDefault: 'Reset to Default',
     applyTheme: 'Apply Theme',
     previewLabel: 'Theme Preview',
+    categoryColor: 'Color Themes',
+    categoryStyle: 'Stylized Themes',
     cream: 'Cream',
     dark: 'Dark',
     importTheme: 'Import Theme',
