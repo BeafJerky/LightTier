@@ -358,6 +358,107 @@ describe('configFormUtil', () => {
     expect((toml.parse(built) as any).flags).toEqual({ future_flag: false })
   })
 
+  it('v2.7.1 DHCP 网段写法：解析为开关+网段并原样写回', () => {
+    const content = 'dhcp = "10.14.0.0/24"'
+    const m = parseConfigFormModel(content)!
+    expect(m.formData.dhcp).toBe(true)
+    expect(m.dhcpCidr).toBe('10.14.0.0/24')
+    const parsed = roundTrip(content)
+    expect(parsed.dhcp).toBe('10.14.0.0/24')
+  })
+
+  it('DHCP 开关关闭时不写网段；布尔开启改为网段后写字符串', () => {
+    const off = roundTrip('dhcp = true', (m) => {
+      m.formData.dhcp = false
+      m.dhcpCidr = '10.0.0.0/24'
+    })
+    expect(off.dhcp).toBe(false)
+
+    const on = roundTrip('dhcp = true', (m) => {
+      m.dhcpCidr = '10.9.0.0/24'
+    })
+    expect(on.dhcp).toBe('10.9.0.0/24')
+  })
+
+  it('v2.7.1 DHCPv6：布尔与网段写法解析/写回，关闭时移除字段', () => {
+    const enabled = parseConfigFormModel('dhcpv6 = true')!
+    expect(enabled.dhcpv6Enabled).toBe(true)
+    expect(enabled.dhcpv6Cidr).toBe('')
+
+    const cidr = parseConfigFormModel('dhcpv6 = "fc00::/64"')!
+    expect(cidr.dhcpv6Enabled).toBe(true)
+    expect(cidr.dhcpv6Cidr).toBe('fc00::/64')
+    expect(roundTrip('dhcpv6 = "fc00::/64"').dhcpv6).toBe('fc00::/64')
+
+    const off = roundTrip('dhcpv6 = true', (m) => {
+      m.dhcpv6Enabled = false
+    })
+    expect(off.dhcpv6).toBeUndefined()
+  })
+
+  it('v2.7.1 Magic DNS：域名、区域、记录与 TTL=0 原样往返', () => {
+    const content = [
+      '[dns]',
+      'domain = "et.net."',
+      '[[dns.zone]]',
+      'origin = "example.test."',
+      'ttl = 0',
+      'records = [',
+      '  { name = "host", type = "A", value = "10.14.14.2", ttl = 0 },',
+      '  { name = "mail", type = "MX", value = "10 mail.example.test." }',
+      ']'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.dns.domain).toBe('et.net.')
+    expect(m.dns.zones).toHaveLength(1)
+    expect(m.dns.zones[0]).toMatchObject({ origin: 'example.test.', ttl: '0' })
+    expect(m.dns.zones[0].records[0]).toMatchObject({ name: 'host', type: 'A', ttl: '0' })
+
+    expect(roundTrip(content).dns).toEqual({
+      domain: 'et.net.',
+      zone: [
+        {
+          origin: 'example.test.',
+          ttl: 0,
+          records: [
+            { name: 'host', type: 'A', value: '10.14.14.2', ttl: 0 },
+            { name: 'mail', type: 'MX', value: '10 mail.example.test.' }
+          ]
+        }
+      ]
+    })
+  })
+
+  it('Magic DNS 空值清理：无 origin 的区域、缺 name/type/value 的记录不落盘', () => {
+    const model = emptyFormModel()
+    model.dns = {
+      domain: '',
+      zones: [
+        { origin: ' ', ttl: '10', records: [{ name: 'a', type: 'A', ttl: '', value: '1.2.3.4' }] },
+        {
+          origin: ' example.test. ',
+          ttl: 'abc',
+          records: [
+            { name: '', type: 'A', ttl: '', value: '1.2.3.4' },
+            { name: 'www', type: 'A', ttl: '', value: ' ' },
+            { name: 'www', type: 'A', ttl: ' 5 ', value: '1.2.3.4' }
+          ]
+        }
+      ]
+    }
+    const parsed = toml.parse(buildConfigFormModel(model).toml) as any
+    expect(parsed.dns).toEqual({
+      zone: [
+        { origin: 'example.test.', records: [{ name: 'www', type: 'A', value: '1.2.3.4', ttl: 5 }] }
+      ]
+    })
+  })
+
+  it('未填写任何 Magic DNS 内容时不写 [dns] 表', () => {
+    const parsed = toml.parse(buildConfigFormModel(emptyFormModel()).toml) as any
+    expect(parsed.dns).toBeUndefined()
+  })
+
   it('完整往返：解析→构建→再解析，关键字段保持一致', () => {
     const content = [
       'hostname = "node-b"',

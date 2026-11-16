@@ -369,6 +369,45 @@ export default {
     unsupportedSection: 'Not Supported by Current Kernel',
     unsupportedHint:
       'These entries exist in the config file but are unsupported or removed in {version}. The form will not modify them; they are preserved as-is on save.',
+    lblDhcpCidr: 'DHCP Subnet',
+    tipDhcpCidr:
+      'Custom DHCP address pool (IPv4 CIDR, prefix length ≤30); leave empty for the kernel default pool (v2.7.1+)',
+    lblDhcpv6: 'Enable DHCPv6',
+    tipDhcpv6: 'Enable DHCPv6 address assignment (v2.7.1+)',
+    lblDhcpv6Cidr: 'DHCPv6 Subnet',
+    tipDhcpv6Cidr:
+      'Custom DHCPv6 address pool (IPv6 CIDR, prefix length ≤126); leave empty for the kernel default pool (v2.7.1+)',
+    magicDnsSection: 'Magic DNS',
+    dnsTip:
+      'Serve DNS resolution inside the virtual network (v2.7.1+). The default domain falls back to et.net. when empty; record values use RDATA text, e.g. "10 mail" for MX or "10 5 5060 sip" for SRV.',
+    dnsDomain: 'Default Domain',
+    dnsDomainPlaceholder: 'et.net.',
+    dnsOrigin: 'Zone Origin',
+    dnsOriginPlaceholder: 'example.test.',
+    dnsTtl: 'TTL (seconds)',
+    dnsRecords: 'Records',
+    dnsRecordName: 'Record Name',
+    dnsRecordType: 'Type',
+    dnsRecordValue: 'Record Value',
+    dnsAddZone: 'Add Zone',
+    dnsAddRecord: 'Add Record',
+    dnsRemoveZone: 'Remove Zone',
+    dnsRemoveRecord: 'Remove Record',
+    dnsEmptyHint:
+      'No zones added. If you only need the default domain, fill in the domain field above.',
+    lblCompressAlgo: 'Compression Algorithm',
+    tipCompressAlgo:
+      'Data compression algorithm; leave it at the kernel default (Lzo is supported from v2.7.1)',
+    compressDefault: 'Kernel Default',
+    compressNone: 'None',
+    compressZstd: 'Zstd',
+    compressLzo: 'Lzo (v2.7.1+)',
+    lblUdpFec: 'UDP FEC',
+    tipUdpFec: 'Enable forward error correction for UDP traffic (v2.7.1+)',
+    lblUdpFecKcp: 'UDP FEC (KCP)',
+    tipUdpFecKcp: 'Enable UDP forward error correction for KCP traffic (v2.7.1+)',
+    lblUdpFecQuic: 'UDP FEC (QUIC)',
+    tipUdpFecQuic: 'Enable UDP forward error correction for QUIC traffic (v2.7.1+)',
     pickFile: 'Pick File',
     showSecret: 'Show',
     hideSecret: 'Hide',
@@ -500,7 +539,11 @@ export default {
     fieldIgnoredSince:
       '{field} is no longer read from config files since {since}; the current kernel {version} ignores it (use CLI arguments instead)',
     rpcPortalCliOnly:
-      'rpc_portal is no longer read from config files since {since}; LightTier passes it as the --rpc-portal CLI argument on desktop (not applicable on Android)'
+      'rpc_portal is no longer read from config files since {since}; LightTier passes it as the --rpc-portal CLI argument on desktop (not applicable on Android)',
+    dhcpCidrNeedsVersion:
+      'dhcp subnet notation requires {since} or later; the current kernel {version} only accepts a boolean and may refuse to start',
+    compressAlgoNeedsVersion:
+      'Compression algorithm {algo} requires {since} or later; the current kernel {version} does not support it and may refuse to start'
   },
   newWebConfig: {
     addConfig: 'New Configuration',

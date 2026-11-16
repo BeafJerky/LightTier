@@ -178,6 +178,14 @@ export const collectUnsupportedConfigEntries = (
     })
   })
 
+  // dhcp 在 v2.7.1 起兼容 CIDR 字符串；旧内核只接受布尔值，字符串会导致解析失败
+  if (
+    typeof (config as Record<string, unknown>).dhcp === 'string' &&
+    compareCoreVersion(caps.version, 'v2.7.1') < 0
+  ) {
+    result.topLevel.dhcp = (config as Record<string, unknown>).dhcp
+  }
+
   return result
 }
 
@@ -305,6 +313,25 @@ export const checkConfigCompat = (config: unknown, version: string | null): Comp
       })
     })
   })
+
+  // === 压缩算法枚举（Lzo 自 v2.7.1 起才存在） ===
+  // 旧内核的 CompressionAlgoPb 没有 Lzo，写入该值会被内核拒绝
+  if (isPlainObject(config.flags)) {
+    const algo = config.flags.data_compress_algo
+    if (algo === 'Lzo' && !versionAtLeast(caps.version, 'v2.7.1')) {
+      push('error', 'compressAlgoNeedsVersion', {
+        algo,
+        since: 'v2.7.1',
+        version: caps.version
+      })
+    }
+  }
+
+  // === dhcp 网段写法（v2.7.1+） ===
+  // 旧内核按布尔解析 dhcp，字符串会直接导致配置解析失败
+  if (typeof config.dhcp === 'string' && !versionAtLeast(caps.version, 'v2.7.1')) {
+    push('error', 'dhcpCidrNeedsVersion', { since: 'v2.7.1', version: caps.version })
+  }
 
   // === peer_public_key（v2.6.0+） ===
   if (!versionAtLeast(caps.version, 'v2.6.0') && Array.isArray(config.peer)) {

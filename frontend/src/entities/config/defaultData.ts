@@ -77,6 +77,9 @@ const defaultFormData: EasyTierFormData | any = {
     enable_udp_broadcast_relay: undefined, // 启用 UDP 广播中继
     disable_relay_kcp: undefined, // 禁止转发 KCP 数据包
     disable_relay_quic: undefined, // 禁止转发 QUIC 数据包
+    enable_udp_fec: undefined, // 启用 UDP FEC（v2.7.1+）
+    enable_udp_fec_kcp: undefined, // KCP 数据包启用 UDP FEC（v2.7.1+）
+    enable_udp_fec_quic: undefined, // QUIC 数据包启用 UDP FEC（v2.7.1+）
     disable_relay_data: undefined, // 禁止转发数据包（v2.6.3+）
     prefer_peer_relay: undefined, // 优先 Peer 中继（v2.7.0+）
     enable_relay_foreign_network_kcp: undefined, // 允许转发外部网络 KCP
@@ -90,7 +93,7 @@ const defaultFormData: EasyTierFormData | any = {
  */
 export interface AdvancedFieldDef {
   key: string
-  type: 'text' | 'switch'
+  type: 'text' | 'switch' | 'select'
   labelKey: string // i18n key，字段标签
   tooltipKey?: string // i18n key，title 属性挂 tooltip
   secret?: boolean // 敏感字段：回显掩码、保存写回原值
@@ -98,6 +101,8 @@ export interface AdvancedFieldDef {
   secureMode?: boolean // true: 位于 [secure_mode] 表内；false/缺省: 顶层字段
   feature?: CoreFeature // 所属内核功能：当前内核不支持时归入“当前内核未兼容”栏
   defaultValue?: boolean // 内核默认值（缺省 false）；用于缺省未写配置时的开关显示
+  /** 下拉选项（type: 'select'）；value 为落盘的 flags 字符串值，空串表示使用内核默认 */
+  options?: ReadonlyArray<{ value: string; labelKey: string; feature?: CoreFeature }>
 }
 
 /**
@@ -134,8 +139,21 @@ export const SECURITY_FIELD_DEFS: AdvancedFieldDef[] = [
   }
 ]
 
+// 数据压缩算法（flags.data_compress_algo，TOML 值为枚举字符串）
+// 空串表示不写该字段、使用内核默认值（v2.7.1 为 None）；LZO 自 v2.7.1 起提供
+export const COMPRESSION_ALGO_OPTIONS: ReadonlyArray<{
+  value: string
+  labelKey: string
+  feature?: CoreFeature
+}> = [
+  { value: '', labelKey: 'newEdit.compressDefault' },
+  { value: 'None', labelKey: 'newEdit.compressNone' },
+  { value: 'Zstd', labelKey: 'newEdit.compressZstd' },
+  { value: 'Lzo', labelKey: 'newEdit.compressLzo', feature: 'compressLzo' }
+]
+
 // 高级选项（flags 内布尔开关，2 列网格）
-// 覆盖内核 2.4.5 ~ 2.7.0 的全部布尔 flags；非布尔 flags 仍由“自定义 Flags”编辑。
+// 覆盖内核 2.4.5 ~ 2.7.1 的常用布尔 flags；其余 flags 仍由“自定义 Flags”编辑。
 // defaultValue 与 EasyTier 内核 gen_default_flags() 保持一致：缺省未写时按内核默认显示。
 export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
   {
@@ -151,6 +169,13 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     labelKey: 'newEdit.lblEnableEncryption',
     tooltipKey: 'newEdit.tipEnableEncryption',
     defaultValue: true
+  },
+  {
+    key: 'data_compress_algo',
+    type: 'select',
+    labelKey: 'newEdit.lblCompressAlgo',
+    tooltipKey: 'newEdit.tipCompressAlgo',
+    options: COMPRESSION_ALGO_OPTIONS
   },
   {
     key: 'enable_ipv6',
@@ -309,6 +334,24 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     type: 'switch',
     labelKey: 'newEdit.lblDisableRelayQuic',
     tooltipKey: 'newEdit.tipDisableRelayQuic'
+  },
+  {
+    key: 'enable_udp_fec',
+    type: 'switch',
+    labelKey: 'newEdit.lblUdpFec',
+    tooltipKey: 'newEdit.tipUdpFec'
+  },
+  {
+    key: 'enable_udp_fec_kcp',
+    type: 'switch',
+    labelKey: 'newEdit.lblUdpFecKcp',
+    tooltipKey: 'newEdit.tipUdpFecKcp'
+  },
+  {
+    key: 'enable_udp_fec_quic',
+    type: 'switch',
+    labelKey: 'newEdit.lblUdpFecQuic',
+    tooltipKey: 'newEdit.tipUdpFecQuic'
   },
   {
     key: 'enable_relay_foreign_network_quic',

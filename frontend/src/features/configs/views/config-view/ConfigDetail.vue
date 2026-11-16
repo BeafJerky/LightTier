@@ -77,8 +77,26 @@
           <div class="nw-field"
             ><span class="nw-label">DHCP</span
             ><span class="nw-val">{{
-              selectedDetail.dhcp ? t('newConfig.dhcpEnabled') : t('newConfig.dhcpDisabled')
+              selectedDetail.dhcp === false
+                ? t('newConfig.dhcpDisabled')
+                : typeof selectedDetail.dhcp === 'string'
+                  ? selectedDetail.dhcp
+                  : t('newConfig.dhcpEnabled')
             }}</span></div
+          >
+          <div v-if="selectedDetail.dhcpv6 !== undefined" class="nw-field"
+            ><span class="nw-label">{{ t('newEdit.lblDhcpv6') }}</span
+            ><span class="nw-val">{{
+              selectedDetail.dhcpv6 === false
+                ? t('newConfig.dhcpDisabled')
+                : typeof selectedDetail.dhcpv6 === 'string'
+                  ? selectedDetail.dhcpv6
+                  : t('newConfig.dhcpEnabled')
+            }}</span></div
+          >
+          <div v-if="selectedDetail.dns" class="nw-field"
+            ><span class="nw-label">{{ t('newEdit.dnsDomain') }}</span
+            ><span class="nw-val">{{ selectedDetail.dns.domain || 'et.net.' }}</span></div
           >
           <div class="nw-field"
             ><span class="nw-label">{{ t('newConfig.rpcPortal') }}</span

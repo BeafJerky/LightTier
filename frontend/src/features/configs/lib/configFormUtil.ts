@@ -43,10 +43,113 @@ export interface ConfigFormModel {
   flagsVals: string[]
   networkName: string
   networkSecret: string
+  /** DHCP 网段（v2.7.1+，如 10.0.0.0/24）；空串表示使用 dhcp 布尔值 */
+  dhcpCidr: string
+  /** DHCPv6 开关与网段（v2.7.1+，顶层 dhcpv6 字段） */
+  dhcpv6Enabled: boolean
+  dhcpv6Cidr: string
+  /** Magic DNS（v2.7.1+，顶层 [dns] 表）；zone/record 的 ttl 以文本编辑，落盘转数字 */
+  dns: DnsForm
   /** 当前内核不支持的 flags：只读展示、保存时原样写回，不进入自定义 Flags 编辑 */
   lockedFlags?: Record<string, any>
   /** 当前内核不支持/已移除的顶层字段：只读展示、保存时原样写回 */
   lockedTopLevel?: Record<string, any>
+}
+
+/** Magic DNS 记录（表单形态：ttl 为输入框文本） */
+export interface DnsRecordForm {
+  name: string
+  type: string
+  ttl: string
+  value: string
+}
+
+/** Magic DNS 静态区域（表单形态） */
+export interface DnsZoneForm {
+  origin: string
+  ttl: string
+  records: DnsRecordForm[]
+}
+
+/** Magic DNS 表单：域名 + 静态区域 */
+export interface DnsForm {
+  domain: string
+  zones: DnsZoneForm[]
+}
+
+export const emptyDnsRecord = (): DnsRecordForm => ({ name: '', type: 'A', ttl: '', value: '' })
+export const emptyDnsZone = (): DnsZoneForm => ({ origin: '', ttl: '', records: [] })
+export const emptyDnsForm = (): DnsForm => ({ domain: '', zones: [] })
+
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** TTL 文本 → 非负整数；空值/非法值返回 undefined（不落盘） */
+const parseTtlText = (raw: unknown): number | undefined => {
+  const text = typeof raw === 'string' ? raw.trim() : typeof raw === 'number' ? String(raw) : ''
+  if (!text) return undefined
+  const value = Number(text)
+  return Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+/** 已解析的 [dns] 表 → 表单形态；非法/缺失结构回退空表单 */
+const parseDnsForm = (raw: unknown): DnsForm => {
+  if (!isPlainObject(raw)) return emptyDnsForm()
+  const zones: DnsZoneForm[] = Array.isArray(raw.zone)
+    ? raw.zone.filter(isPlainObject).map((zone) => ({
+        origin: typeof zone.origin === 'string' ? zone.origin : '',
+        ttl: typeof zone.ttl === 'number' || typeof zone.ttl === 'string' ? String(zone.ttl) : '',
+        records: Array.isArray(zone.records)
+          ? zone.records.filter(isPlainObject).map((record) => ({
+              name: typeof record.name === 'string' ? record.name : '',
+              type: typeof record.type === 'string' ? record.type : 'A',
+              ttl:
+                typeof record.ttl === 'number' || typeof record.ttl === 'string'
+                  ? String(record.ttl)
+                  : '',
+              value:
+                typeof record.value === 'string'
+                  ? record.value
+                  : record.value === undefined
+                    ? ''
+                    : String(record.value)
+            }))
+          : []
+      }))
+    : []
+  return { domain: typeof raw.domain === 'string' ? raw.domain : '', zones }
+}
+
+/** 表单形态 → TOML [dns] 表；无域名且无有效区域时返回 undefined（不落盘空表） */
+const buildDnsToml = (form: DnsForm | undefined): Record<string, any> | undefined => {
+  const domain = typeof form?.domain === 'string' ? form.domain.trim() : ''
+  const zones = (Array.isArray(form?.zones) ? form!.zones : [])
+    .map((zone) => {
+      const origin = typeof zone.origin === 'string' ? zone.origin.trim() : ''
+      // origin 为内核必填：未填写时整段跳过，避免写出会被拒绝的空区域
+      if (!origin) return null
+      const output: Record<string, any> = { origin }
+      const ttl = parseTtlText(zone.ttl)
+      if (ttl !== undefined) output.ttl = ttl
+      const records = (Array.isArray(zone.records) ? zone.records : [])
+        .map((record) => {
+          const name = typeof record.name === 'string' ? record.name.trim() : ''
+          const type = typeof record.type === 'string' ? record.type.trim() : ''
+          const value = typeof record.value === 'string' ? record.value : ''
+          // name / type / value 均为内核必填（RDATA 缺失会拒绝启动）：未填完整时跳过该行
+          if (!name || !type || !value.trim()) return null
+          const item: Record<string, any> = { name, type, value }
+          const recordTtl = parseTtlText(record.ttl)
+          if (recordTtl !== undefined) item.ttl = recordTtl
+          return item
+        })
+        .filter((record): record is Record<string, any> => record !== null)
+      if (records.length) output.records = records
+      return output
+    })
+    .filter((zone): zone is Record<string, any> => zone !== null)
+  if (!domain && zones.length === 0) return undefined
+  return { ...(domain ? { domain } : {}), ...(zones.length ? { zone: zones } : {}) }
 }
 
 /**
@@ -72,7 +175,10 @@ const MODELED_TOP_LEVEL_KEYS = new Set([
   'exit_nodes',
   'ipv6_public_addr_provider',
   'ipv6_public_addr_auto',
-  'ipv6_public_addr_prefix'
+  'ipv6_public_addr_prefix',
+  // v2.7.1：Magic DNS 与 DHCPv6（编辑形态分别为 dns / dhcpv6Enabled + dhcpv6Cidr）
+  'dns',
+  'dhcpv6'
 ])
 
 /** 空表单模型（字段默认值与 EditDialog 初始状态一致） */
@@ -101,6 +207,10 @@ export const emptyFormModel = (): ConfigFormModel => ({
   flagsVals: [],
   networkName: '',
   networkSecret: '',
+  dhcpCidr: '',
+  dhcpv6Enabled: false,
+  dhcpv6Cidr: '',
+  dns: emptyDnsForm(),
   lockedFlags: {},
   lockedTopLevel: {}
 })
@@ -115,10 +225,12 @@ export const parseConfigFormModel = (content: string): ConfigFormModel | null =>
     // 旧版 LightTier 私有标记迁移到 [lighttier]，避免暴露为可编辑的自定义 Flag
     migrateLightTierConfig(parsed)
     const model = emptyFormModel()
+    // v2.7.1 起 dhcp 可为布尔或 IPv4 CIDR 字符串：字符串视为“已启用 + 指定网段”
+    const dhcpRaw = parsed.dhcp
     model.formData = {
       hostname: parsed.hostname || '',
       instance_name: parsed.instance_name || '',
-      dhcp: parsed.dhcp !== undefined ? parsed.dhcp : true,
+      dhcp: typeof dhcpRaw === 'boolean' ? dhcpRaw : true,
       rpc_portal: parsed.rpc_portal || '',
       network_identity: parsed.network_identity || {},
       flags: { ...(parsed.flags || {}) },
@@ -126,6 +238,12 @@ export const parseConfigFormModel = (content: string): ConfigFormModel | null =>
       ipv6_public_addr_auto: parsed.ipv6_public_addr_auto === true,
       ipv6_public_addr_prefix: parsed.ipv6_public_addr_prefix || ''
     }
+    model.dhcpCidr = typeof dhcpRaw === 'string' ? dhcpRaw : ''
+    // v2.7.1 顶层 dhcpv6：布尔或 IPv6 CIDR 字符串
+    const dhcpv6Raw = parsed.dhcpv6
+    model.dhcpv6Enabled = dhcpv6Raw === true || typeof dhcpv6Raw === 'string'
+    model.dhcpv6Cidr = typeof dhcpv6Raw === 'string' ? dhcpv6Raw : ''
+    model.dns = parseDnsForm(parsed.dns)
     // 未建模的顶层键与表原样透传：[lighttier]、vpn_portal_config、proxy_network、
     // port_forward、source、managed_credentials 等，避免表单保存时丢数据
     Object.entries(parsed).forEach(([key, value]) => {
@@ -260,6 +378,22 @@ export const buildConfigFormModel = (
       : ''
   if (ipv6Prefix) data.ipv6_public_addr_prefix = ipv6Prefix
   else delete data.ipv6_public_addr_prefix
+  // DHCP（v2.7.1+ 支持网段写法）：有关闭开关时写 false；填写网段时写 CIDR 字符串；
+  // 否则沿用布尔 true（现有行为：默认写出 dhcp = true）
+  const dhcpCidr = typeof model.dhcpCidr === 'string' ? model.dhcpCidr.trim() : ''
+  if (model.formData.dhcp === false) data.dhcp = false
+  else data.dhcp = dhcpCidr || true
+  // DHCPv6（v2.7.1+ 顶层字段）：开启时写 true 或 IPv6 网段；关闭时不落盘
+  if (model.dhcpv6Enabled === true) {
+    const dhcpv6Cidr = typeof model.dhcpv6Cidr === 'string' ? model.dhcpv6Cidr.trim() : ''
+    data.dhcpv6 = dhcpv6Cidr || true
+  } else {
+    delete data.dhcpv6
+  }
+  // Magic DNS（v2.7.1+ 顶层 [dns] 表）：无域名且无有效区域时不落盘
+  const dnsToml = buildDnsToml(model.dns)
+  if (dnsToml) data.dns = dnsToml
+  else delete data.dns
   // rpc_portal：空值不落盘。该字段自 v2.5.0 起已从配置移除（改走 CLI），
   // 新增配置默认不展示它，不能因表单空值写出一个被内核忽略的字段
   const rpcPortal = typeof data.rpc_portal === 'string' ? data.rpc_portal.trim() : ''

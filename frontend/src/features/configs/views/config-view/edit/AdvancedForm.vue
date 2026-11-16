@@ -16,7 +16,17 @@
           :title="f.tooltipKey ? t(f.tooltipKey) : f.key"
           >{{ t(f.labelKey) }}</label
         >
-        <div class="ed-form-switch-wrap">
+        <!-- 下拉型 flags（如 data_compress_algo）：空值表示不写字段、使用内核默认 -->
+        <LtSelect
+          v-if="f.type === 'select'"
+          :model-value="(formData.flags?.[f.key] as string) ?? ''"
+          :options="selectOptionsFor(f)"
+          variant="outline"
+          size="sm"
+          :aria-label="t(f.labelKey)"
+          @update:model-value="setAdvancedSelect(f, $event)"
+        />
+        <div v-else class="ed-form-switch-wrap">
           <LtSwitch
             :model-value="isAdvancedFlagOn(f)"
             :aria-label="t(f.labelKey)"
@@ -152,9 +162,10 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
+import { LtButton, LtInput, LtSelect, LtSwitch } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { injectRequired } from '@/shared/lib/inject'
+import type { AdvancedFieldDef } from '@/entities/config/defaultData'
 import { CONFIG_EDITOR_KEY } from './context'
 
 defineOptions({ name: 'ConfigAdvancedForm' })
@@ -171,6 +182,8 @@ const {
   formStunServers,
   isAdvancedFlagOn,
   toggleAdvancedFlag,
+  visibleSelectOptions,
+  setAdvancedSelect,
   toggleTopSwitch,
   securitySectionVisible,
   secureModeEnabled,
@@ -182,6 +195,10 @@ const {
   pickCredentialFile,
   lockedEntries
 } = injectRequired(CONFIG_EDITOR_KEY, 'ConfigAdvancedForm')
+
+/** 下拉选项：按当前内核版本过滤后映射为 NSelect 的 label/value */
+const selectOptionsFor = (f: AdvancedFieldDef) =>
+  visibleSelectOptions(f).map((o) => ({ label: t(o.labelKey), value: o.value }))
 </script>
 
 <style scoped lang="less">

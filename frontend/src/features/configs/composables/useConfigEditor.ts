@@ -17,8 +17,10 @@ import { isValidConfigName } from '@/shared/lib/configNameUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import {
   buildConfigFormModel,
+  emptyDnsForm,
   parseConfigFormModel,
-  type ConfigFormModel
+  type ConfigFormModel,
+  type DnsForm
 } from '@/features/configs/lib/configFormUtil'
 import {
   CONFIG_TEMPLATES,
@@ -144,6 +146,11 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
 
   const formDataNetworkName = ref('')
   const formDataNetworkSecret = ref('')
+  // v2.7.1：DHCP 网段 / DHCPv6 / Magic DNS（UI 形态，保存时由 configFormUtil 转 TOML）
+  const formDhcpCidr = ref('')
+  const formDhcpv6Enabled = ref(false)
+  const formDhcpv6Cidr = ref('')
+  const formDns = ref<DnsForm>(emptyDnsForm())
 
   // ===== 未保存修改检测 =====
   // 表单模式以内容快照比较（避免逐事件接线）；代码模式直接比较原文；名称变化同样视为修改
@@ -161,6 +168,10 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       flagVals: formFlagsVals.value,
       networkName: formDataNetworkName.value,
       networkSecret: formDataNetworkSecret.value,
+      dhcpCidr: formDhcpCidr.value,
+      dhcpv6Enabled: formDhcpv6Enabled.value,
+      dhcpv6Cidr: formDhcpv6Cidr.value,
+      dns: formDns.value,
       secretDisplays: secretDisplays.value
     })
 
@@ -246,6 +257,16 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
           delete model.secretBackup.local_private_key
           delete model.formData.local_public_key
         }
+        // v2.7.1 之前的 dhcp 只接受布尔值：网段写法归入未兼容栏并清空表单值，避免被改写成 true
+        if (lockedTopKeys.has('dhcp')) {
+          delete model.formData.dhcp
+          model.dhcpCidr = ''
+        }
+        if (lockedTopKeys.has('dhcpv6')) {
+          model.dhcpv6Enabled = false
+          model.dhcpv6Cidr = ''
+        }
+        if (lockedTopKeys.has('dns')) model.dns = emptyDnsForm()
       }
     } catch {
       /* parseConfigFormModel 已成功解析，忽略重复解析异常 */
@@ -265,6 +286,10 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formFlagsVals.value = [...model.flagsVals]
     formDataNetworkName.value = model.networkName
     formDataNetworkSecret.value = model.networkSecret
+    formDhcpCidr.value = model.dhcpCidr
+    formDhcpv6Enabled.value = model.dhcpv6Enabled
+    formDhcpv6Cidr.value = model.dhcpv6Cidr
+    formDns.value = model.dns
     return true
   }
 
@@ -285,6 +310,10 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     flagsVals: formFlagsVals.value,
     networkName: formDataNetworkName.value,
     networkSecret: formDataNetworkSecret.value,
+    dhcpCidr: formDhcpCidr.value,
+    dhcpv6Enabled: formDhcpv6Enabled.value,
+    dhcpv6Cidr: formDhcpv6Cidr.value,
+    dns: formDns.value,
     lockedFlags: formLockedFlags.value,
     lockedTopLevel: formLockedTop.value
   })
@@ -310,6 +339,21 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   )
   const visibleTopSwitchDefs = computed(() => ADVANCED_TOP_SWITCH_DEFS.filter(supportsDef))
   const visibleTopTextDefs = computed(() => ADVANCED_TOP_TEXT_DEFS.filter(supportsDef))
+  // v2.7.1 字段门控：旧内核隐藏可编辑控件；配置中已有的值由未兼容栏原样保留
+  // dhcp 本身被锁定（旧内核的网段写法）：隐藏开关，避免编辑了保存时又被锁定值覆盖
+  const dhcpLocked = computed(() => lockedTopKeys.value.has('dhcp'))
+  const dhcpCidrSupported = computed(
+    () => isCoreFeatureSupported('dhcpCidr', store.coreCaps) && !dhcpLocked.value
+  )
+  const dhcpv6Supported = computed(
+    () => isCoreFeatureSupported('dhcpv6', store.coreCaps) && !lockedTopKeys.value.has('dhcpv6')
+  )
+  const dnsSupported = computed(
+    () => isCoreFeatureSupported('magicDns', store.coreCaps) && !lockedTopKeys.value.has('dns')
+  )
+  // 下拉选项按内核功能过滤（如 LZO 仅 v2.7.1+）
+  const visibleSelectOptions = (f: AdvancedFieldDef) =>
+    (f.options ?? []).filter((o) => !o.feature || isCoreFeatureSupported(o.feature, store.coreCaps))
   const visibleSecurityFieldDefs = computed(() =>
     SECURITY_FIELD_DEFS.filter((f) => !lockedTopKeys.value.has(f.key))
   )
@@ -399,6 +443,14 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   // 顶层布尔字段（如 ipv6_public_addr_provider）：false 时不落盘
   const toggleTopSwitch = (key: string) => {
     formData.value[key] = formData.value[key] !== true
+  }
+
+  // 高级下拉（如 data_compress_algo）：空值表示使用内核默认，不落盘
+  const setAdvancedSelect = (f: AdvancedFieldDef, value: string | number | null) => {
+    if (!formData.value.flags) formData.value.flags = {}
+    const text = typeof value === 'string' ? value : ''
+    if (text) formData.value.flags[f.key] = text
+    else delete formData.value.flags[f.key]
   }
 
   // 敏感字段输入：掩码未被修改时保持占位，用户输入即视为新值
@@ -681,11 +733,21 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formFlagsVals,
     formDataNetworkName,
     formDataNetworkSecret,
+    formDhcpCidr,
+    formDhcpv6Enabled,
+    formDhcpv6Cidr,
+    formDns,
     visibleAdvancedFlagDefs,
     visibleTopSwitchDefs,
     visibleTopTextDefs,
     visibleSecurityFieldDefs,
     securitySectionVisible,
+    dhcpLocked,
+    dhcpCidrSupported,
+    dhcpv6Supported,
+    dnsSupported,
+    visibleSelectOptions,
+    setAdvancedSelect,
     lockedEntries,
     rpcPortalSupported,
     showRpcPortal,

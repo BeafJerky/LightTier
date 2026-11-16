@@ -130,7 +130,12 @@ type EasyTierConfig = {
   machine_id?: string
   ipv4: string
   ipv6?: string
-  dhcp: boolean
+  /** v2.7.1 起兼容 IPv4 CIDR 字符串，旧版内核只接受布尔值 */
+  dhcp: boolean | string
+  /** v2.7.1 起支持；bool 或 IPv6 CIDR 字符串 */
+  dhcpv6?: boolean | string
+  /** v2.7.1 Magic DNS（[dns] 表） */
+  dns?: Record<string, unknown>
   network_identity: NetworkIdentity
   listeners: string
   exit_nodes: string[]

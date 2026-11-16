@@ -81,6 +81,36 @@ describe('kernelCompatUtil / 能力推导', () => {
     expect(caps.serviceCoreArgs).toBe('named')
   })
 
+  it('v2.7.1：新增 UDP FEC flags，累计 46 个', () => {
+    const caps = resolveCoreCapabilities('v2.7.1')!
+    expect(caps.known).toBe(true)
+    expect(caps.flags!.has('enable_udp_fec')).toBe(true)
+    expect(caps.flags!.has('enable_udp_fec_kcp')).toBe(true)
+    expect(caps.flags!.has('enable_udp_fec_quic')).toBe(true)
+    expect(caps.flags!.size).toBe(46)
+    expect(caps.flagsStrict).toBe(true)
+  })
+
+  it('v2.7.1 新顶层字段：dns / dhcpv6 在 v2.7.0 提示需要升级，v2.7.1 不提示', () => {
+    const config = {
+      dns: { domain: 'lan.example.com', zone: [] },
+      dhcpv6: true
+    }
+    expect(checkConfigCompat(config, 'v2.7.0')).toEqual([
+      {
+        level: 'warning',
+        code: 'fieldNeedsVersion',
+        params: { field: 'dns', since: 'v2.7.1', version: 'v2.7.0' }
+      },
+      {
+        level: 'warning',
+        code: 'fieldNeedsVersion',
+        params: { field: 'dhcpv6', since: 'v2.7.1', version: 'v2.7.0' }
+      }
+    ])
+    expect(checkConfigCompat(config, 'v2.7.1')).toEqual([])
+  })
+
   it('高于最高已知版本：跳过 flags 白名单校验（避免误报未来新增键）', () => {
     const caps = resolveCoreCapabilities('v2.8.0')!
     expect(caps.known).toBe(false)
@@ -131,6 +161,33 @@ describe('kernelCompatUtil / 未兼容配置项收集', () => {
     )
     expect(entries.flags).toEqual({})
     expect(entries.topLevel).toEqual({ rpc_portal_whitelist: ['127.0.0.1/32'] })
+  })
+
+  it('Lzo 压缩算法：v2.7.0 报错，v2.7.1 放行；Zstd 不受影响', () => {
+    const lzo = { flags: { data_compress_algo: 'Lzo' } }
+    expect(checkConfigCompat(lzo, 'v2.7.0')).toContainEqual({
+      level: 'error',
+      code: 'compressAlgoNeedsVersion',
+      params: { algo: 'Lzo', since: 'v2.7.1', version: 'v2.7.0' }
+    })
+    expect(checkConfigCompat(lzo, 'v2.7.1')).toEqual([])
+    expect(checkConfigCompat({ flags: { data_compress_algo: 'Zstd' } }, 'v2.4.5')).toEqual([])
+  })
+
+  it('dhcp 网段写法：v2.6.4 归入未兼容并报错，v2.7.1 正常放行', () => {
+    const config = { dhcp: '10.0.0.0/24' }
+    expect(
+      collectUnsupportedConfigEntries(config, resolveCoreCapabilities('v2.6.4')).topLevel
+    ).toEqual({ dhcp: '10.0.0.0/24' })
+    expect(
+      collectUnsupportedConfigEntries(config, resolveCoreCapabilities('v2.7.1')).topLevel
+    ).toEqual({})
+    expect(checkConfigCompat(config, 'v2.6.4')).toContainEqual({
+      level: 'error',
+      code: 'dhcpCidrNeedsVersion',
+      params: { since: 'v2.7.1', version: 'v2.6.4' }
+    })
+    expect(checkConfigCompat(config, 'v2.7.1')).toEqual([])
   })
 
   it('未知版本/null 能力集不锁定任何项（宽松降级，避免误伤）', () => {

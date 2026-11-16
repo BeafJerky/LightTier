@@ -52,11 +52,49 @@
           placeholder="network_secret"
         />
       </div>
-      <div class="ed-form-field ed-form-field--switch">
+      <div v-if="!dhcpLocked" class="ed-form-field ed-form-field--switch">
         <label class="ed-form-label" :for="fieldId('dhcp')">DHCP</label>
         <div class="ed-form-switch-wrap">
           <LtSwitch v-model="formData.dhcp" aria-label="DHCP" />
         </div>
+      </div>
+      <!-- v2.7.1：DHCP 网段写法（留空使用内核默认地址池） -->
+      <div v-if="dhcpCidrSupported && formData.dhcp" class="ed-form-field">
+        <label
+          class="ed-form-label"
+          :for="fieldId('dhcp_cidr')"
+          :title="t('newEdit.tipDhcpCidr')"
+          >{{ t('newEdit.lblDhcpCidr') }}</label
+        >
+        <LtInput
+          v-model="formDhcpCidr"
+          variant="outline"
+          :aria-label="t('newEdit.lblDhcpCidr')"
+          placeholder="10.0.0.0/24"
+        />
+      </div>
+      <!-- v2.7.1：DHCPv6（顶层 dhcpv6 字段） -->
+      <div v-if="dhcpv6Supported" class="ed-form-field ed-form-field--switch">
+        <label class="ed-form-label" :for="fieldId('dhcpv6')" :title="t('newEdit.tipDhcpv6')">{{
+          t('newEdit.lblDhcpv6')
+        }}</label>
+        <div class="ed-form-switch-wrap">
+          <LtSwitch v-model="formDhcpv6Enabled" :aria-label="t('newEdit.lblDhcpv6')" />
+        </div>
+      </div>
+      <div v-if="dhcpv6Supported && formDhcpv6Enabled" class="ed-form-field">
+        <label
+          class="ed-form-label"
+          :for="fieldId('dhcpv6_cidr')"
+          :title="t('newEdit.tipDhcpv6Cidr')"
+          >{{ t('newEdit.lblDhcpv6Cidr') }}</label
+        >
+        <LtInput
+          v-model="formDhcpv6Cidr"
+          variant="outline"
+          :aria-label="t('newEdit.lblDhcpv6Cidr')"
+          placeholder="fc00::/64"
+        />
       </div>
       <div v-if="showRpcPortal" class="ed-form-field">
         <label
@@ -243,6 +281,12 @@ const {
   formData,
   formDataNetworkName,
   formDataNetworkSecret,
+  formDhcpCidr,
+  formDhcpv6Enabled,
+  formDhcpv6Cidr,
+  dhcpLocked,
+  dhcpCidrSupported,
+  dhcpv6Supported,
   showRpcPortal,
   rpcPortalSupported,
   unsupportedTitle,

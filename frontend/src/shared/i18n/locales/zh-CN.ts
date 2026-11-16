@@ -358,6 +358,42 @@ export default {
     unsupportedSection: '当前内核不支持',
     unsupportedHint:
       '以下配置项存在于配置文件中，但当前内核 {version} 不支持或已移除；表单不会修改它们，保存时原样保留。',
+    lblDhcpCidr: 'DHCP 网段',
+    tipDhcpCidr: '自定义 DHCP 地址池（IPv4 CIDR，前缀长度 ≤30）；留空使用内核默认地址池（v2.7.1+）',
+    lblDhcpv6: '启用 DHCPv6',
+    tipDhcpv6: '启用 DHCPv6 地址下发（v2.7.1+）',
+    lblDhcpv6Cidr: 'DHCPv6 网段',
+    tipDhcpv6Cidr:
+      '自定义 DHCPv6 地址池（IPv6 CIDR，前缀长度 ≤126）；留空使用内核默认地址池（v2.7.1+）',
+    magicDnsSection: 'Magic DNS',
+    dnsTip:
+      '在虚拟网络中提供 DNS 解析（v2.7.1+）。域名留空时使用 et.net.；记录值按 RDATA 文本填写，如 MX 填「10 mail」、SRV 填「10 5 5060 sip」。',
+    dnsDomain: '默认域名',
+    dnsDomainPlaceholder: 'et.net.',
+    dnsOrigin: '区域名',
+    dnsOriginPlaceholder: 'example.test.',
+    dnsTtl: 'TTL（秒）',
+    dnsRecords: '记录',
+    dnsRecordName: '记录名',
+    dnsRecordType: '类型',
+    dnsRecordValue: '记录值',
+    dnsAddZone: '添加区域',
+    dnsAddRecord: '添加记录',
+    dnsRemoveZone: '删除区域',
+    dnsRemoveRecord: '删除记录',
+    dnsEmptyHint: '未添加解析区域。只需要默认域名时，直接填写上方域名即可。',
+    lblCompressAlgo: '压缩算法',
+    tipCompressAlgo: '数据传输压缩算法；默认使用内核内置值（v2.7.1 起支持 Lzo）',
+    compressDefault: '内核默认',
+    compressNone: '不压缩',
+    compressZstd: 'Zstd',
+    compressLzo: 'Lzo（v2.7.1+）',
+    lblUdpFec: 'UDP FEC',
+    tipUdpFec: '为 UDP 数据启用前向纠错（v2.7.1+）',
+    lblUdpFecKcp: 'UDP FEC（KCP）',
+    tipUdpFecKcp: '为 KCP 流量启用 UDP 前向纠错（v2.7.1+）',
+    lblUdpFecQuic: 'UDP FEC（QUIC）',
+    tipUdpFecQuic: '为 QUIC 流量启用 UDP 前向纠错（v2.7.1+）',
     pickFile: '选择文件',
     showSecret: '显示',
     hideSecret: '隐藏',
@@ -480,7 +516,11 @@ export default {
     fieldIgnoredSince:
       '{field} 自 {since} 起不再从配置文件读取，当前内核 {version} 会忽略（请改用 CLI 参数）',
     rpcPortalCliOnly:
-      'rpc_portal 自 {since} 起不再从配置文件读取；桌面端由 LightTier 转为 --rpc-portal 命令行参数传入，Android 端不生效'
+      'rpc_portal 自 {since} 起不再从配置文件读取；桌面端由 LightTier 转为 --rpc-portal 命令行参数传入，Android 端不生效',
+    dhcpCidrNeedsVersion:
+      'dhcp 使用网段写法需要 {since} 或更高版本，当前内核 {version} 只接受布尔值，可能拒绝启动',
+    compressAlgoNeedsVersion:
+      '压缩算法 {algo} 需要 {since} 或更高版本，当前内核 {version} 不支持该值，可能拒绝启动'
   },
   newWebConfig: {
     addConfig: '新建配置',

@@ -5,6 +5,7 @@
  * - v2.6.4 / v2.7.0 的 Config 虽然定义了 `[file_logger]` 段，但内核日志初始化只读取 CLI 参数
  *   `--file-log-dir/--file-log-level/--file-log-size/--file-log-count`，
  *   文件名固定为 `easytier.log`（CLI 无文件名字段），因此管理器必须把 TOML 配置翻译成 CLI 参数；
+ *   v2.7.1 起 TOML 日志段被内核直接忽略并告警，同样只能走 CLI 参数；
  * - 轮转为 Debian 风格：当前文件无后缀，历史文件为 `easytier.log.1/.2/...`（并非日期后缀），
  *   `.1` 是最新的历史分段，`count` 约等于“活跃文件 + 历史文件”的总数；
  * - 旧版内核可能按 TOML `file` 字段写 `{configName}.log` 或带日期后缀的文件，读取端需兼容；

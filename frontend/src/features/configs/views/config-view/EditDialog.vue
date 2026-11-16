@@ -206,6 +206,7 @@
       >
         <BasicForm />
         <AdvancedForm />
+        <MagicDnsEditor />
       </div>
     </div>
 
@@ -275,6 +276,7 @@ import { CONFIG_EDITOR_KEY } from './edit/context'
 import TomlEditor from './edit/TomlEditor.vue'
 import BasicForm from './edit/BasicForm.vue'
 import AdvancedForm from './edit/AdvancedForm.vue'
+import MagicDnsEditor from './edit/MagicDnsEditor.vue'
 
 const { t } = useI18n()
 const store = useEasyTierStore()
