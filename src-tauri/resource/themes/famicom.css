@@ -42,6 +42,7 @@
   --theme-radius-xl: 0;
   --theme-radius-xxl: 0;
   --theme-radius-pill: 0;
+  /* 仅供状态点、分隔点、加载环等指示元素使用；按钮与图标容器在下方统一切直角 */
   --theme-radius-round: 50%;
 
   /* 标题不能用 MS Gothic：它覆盖大量简体字形但没有 600 粗体，
@@ -54,4 +55,25 @@
 
   --theme-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --theme-duration: 0.16s;
+}
+
+/* 全直角主题：圆形按钮与图标容器跟随主题切直角，
+   状态点 / 分隔点 / 加载环保留圆形，避免指示语义丢失 */
+html[data-theme='famicom'] .lt-btn--circle,
+html[data-theme='famicom'] .nl-toolbar-android .nl-back-btn,
+html[data-theme='famicom'] .lock-icon,
+html[data-theme='famicom'] .og-done-icon,
+html[data-theme='famicom'] .nda-empty-icon,
+html[data-theme='famicom'] .nw-empty-icon,
+html[data-theme='famicom'] .nwc-empty-icon,
+html[data-theme='famicom'] .nm-empty-icon,
+html[data-theme='famicom'] .nm-state-icon {
+  border-radius: 0 !important;
+}
+
+/* 悬浮快捷按钮沿用主题按钮的墨黑描边与不透明底色，
+   硬投影保留，用于和普通按钮区分悬浮层级 */
+html[data-theme='famicom'] .fab-root .fab-trigger {
+  opacity: 1;
+  border-color: var(--theme-border);
 }
