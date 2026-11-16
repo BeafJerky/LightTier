@@ -165,6 +165,18 @@
 - 中文、空格、斜杠等字符会被拒绝，主题不会出现在列表中
 - 中文显示名请使用文件顶部的 `@theme-label` 元数据（见上文）
 
+## 覆盖优先级
+
+同名主题按以下顺序取用，靠前者覆盖靠后者：
+
+1. **导入的主题**（桌面与 Android 的 AppData/themes；浏览器预览为 localStorage）
+2. **桌面端 Resource 目录扫描结果**（`resource/themes/*.css`），覆盖构建期同名预置
+3. **构建期打包的预置主题**（Android 也使用这一份）
+
+- 导入同名文件即覆盖旧版本；删除导入文件后回落到 Resource 或预置版本。
+- `cream`、`dark` 是内置保留 ID，导入同名文件会被拒绝。
+- 替换 Resource 目录文件后，在主题弹窗点「刷新列表」即可重新扫描，无需重启应用。
+
 ## 可读性建议
 
 - 正文、次要文字对背景的对比度建议不低于 4.5:1
@@ -231,11 +243,34 @@
 }
 ```
 
+## 主题预览钩子
+
+主题弹窗右侧的预览区使用 Shadow DOM 骨架：桌面为 `.pv-d-*`，移动端（含 Android 二级页）为 `.pv-m-*`。它只呈现变量效果与命中骨架元素的规则，不是真实界面的截图。
+
+- `html[data-theme='<主题 ID>']` 会被自动改写为 `:host([data-theme='<主题 ID>'])`（预览宿主会写入相同的 `data-theme`），因此写在该作用域下、作用于骨架公共类或元素（如 `h1`、`button`）的规则会在预览中生效；作用于应用专属类（如 `.nm-state-icon`、`.fab-trigger`）的规则在预览里自然不命中。
+- 想定制预览观感，可追加 `:host` 钩子，只影响预览、不影响真实界面（`:host` 在全局样式表中无效）：
+
+```css
+/* 预览：卡片改为双色描边 */
+:host .pv-d-card,
+:host .pv-m-group {
+  border-color: var(--theme-accent-primary);
+  box-shadow: inset 0 0 0 2px var(--theme-bg-card);
+}
+
+/* 也可以叠加在 data-theme 作用域上 */
+:host([data-theme='<主题 ID>']) .pv-d-nav-item.active {
+  border-radius: 0;
+}
+```
+
+常用骨架类：桌面 `.pv-d-side`、`.pv-d-nav-item.active`、`.pv-d-stat`、`.pv-d-card`、`.pv-d-btn`、`.pv-d-toast`；移动端 `.pv-m-hero`、`.pv-m-group`、`.pv-m-row`、`.pv-m-tile`、`.pv-m-btn`。参考 `neumorphism.css` 末尾的 `:host .pv-*` 写法。
+
 ## 注意事项
 
 1. **颜色主题的变量必须写在 `:root {}` 块内**；风格化主题可以追加 `html[data-theme='<主题 ID>']` 组件覆盖规则，主题 ID 即文件名（如 `html[data-theme='famicom']`），应用会自动写入 `data-theme` 属性
 2. **不要自行定义其它 `data-theme` 值或修改宿主属性** — 覆盖规则只对本主题生效，其它选择器一律无效
 3. **阴影 rgba 不要用纯黑** — 建议用与文字色同源的色调，视觉上更协调
 4. **颜色主题建议保持圆角与字体默认值** — 只有风格化主题才需要改变骨架
-5. **预览面板只呈现 `:root` 变量**：`html[data-theme=...]` 覆盖规则在主题预览的 Shadow DOM 内不会生效，请以应用后的真实界面为准
+5. **预览不是真实界面**：预览只呈现 `:root` 变量与命中骨架的规则（`html[data-theme=...]` 会被改写到预览宿主，详见「主题预览钩子」）；依赖应用专属类的风格细节请以应用后的真实界面为准
 6. **文件编码** — 使用 UTF-8 编码保存

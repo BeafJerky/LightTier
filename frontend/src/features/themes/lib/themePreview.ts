@@ -23,6 +23,19 @@ const PREVIEW_RGB_VARS = [
   '--theme-color-warning'
 ]
 
+/**
+ * 风格化主题的覆盖规则写在 html[data-theme='<id>'] 下。预览把该作用域改写到
+ * Shadow 宿主（宿主同时写入 data-theme），这样命中预览骨架公共类的规则仍能生效；
+ * 作用于真实界面专属类的规则在预览里自然不命中。
+ */
+const PREVIEW_SCOPE_PATTERN = /(^|[^\w-])html\[data-theme\s*=\s*['"]?([^'"\]\s]+?)['"]?\]/g
+
+export const rewritePreviewScopes = (cssText: string): string =>
+  cssText.replace(
+    PREVIEW_SCOPE_PATTERN,
+    (_match, lead: string, themeId: string) => `${lead}:host([data-theme='${themeId}'])`
+  )
+
 /** 外部主题按自身声明值派生分量，避免继承到当前全局主题的颜色 */
 const buildPreviewRgbVars = (cssText: string): string => {
   const lines = PREVIEW_RGB_VARS.flatMap((name) => {
@@ -314,5 +327,5 @@ export const getExternalPreviewStyle = (cssText: string): string => `
     --theme-radius-lg: 12px; --theme-radius-xl: 16px; --theme-radius-pill: 100px;
   }
   ${buildPreviewRgbVars(cssText)}
-  ${cssText.replace(/:root/g, ':host')}
+  ${rewritePreviewScopes(cssText).replace(/:root/g, ':host')}
   ${previewStyle}`

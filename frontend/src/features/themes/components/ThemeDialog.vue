@@ -364,6 +364,9 @@ const renderPreview = (name: string) => {
 
   shadowRoot = el.shadowRoot || el.attachShadow({ mode: 'open' })
 
+  // 风格化主题的覆盖规则以 :host([data-theme]) 匹配，宿主需与当前预览主题一致
+  el.dataset.theme = name
+
   // 首次调用：创建容器和 style 元素（后续调用只更新容器内容，保留 style 元素）
   if (!shadowRoot.querySelector('.pv-container')) {
     const container = document.createElement('div')
