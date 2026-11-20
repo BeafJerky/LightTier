@@ -14,7 +14,7 @@ import pkg from '../../../../../package.json'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
-import { CONFIG_PATH, GITHUB_EASYTIER } from '@/shared/constants/easytier'
+import { CONFIG_PATH, CONFIG_FILE_NAME, GITHUB_EASYTIER } from '@/shared/constants/easytier'
 import {
   MIRROR_CUSTOM_KEY,
   MIRROR_HIDDEN_KEY,
@@ -23,6 +23,7 @@ import {
 import { loadThemeCss } from '@/shared/composables/useExternalThemes'
 import { useMockData } from '@/shared/platform/mockData'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { useIslandStore } from '@/shared/store/island'
 import type { FormWebData } from '@/entities/config/formTypes'
 import {
   buildBackupFileName,
@@ -34,6 +35,7 @@ import {
   LEGACY_AUTO_RUN_LOCAL_KEYS,
   parseWebConfigValue,
   RESTORABLE_PREFERENCE_LOCAL_KEYS,
+  runRestoreTransaction,
   sanitizeAppearancePayload,
   sanitizeMirrorPayload,
   sanitizePreferencesPayload,
@@ -165,6 +167,7 @@ const collectPreferencesPayload = (): PreferencesPayload => {
       orderedServiceConfigs[name] = serviceConfigs[name]
     })
 
+  const island = useIslandStore()
   return {
     version: 1,
     store: {
@@ -174,7 +177,11 @@ const collectPreferencesPayload = (): PreferencesPayload => {
       defaultServiceInstallMethod: store.defaultServiceInstallMethod,
       defaultEnableAutostart: store.defaultEnableAutostart,
       autoRunNetworkSetting: store.autoRunNetworkSetting,
-      autoRunConfigName: store.autoRunConfigName
+      autoRunConfigName: store.autoRunConfigName,
+      islandSettings: {
+        ...island.settings,
+        types: { ...island.settings.types }
+      }
     },
     local,
     serviceConfigs: orderedServiceConfigs
@@ -398,9 +405,10 @@ const resolveRestorableTheme = async (theme: string): Promise<string> => {
   }
 }
 
-const applyPreferences = (item: BackupItem): void => {
-  const payload = sanitizePreferencesPayload(item.value)
-  if (!payload) throw new Error('invalid preferences payload')
+const applyPreferencesPayload = (
+  payload: PreferencesPayload,
+  options: { replaceServiceConfigs?: boolean } = {}
+): void => {
   for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
     if (Object.prototype.hasOwnProperty.call(payload.local, key)) {
       localStorage.setItem(key, payload.local[key])
@@ -411,6 +419,7 @@ const applyPreferences = (item: BackupItem): void => {
   // 旧备份可能只带 settings.autoRun* 本地键：迁移进 store（单一真源）后清理残留
   const legacy = extractLegacyAutoRunSettings(payload.local)
   const patch: PreferencesPayload['store'] = { ...payload.store }
+  delete patch.islandSettings
   if (patch.autoRunNetworkSetting === undefined && legacy.autoRunNetworkSetting !== undefined) {
     patch.autoRunNetworkSetting = legacy.autoRunNetworkSetting
   }
@@ -418,12 +427,30 @@ const applyPreferences = (item: BackupItem): void => {
     patch.autoRunConfigName = legacy.autoRunConfigName
   }
   for (const key of LEGACY_AUTO_RUN_LOCAL_KEYS) localStorage.removeItem(key)
-  // 服务安装方式按“合并”恢复：不删除本地其它配置的记录，避免已有服务失去方式识别
+  // 回滚需要精确还原：先清空本地服务安装记录，再写回快照；正常恢复按“合并”处理，
+  // 不删除本地其它配置的记录，避免已有服务失去方式识别。
+  if (options.replaceServiceConfigs) {
+    const tracked: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(SERVICE_CONFIG_PREFIX)) tracked.push(key)
+    }
+    for (const key of tracked) localStorage.removeItem(key)
+  }
   for (const [key, value] of Object.entries(payload.serviceConfigs)) {
     localStorage.setItem(key, value)
   }
   // store 已由 pinia 持久化插件管理，$patch 会同步写回 localStorage
   useEasyTierStore().$patch(patch)
+  if (payload.store.islandSettings) {
+    useIslandStore().$patch({ settings: payload.store.islandSettings })
+  }
+}
+
+const applyPreferences = (item: BackupItem): void => {
+  const payload = sanitizePreferencesPayload(item.value)
+  if (!payload) throw new Error('invalid preferences payload')
+  applyPreferencesPayload(payload)
 }
 
 const applyAppearance = async (item: BackupItem): Promise<void> => {
@@ -503,24 +530,94 @@ const applyEntry = async (item: BackupItem): Promise<void> => {
 export interface ApplyRestoreResult {
   applied: number
   failed: string[]
+  /** 中途失败后已回滚到操作前状态；回滚自身失败时为 false */
+  rolledBack: boolean
 }
 
-/** 按逐项选择应用恢复；无效项与“保留本地”项跳过 */
+type RestoreSnapshot =
+  | { kind: 'config-file'; path: string; existed: boolean; value: string }
+  | { kind: 'web-list'; existed: boolean; value: string }
+  | { kind: 'preferences'; value: string }
+  | { kind: 'appearance'; value: string }
+  | { kind: 'security'; value: string }
+  | { kind: 'mirror'; value: string }
+
+/** 采集恢复目标的当前状态；任何一步失败都中止恢复，不产生部分写入 */
+const captureRestoreSnapshot = async (item: BackupItem): Promise<RestoreSnapshot> => {
+  switch (item.category) {
+    case 'configs': {
+      const path = `${CONFIG_PATH}/${item.name}`
+      const files = await useMockData().listTomlFiles()
+      const existed = files.includes(item.name)
+      const value = existed ? ((await useMockData().readFileContent(path)) as string) : ''
+      return { kind: 'config-file', path, existed, value }
+    }
+    case 'web': {
+      const value = await collectWebValue()
+      // data.json 缺失与空列表在读路径上等价，按空列表回滚即可
+      return { kind: 'web-list', existed: value !== '[]', value }
+    }
+    case 'preferences':
+      return { kind: 'preferences', value: JSON.stringify(collectPreferencesPayload()) }
+    case 'appearance':
+      return { kind: 'appearance', value: JSON.stringify(collectAppearancePayload()) }
+    case 'security':
+      return { kind: 'security', value: useEasyTierStore().lockPassword }
+    case 'mirror':
+      return { kind: 'mirror', value: JSON.stringify(collectMirrorPayload()) }
+    default:
+      throw new Error(`unknown backup category: ${(item as BackupItem).category}`)
+  }
+}
+
+const rollbackRestoreEntry = async (item: BackupItem, snapshot: unknown): Promise<void> => {
+  const snap = snapshot as RestoreSnapshot
+  if (snap.kind === 'config-file') {
+    if (snap.existed) await useMockData().writeFileContent(snap.path, snap.value)
+    else await useMockData().deleteFileOrDir(snap.path)
+    return
+  }
+  if (snap.kind === 'web-list') {
+    if (snap.existed) {
+      const list = parseWebConfigValue(snap.value)
+      if (!list) throw new Error('invalid web snapshot')
+      await useMockData().writeWebConfigList(list as unknown as FormWebData[])
+    } else {
+      await useMockData().deleteFileOrDir(`${CONFIG_PATH}/${CONFIG_FILE_NAME}`)
+    }
+    return
+  }
+  if (snap.kind !== item.category) throw new Error('restore snapshot mismatch')
+  switch (snap.kind) {
+    case 'preferences': {
+      const payload = sanitizePreferencesPayload(snap.value)
+      if (!payload) throw new Error('invalid preferences snapshot')
+      applyPreferencesPayload(payload, { replaceServiceConfigs: true })
+      return
+    }
+    case 'appearance':
+      await applyAppearance({ ...item, value: snap.value })
+      return
+    case 'security':
+      useEasyTierStore().$patch({ lockPassword: snap.value })
+      return
+    case 'mirror':
+      applyMirror({ ...item, value: snap.value })
+      return
+  }
+}
+
+/** 按逐项选择应用恢复；无效项与“保留本地”项跳过，任一失败则整体回滚 */
 export const applyRestore = async (
   plan: RestorePlan,
   choices: Record<string, RestoreChoice>
 ): Promise<ApplyRestoreResult> => {
-  let applied = 0
-  const failed: string[] = []
-  for (const entry of plan.entries) {
-    if (entry.status === 'invalid' || choices[entry.item.id] !== 'backup') continue
-    try {
-      await applyEntry(entry.item)
-      applied += 1
-    } catch (error) {
-      console.error('恢复备份条目失败:', entry.item.id, error)
-      failed.push(entry.item.id)
-    }
-  }
-  return { applied, failed }
+  const items = plan.entries
+    .filter((entry) => entry.status !== 'invalid' && choices[entry.item.id] === 'backup')
+    .map((entry) => entry.item)
+  return runRestoreTransaction(items, {
+    snapshot: captureRestoreSnapshot,
+    apply: applyEntry,
+    rollback: rollbackRestoreEntry
+  })
 }

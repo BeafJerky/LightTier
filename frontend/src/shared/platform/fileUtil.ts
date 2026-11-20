@@ -117,7 +117,6 @@ const grantExecutableBits = async (paths: string[]): Promise<boolean> => {
 export const checkDir = async (dirPath: string = RESOURCE_PATH) => {
   try {
     try {
-      // @ts-ignore
       const _e = await extname(dirPath)
       // 有扩展名视为文件路径，取其父目录；无扩展名（如 resource/core）视为目录本身
       if (_e) {

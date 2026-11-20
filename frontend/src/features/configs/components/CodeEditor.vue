@@ -10,9 +10,10 @@
  * - 组件卸载时 dispose 编辑器，防止 Monaco 实例泄漏。
  * 注意：monaco 为强制独立 chunk（vite manualChunks），勿改分包策略。
  */
-// @ts-ignore
-// @ts-nocheck
-import * as monaco from 'monaco-editor'
+// 只引入编辑器 API 与全部编辑器功能，不引入 json/css/html/ts 语言服务：
+// 语言服务会额外打包 4 个 worker（约 9MB），而本编辑器只注册自定义 TOML。
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'
+import 'monaco-editor/esm/vs/editor/editor.all.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke, isTauri } from '@tauri-apps/api/core'
@@ -20,28 +21,13 @@ import { LtButton } from '@/shared/ui'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
 // Monaco Worker 环境（模块级，仅初始化一次）
-self.MonacoEnvironment = {
-  getWorker(_, label) {
-    if (label === 'json') {
-      return new jsonWorker()
-    }
-    if (label === 'css' || label === 'scss' || label === 'less') {
-      return new cssWorker()
-    }
-    if (label === 'html' || label === 'handlebars' || label === 'razor') {
-      return new htmlWorker()
-    }
-    if (label === 'typescript' || label === 'javascript') {
-      return new tsWorker()
-    }
-    return new editorWorker()
-  }
+// 编辑器只提供自定义 TOML 与 plaintext，不注册 json/css/html/ts 语言服务；
+// 对应语言 worker 不再打包，安装包体积因此减少约 9MB。
+// Monaco 的 Worker 入口不在 lib.dom 的 Window 类型里，这里按官方运行时约定写入
+;(self as unknown as { MonacoEnvironment: { getWorker: () => Worker } }).MonacoEnvironment = {
+  getWorker: () => new editorWorker()
 }
 
 // TOML 语法高亮注册（模块级单次）

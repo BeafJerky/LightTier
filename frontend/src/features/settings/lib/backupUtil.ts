@@ -11,6 +11,7 @@
  * 凭据安全：锁屏密码仅备份加盐校验串（sha256$salt$hash），旧版明文在应用时迁移。
  */
 import { isValidConfigName } from '@/shared/lib/configNameUtil'
+import { normalizeIslandSettings, type IslandSettings } from '@/shared/lib/island/settings'
 import { sha256Hex } from '@/shared/platform/lockUtil'
 import { validateToml } from '@/shared/lib/tomlValidationUtil'
 
@@ -399,6 +400,7 @@ export interface PreferencesPayload {
     defaultEnableAutostart?: boolean
     autoRunNetworkSetting?: boolean
     autoRunConfigName?: string
+    islandSettings?: IslandSettings
   }
   local: Record<string, string>
   serviceConfigs: Record<string, string>
@@ -456,6 +458,10 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
     if (rawStore.autoRunConfigName !== undefined) {
       if (!isRestorableConfigRef(rawStore.autoRunConfigName)) return null
       store.autoRunConfigName = rawStore.autoRunConfigName
+    }
+    if (rawStore.islandSettings !== undefined) {
+      if (!isRecord(rawStore.islandSettings)) return null
+      store.islandSettings = normalizeIslandSettings(rawStore.islandSettings)
     }
   }
 
@@ -784,4 +790,58 @@ export const buildBackupFileName = (mode: BackupMode, now: Date = new Date()): s
     now.getHours()
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
   return `LightTier-${mode}-${stamp}.json`
+}
+
+export interface RestoreTransactionOps<T> {
+  /** 在任何写入前采集条目对应的本地现状；失败则整体中止，不产生部分写入 */
+  snapshot: (item: T) => Promise<unknown>
+  apply: (item: T) => Promise<void>
+  rollback: (item: T, snapshot: unknown) => Promise<void>
+}
+
+export interface RestoreTransactionResult {
+  /** 全部成功才返回实际写入数；发生回滚时为 0 */
+  applied: number
+  failed: string[]
+  /** 中途失败后是否已成功回滚全部已应用项 */
+  rolledBack: boolean
+}
+
+/**
+ * 恢复事务：先完成全部快照，再逐项应用；任一条失败则逆序回滚已应用项。
+ *
+ * 回滚本身失败时保留部分写入并如实返回 rolledBack=false，交由界面提示用户
+ * 使用事先导出的备份人工恢复，避免误报“已回滚”。
+ */
+export const runRestoreTransaction = async <T extends { id: string }>(
+  items: T[],
+  ops: RestoreTransactionOps<T>
+): Promise<RestoreTransactionResult> => {
+  const snapshots: Array<{ item: T; snapshot: unknown }> = []
+  for (const item of items) {
+    snapshots.push({ item, snapshot: await ops.snapshot(item) })
+  }
+
+  const appliedSnapshots: Array<{ item: T; snapshot: unknown }> = []
+  for (const entry of snapshots) {
+    try {
+      await ops.apply(entry.item)
+      appliedSnapshots.push(entry)
+    } catch (error) {
+      console.error('恢复备份条目失败:', entry.item.id, error)
+      let rolledBack = true
+      for (let i = appliedSnapshots.length - 1; i >= 0; i--) {
+        const appliedEntry = appliedSnapshots[i]
+        try {
+          await ops.rollback(appliedEntry.item, appliedEntry.snapshot)
+        } catch (rollbackError) {
+          console.error('回滚备份条目失败:', appliedEntry.item.id, rollbackError)
+          rolledBack = false
+        }
+      }
+      return { applied: 0, failed: [entry.item.id], rolledBack }
+    }
+  }
+
+  return { applied: appliedSnapshots.length, failed: [], rolledBack: false }
 }

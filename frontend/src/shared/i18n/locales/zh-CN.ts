@@ -360,11 +360,13 @@ export default {
       '以下配置项存在于配置文件中，但当前内核 {version} 不支持或已移除；表单不会修改它们，保存时原样保留。',
     lblDhcpCidr: 'DHCP 网段',
     tipDhcpCidr: '自定义 DHCP 地址池（IPv4 CIDR，前缀长度 ≤30）；留空使用内核默认地址池（v2.7.1+）',
+    dhcpCidrInvalid: '格式不正确：需形如 10.88.0.0/24，前缀长度 ≤30',
     lblDhcpv6: '启用 DHCPv6',
     tipDhcpv6: '启用 DHCPv6 地址下发（v2.7.1+）',
     lblDhcpv6Cidr: 'DHCPv6 网段',
     tipDhcpv6Cidr:
       '自定义 DHCPv6 地址池（IPv6 CIDR，前缀长度 ≤126）；留空使用内核默认地址池（v2.7.1+）',
+    dhcpv6CidrInvalid: '格式不正确：需为 fc00::/7 或 2000::/3 范围内的网段，前缀长度 ≤126',
     magicDnsSection: 'Magic DNS',
     dnsTip:
       '在虚拟网络中提供 DNS 解析（v2.7.1+）。域名留空时使用 et.net.；记录值按 RDATA 文本填写，如 MX 填「10 mail」、SRV 填「10 5 5060 sip」。',
@@ -873,6 +875,7 @@ export default {
     restoreMergeHint: '恢复采用合并写入，不会删除备份中不存在的本地条目。',
     restorePartial: '已恢复 {count} 项，{failed} 项失败',
     restoreSuccess: '已恢复 {count} 项',
+    restoreRolledBack: '恢复失败，已回滚到操作前的状态，本地数据未改变',
     reloadHint: '请重新加载应用以应用全部设置',
     reloading: '恢复完成，正在重新加载应用…',
     failedItems: '失败条目：',

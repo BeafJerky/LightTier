@@ -448,7 +448,9 @@ export function useBackupRestore() {
         return entry ? itemTitle(entry) : id
       })
       phase.value = 'done'
-      if (failedItems.value.length === 0) {
+      if (result.rolledBack) {
+        toast.error(t('newBackup.restoreRolledBack'))
+      } else if (result.failed.length === 0) {
         toast.success(t('newBackup.restoreSuccess', { count: result.applied }))
         scheduleReload()
       } else {

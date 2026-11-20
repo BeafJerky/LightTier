@@ -372,11 +372,14 @@ export default {
     lblDhcpCidr: 'DHCP Subnet',
     tipDhcpCidr:
       'Custom DHCP address pool (IPv4 CIDR, prefix length ≤30); leave empty for the kernel default pool (v2.7.1+)',
+    dhcpCidrInvalid: 'Invalid format: use e.g. 10.88.0.0/24 with a prefix length ≤30',
     lblDhcpv6: 'Enable DHCPv6',
     tipDhcpv6: 'Enable DHCPv6 address assignment (v2.7.1+)',
     lblDhcpv6Cidr: 'DHCPv6 Subnet',
     tipDhcpv6Cidr:
       'Custom DHCPv6 address pool (IPv6 CIDR, prefix length ≤126); leave empty for the kernel default pool (v2.7.1+)',
+    dhcpv6CidrInvalid:
+      'Invalid format: use a subnet within fc00::/7 or 2000::/3 with a prefix length ≤126',
     magicDnsSection: 'Magic DNS',
     dnsTip:
       'Serve DNS resolution inside the virtual network (v2.7.1+). The default domain falls back to et.net. when empty; record values use RDATA text, e.g. "10 mail" for MX or "10 5 5060 sip" for SRV.',
@@ -907,6 +910,7 @@ export default {
       'Restoring merges items into local data; local items not present in the backup are kept.',
     restorePartial: 'Restored {count} items, {failed} failed',
     restoreSuccess: 'Restored {count} items',
+    restoreRolledBack: 'Restore failed and was rolled back; local data is unchanged',
     reloadHint: 'Reload the app to apply all restored settings',
     reloading: 'Restore complete. Reloading the app…',
     failedItems: 'Failed items:',

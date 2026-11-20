@@ -2,6 +2,7 @@
  * backupUtil 单测：清单解析、差量构建、逐项校验与冲突状态。
  */
 import { describe, expect, it } from 'vitest'
+import * as backupUtil from '@/features/settings/lib/backupUtil'
 import {
   BACKUP_APP,
   BACKUP_FORMAT_VERSION,
@@ -522,5 +523,122 @@ describe('extractLegacyAutoRunSettings（旧备份兼容）', () => {
     })
     expect(extractLegacyAutoRunSettings({ 'settings.autoRunNetwork': 'yes' })).toEqual({})
     expect(extractLegacyAutoRunSettings({ 'settings.autoRunConfigName': '../evil' })).toEqual({})
+  })
+})
+
+describe('灵动岛偏好随应用偏好备份', () => {
+  it('保留合法字段并逐字段归一化', () => {
+    const payload = sanitizePreferencesPayload(
+      JSON.stringify({
+        version: 1,
+        store: {
+          islandSettings: {
+            enabled: false,
+            idle: 'bogus',
+            types: { error: false, update: 'yes' },
+            silent: true,
+            motion: 'fast',
+            face: 'x'
+          }
+        }
+      })
+    )
+    expect(payload?.store.islandSettings).toEqual({
+      enabled: false,
+      idle: 'count',
+      types: { error: false, update: true, quality: true, feedback: true },
+      silent: true,
+      motion: 'system',
+      face: true
+    })
+  })
+
+  it('灵动岛设置不是对象时整体拒绝，避免写入损坏配置', () => {
+    expect(
+      sanitizePreferencesPayload(JSON.stringify({ version: 1, store: { islandSettings: 'x' } }))
+    ).toBeNull()
+  })
+})
+
+describe('runRestoreTransaction（恢复原子化）', () => {
+  interface TxItem {
+    id: string
+  }
+  type Tx = {
+    runRestoreTransaction: <T extends { id: string }>(
+      items: T[],
+      ops: {
+        snapshot: (item: T) => Promise<unknown>
+        apply: (item: T) => Promise<void>
+        rollback: (item: T, snapshot: unknown) => Promise<void>
+      }
+    ) => Promise<{ applied: number; failed: string[]; rolledBack: boolean }>
+  }
+  const runTx = (backupUtil as unknown as Tx).runRestoreTransaction
+
+  it('先完成全部快照，再按顺序应用', async () => {
+    const log: string[] = []
+    const items: TxItem[] = [{ id: 'a' }, { id: 'b' }]
+    const result = await runTx(items, {
+      snapshot: async (item) => {
+        log.push(`snapshot:${item.id}`)
+        return item.id
+      },
+      apply: async (item) => {
+        log.push(`apply:${item.id}`)
+      },
+      rollback: async (item) => {
+        log.push(`rollback:${item.id}`)
+      }
+    })
+    expect(log).toEqual(['snapshot:a', 'snapshot:b', 'apply:a', 'apply:b'])
+    expect(result).toEqual({ applied: 2, failed: [], rolledBack: false })
+  })
+
+  it('中途失败时按逆序回滚已应用项，最终不算已应用', async () => {
+    const log: string[] = []
+    const items: TxItem[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    const result = await runTx(items, {
+      snapshot: async (item) => item.id,
+      apply: async (item) => {
+        log.push(`apply:${item.id}`)
+        if (item.id === 'b') throw new Error('boom')
+      },
+      rollback: async (item, snapshot) => {
+        log.push(`rollback:${item.id}:${snapshot}`)
+      }
+    })
+    expect(log).toEqual(['apply:a', 'apply:b', 'rollback:a:a'])
+    expect(result).toEqual({ applied: 0, failed: ['b'], rolledBack: true })
+  })
+
+  it('回滚自身失败时如实标记 rolledBack=false', async () => {
+    const items: TxItem[] = [{ id: 'a' }, { id: 'b' }]
+    const result = await runTx(items, {
+      snapshot: async (item) => item.id,
+      apply: async (item) => {
+        if (item.id === 'b') throw new Error('boom')
+      },
+      rollback: async () => {
+        throw new Error('rollback failed')
+      }
+    })
+    expect(result).toEqual({ applied: 0, failed: ['b'], rolledBack: false })
+  })
+
+  it('快照失败时不产生任何写入并向上抛错', async () => {
+    const applied: string[] = []
+    await expect(
+      runTx([{ id: 'a' }], {
+        snapshot: async () => {
+          throw new Error('snapshot failed')
+        },
+        apply: async (item) => {
+          applied.push(item.id)
+        },
+        rollback: async () => {}
+      })
+    ).rejects.toThrow('snapshot failed')
+    expect(applied).toEqual([])
   })
 })

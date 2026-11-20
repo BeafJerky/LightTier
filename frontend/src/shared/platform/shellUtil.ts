@@ -272,7 +272,7 @@ export const checkPortConflicts = async (configFileName: string): Promise<PortCo
     if (!res?.length) return conflicts
     for (const r of res) {
       const cmd = r.commandLine || ''
-      const match = cmd.match(/[\/\\]([^\/\\]+)\.toml/) || cmd.match(/([^\s"]+)\.toml/)
+      const match = cmd.match(/[/\\]([^/\\]+)\.toml/) || cmd.match(/([^\s"]+)\.toml/)
       if (!match) continue
       const runningName = match[1] + '.toml'
       if (runningName === configFileName) continue
@@ -615,7 +615,7 @@ export const fetchRunningList = async (configNames: string[]): Promise<RunningIt
   if (res?.length) {
     res.forEach((r: any) => {
       const cmd = r.commandLine || ''
-      const match = cmd.match(/[\/\\]([^\/\\]+)\.toml/) || cmd.match(/([^\s"]+)\.toml/)
+      const match = cmd.match(/[/\\]([^/\\]+)\.toml/) || cmd.match(/([^\s"]+)\.toml/)
       if (match) {
         const name = match[1]
         if (knownNames.has(name)) {

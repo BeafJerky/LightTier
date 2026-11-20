@@ -44,29 +44,26 @@ export default tseslint.config(
   },
   rules: {
     'prettier/prettier': 'error',
-    'no-useless-escape': 0, // TODO: evaluate whether to re-enable
-    'no-undef': 0, // TODO: evaluate whether to re-enable
-    'vue/no-reserved-component-names': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/explicit-function-return-type': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/no-explicit-any': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/no-empty-function': 0, // TODO: evaluate whether to re-enable
-    'vue/custom-event-name-casing': 0, // TODO: evaluate whether to re-enable
-    'no-use-before-define': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/no-use-before-define': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/ban-ts-comment': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/no-non-null-assertion': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/explicit-module-boundary-types': 0, // TODO: evaluate whether to re-enable
-    '@typescript-eslint/no-unused-vars': 0, // TODO: evaluate whether to re-enable
-    'no-unused-vars': 0, // TODO: evaluate whether to re-enable
-    'space-before-function-paren': 0, // TODO: evaluate whether to re-enable
-    'vue/attributes-order': 0, // TODO: evaluate whether to re-enable
-    'vue/one-component-per-file': 0, // TODO: evaluate whether to re-enable
-    'vue/html-closing-bracket-newline': 0, // TODO: evaluate whether to re-enable
-    'vue/max-attributes-per-line': 0, // TODO: evaluate whether to re-enable
-    'vue/multiline-html-element-content-newline': 0, // TODO: evaluate whether to re-enable
-    'vue/singleline-html-element-content-newline': 0, // TODO: evaluate whether to re-enable
-    'vue/attribute-hyphenation': 0, // TODO: evaluate whether to re-enable
-    'vue/require-default-prop': 0, // TODO: evaluate whether to re-enable
+    'no-undef': 0, // TS 负责标识符检查；ESLint no-undef 对 TS 类型与浏览器全局误报较多
+    '@typescript-eslint/explicit-function-return-type': 0, // 仅要求导出 API 显式返回类型时再启用
+    '@typescript-eslint/no-explicit-any': 0, // 历史平台桥接代码大量 any，逐模块收敛后再启用
+    '@typescript-eslint/no-empty-function': 0, // 大量事件占位回调，启用需逐个标注意图
+    'vue/custom-event-name-casing': 0, // 代码库统一使用 kebab-case 事件名，保持现状
+    'no-use-before-define': 0,
+    '@typescript-eslint/no-use-before-define': 0,
+    '@typescript-eslint/no-non-null-assertion': 0,
+    '@typescript-eslint/explicit-module-boundary-types': 0,
+    '@typescript-eslint/no-unused-vars': 0, // 待单独批次清理未使用变量后启用
+    'no-unused-vars': 0,
+    'space-before-function-paren': 0, // 与 Prettier 冲突，交由 Prettier 决定
+    'vue/attributes-order': 0,
+    'vue/one-component-per-file': 0,
+    'vue/html-closing-bracket-newline': 0,
+    'vue/max-attributes-per-line': 0,
+    'vue/multiline-html-element-content-newline': 0,
+    'vue/singleline-html-element-content-newline': 0,
+    'vue/attribute-hyphenation': 0,
+    'vue/require-default-prop': 0,
     'vue/html-self-closing': [
       1,
       {
@@ -79,9 +76,10 @@ export default tseslint.config(
         math: 'always'
       }
     ],
-    'vue/multi-word-component-names': 0, // TODO: evaluate whether to re-enable
-    'vue/no-v-html': 0, // TODO: evaluate whether to re-enable
-    'no-async-promise-executor': 0 // TODO: evaluate whether to re-enable
+    'vue/multi-word-component-names': 0, // 单文件页面组件命名与路由目录保持一致
+    // shellUtil 中 6 处 async Promise executor 属历史写法，重构涉及进程检测主链路，
+    // 留待单独批次改造后再启用该规则。
+    'no-async-promise-executor': 0
   }
   },
   {

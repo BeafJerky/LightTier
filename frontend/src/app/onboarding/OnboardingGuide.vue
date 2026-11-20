@@ -23,6 +23,7 @@
             <p class="og-sub">{{ t('newOnboarding.featuresDesc') }}</p>
             <div class="og-feature-grid">
               <div v-for="f in features" :key="f.title" class="og-feature">
+                <!-- eslint-disable-next-line vue/no-v-html -- 图标为代码内静态 SVG，不含用户输入 -->
                 <div class="og-feature-icon" v-html="f.icon"></div>
                 <div class="og-feature-text">
                   <div class="og-feature-title">{{ f.title }}</div>

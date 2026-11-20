@@ -70,8 +70,12 @@
           v-model="formDhcpCidr"
           variant="outline"
           :aria-label="t('newEdit.lblDhcpCidr')"
+          :aria-describedby="dhcpCidrIssue ? `${fieldId('dhcp_cidr')}-hint` : undefined"
           placeholder="10.0.0.0/24"
         />
+        <p v-if="dhcpCidrIssue" :id="`${fieldId('dhcp_cidr')}-hint`" class="ed-form-hint">
+          {{ t('newEdit.dhcpCidrInvalid') }}
+        </p>
       </div>
       <!-- v2.7.1：DHCPv6（顶层 dhcpv6 字段） -->
       <div v-if="dhcpv6Supported" class="ed-form-field ed-form-field--switch">
@@ -93,8 +97,12 @@
           v-model="formDhcpv6Cidr"
           variant="outline"
           :aria-label="t('newEdit.lblDhcpv6Cidr')"
+          :aria-describedby="dhcpv6CidrIssue ? `${fieldId('dhcpv6_cidr')}-hint` : undefined"
           placeholder="fc00::/64"
         />
+        <p v-if="dhcpv6CidrIssue" :id="`${fieldId('dhcpv6_cidr')}-hint`" class="ed-form-hint">
+          {{ t('newEdit.dhcpv6CidrInvalid') }}
+        </p>
       </div>
       <div v-if="showRpcPortal" class="ed-form-field">
         <label
@@ -268,9 +276,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
 import { injectRequired } from '@/shared/lib/inject'
+import { validateDhcpCidr, validateDhcpv6Cidr } from '@/entities/config/cidr'
 import { CONFIG_EDITOR_KEY } from './context'
 
 defineOptions({ name: 'ConfigBasicForm' })
@@ -300,6 +310,9 @@ const {
   addPeer,
   removeFlag
 } = injectRequired(CONFIG_EDITOR_KEY, 'ConfigBasicForm')
+
+const dhcpCidrIssue = computed(() => validateDhcpCidr(formDhcpCidr.value))
+const dhcpv6CidrIssue = computed(() => validateDhcpv6Cidr(formDhcpv6Cidr.value))
 </script>
 
 <style scoped lang="less">
