@@ -3,6 +3,8 @@
 //! 安全边界：前端不再直接持有 powershell / route / taskkill 权限；
 //! 所有系统参数在进入命令前必须经过本模块校验。
 
+pub mod route;
+
 pub fn validate_pid(pid: u32) -> Result<(), String> {
     if pid == 0 {
         return Err("invalid pid".into());
