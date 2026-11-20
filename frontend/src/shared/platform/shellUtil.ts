@@ -27,6 +27,7 @@ import {
   parsePositiveInt
 } from '@/shared/lib/coreLogUtil'
 import { getPlatform, sleep } from './sysUtil'
+import * as systemOps from './systemOps'
 import * as toml from 'smol-toml'
 import { clearExitRoute } from './routeUtil'
 import { compareCoreVersion, parseCoreVersion } from '@/entities/kernel/kernelCompatUtil'
@@ -445,19 +446,17 @@ export async function killProcess(pid: number, force: boolean = true): Promise<b
   }
   try {
     const platform = await getPlatform()
-    let result: unknown
-    // Windows 使用 taskkill 命令
+    // Windows 统一走 Rust sysops（固定 taskkill 模板，前端不再持有该权限）
     if (platform === 'windows') {
-      const args = force ? ['/F', '/PID', pid.toString()] : ['/PID', pid.toString()]
-      result = await executeCmd('taskkill', args, { encoding: 'gbk' })
-      debug(`强制终止进程 ${JSON.stringify(result)}`)
+      const ok = await systemOps.killProcess(pid)
+      if (!ok) warn(`终止进程 ${pid} 失败`)
+      else info(`进程 ${pid} 已终止`)
+      return ok
     }
     // Unix-like 系统使用 kill 命令
-    else {
-      const signal = force ? '-9' : '-15' // SIGKILL vs SIGTERM
-      result = await executeCmd('kill', [signal, pid.toString()])
-      debug(`强制终止进程 ${JSON.stringify(result)}`)
-    }
+    const signal = force ? '-9' : '-15' // SIGKILL vs SIGTERM
+    const result = await executeCmd('kill', [signal, pid.toString()])
+    debug(`强制终止进程 ${JSON.stringify(result)}`)
     // 退出码非 0（进程不存在/权限不足）不能视为停止成功，否则 UI 会误报并掩盖残留进程
     if (!isCommandSuccess(result)) {
       warn(`终止进程 ${pid} 失败:${JSON.stringify(result)}`)
@@ -502,106 +501,43 @@ export async function stopAllNodes() {
 export const getRunningProcesses = async (
   programName: string = 'easytier-core'
 ): Promise<Array<any>> => {
-  return new Promise(async (resolve, reject) => {
-    // 声明后由下方平台分支赋值（初始值从未被读取，无需初始化）
-    let args: string[]
-    let program: string
-    let encoding = 'utf-8'
-    const processInfo: any[] = []
-    const platform = await getPlatform()
+  const platform = await getPlatform()
+  // Windows 统一走 Rust sysops：过滤词通过环境变量传入，前端不再执行 PowerShell
+  if (platform === 'windows') {
+    const list = await systemOps.listProcesses(programName)
+    return list.map((item) => ({ ...item, fileName: programName }))
+  }
+  if (platform !== 'macos' && platform !== 'linux') {
+    throw new Error('Unsupported OS')
+  }
 
-    if (platform === 'windows') {
-      // 新的 PowerShell 命令
-      const psCommand = `\
-        Get-CimInstance -ClassName Win32_Process -Filter "CommandLine LIKE '%${programName}%'" |\
-        Select-Object @{N='name';E={$_.Caption}},\
-                      @{N='commandLine';E={$_.CommandLine}},\
-                      @{N='path';E={$_.ExecutablePath}},\
-                      @{N='pid';E={$_.ProcessId}},\
-                      @{N='memory';E={$_.WorkingSetSize}} |\
-        ConvertTo-Json -Compress\
-      `.trim()
-
-      program = 'powershell'
-      // 可选 ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand]
-      args = ['-NoProfile', '-Command', psCommand]
-      encoding = 'gbk'
-    } else if (platform === 'macos' || platform === 'linux') {
-      // macOS 和 Linux 使用 ps 命令
-      // 注意：管道符需要通过 shell 执行，所以使用 sh -c 包装整个命令
-      const psCommand = `ps -eo comm,args,pid,rss | grep ${programName}`
-      program = 'sh'
-      args = ['-c', psCommand]
-    } else {
-      reject(new Error('Unsupported OS'))
-      return
-    }
-    executeCmd(program, args, { encoding })
-      .then((res) => {
-        // 命令失败（返回 { code, msg }）或 grep 无匹配（Unix 下 grep 退出码 1）时视为无匹配进程
-        if (typeof res !== 'string') {
-          resolve(processInfo)
-          return
-        }
-        if (platform === 'windows') {
-          // 解析 PowerShell 的 JSON 输出
-          // 注：ConvertTo-Json 在仅一条结果时输出单个对象而非数组，需归一化为数组
-          let parsed: any
-          try {
-            parsed = JSON.parse(res || '[]')
-          } catch {
-            parsed = []
-          }
-          const list = Array.isArray(parsed)
-            ? parsed
-            : parsed && typeof parsed === 'object'
-              ? [parsed]
-              : []
-          const result = list.filter((r: any) => !String(r.name || '').includes('powershell.exe'))
-          result.forEach((p: any) => {
-            if (p.commandLine && p.commandLine.includes(programName)) {
-              const process = {
-                name: p.name,
-                commandLine: p.commandLine,
-                path: p.path,
-                pid: parseInt(p.pid, 10) || 0,
-                memory: parseInt(p.memory, 10) || 0,
-                fileName: programName
-              }
-              processInfo.push(process)
-            }
-          })
-          resolve(processInfo)
-          return
-        }
-        // 解析 macOS 和 Linux 的 ps 文本输出（列固定为 comm,args,pid,rss，从行尾定位 pid/rss 最稳妥）
-        const lines = res.trim().split('\n')
-        lines.forEach((line: string) => {
-          const parts = line.trim().split(/\s+/)
-          if (parts.length >= 4) {
-            const rss = parts[parts.length - 1]
-            const pid = parts[parts.length - 2]
-            const comm = parts[0]
-            const commandLine = parts.slice(1, parts.length - 2).join(' ')
-            if (commandLine.includes(programName)) {
-              const process = {
-                name: comm,
-                commandLine: commandLine,
-                path: comm, // ps 命令不直接提供可执行文件路径
-                pid: parseInt(pid, 10),
-                memory: parseInt(rss, 10) * 1024, // rss 单位是 KB
-                fileName: programName
-              }
-              processInfo.push(process)
-            }
-          }
+  // macOS / Linux 使用 ps 命令（Task 11 迁移 chmod 后再收口 sh）
+  const psCommand = `ps -eo comm,args,pid,rss | grep ${programName}`
+  const res = await executeCmd('sh', ['-c', psCommand])
+  // 命令失败或 grep 无匹配（Unix 下 grep 退出码 1）时视为无匹配进程
+  if (typeof res !== 'string') return []
+  const processInfo: any[] = []
+  const lines = res.trim().split(/\r?\n/)
+  lines.forEach((line: string) => {
+    const parts = line.trim().split(/\s+/)
+    if (parts.length >= 4) {
+      const rss = parts[parts.length - 1]
+      const pid = parts[parts.length - 2]
+      const comm = parts[0]
+      const commandLine = parts.slice(1, parts.length - 2).join(' ')
+      if (commandLine.includes(programName)) {
+        processInfo.push({
+          name: comm,
+          commandLine,
+          path: comm, // ps 命令不直接提供可执行文件路径
+          pid: parseInt(pid, 10),
+          memory: parseInt(rss, 10) * 1024, // rss 单位是 KB
+          fileName: programName
         })
-        resolve(processInfo)
-      })
-      .catch((error) => {
-        reject(error)
-      })
+      }
+    }
   })
+  return processInfo
 }
 
 /**
@@ -1130,19 +1066,4 @@ export const replaceLastWithZero = (ip: string): string => {
   if (segments.length === 1) return '0'
   segments[segments.length - 1] = '0'
   return segments.join('.')
-}
-
-/**
- * Windows 上探测某地址是否已有路由（route print 过滤输出中匹配目标列）。
- * 命令失败或输出不可解析时按「不存在」处理，让调用方走新增路由分支。
- */
-export const checkRouteOnWindows = async (ip: string): Promise<boolean> => {
-  try {
-    const table = await executeCmd('route', ['print', '-4', ip], { encoding: 'gbk' })
-    if (typeof table !== 'string') return false
-    return table.split(/\r?\n/).some((row) => row.trim().split(/\s+/).includes(ip))
-  } catch (cause) {
-    error(`检测路由失败 ${ip}:${String(cause)}`)
-    return false
-  }
 }

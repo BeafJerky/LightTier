@@ -5,19 +5,17 @@
  * 并为出口节点公网 IP 添加直连路由（避免隧道自环）；停止时 clearExitRoute 反向清理。
  *
  * 可靠性设计：
- * - 命令结果严格校验（executeCmd 非零退出返回对象而非抛错），任一步失败立即回滚；
+ * - 命令结果严格校验（Rust 命令失败抛错），任一步失败立即回滚；
  * - 路由状态按配置名隔离（Map<configName, RouteEntry[]>），多出口配置互不覆盖；
  * - 原默认路由用 `route change` 改写 metric，清理时恢复原 metric，绝不删除系统默认路由；
  * - 记录落盘（version 2，多配置），崩溃/强杀后可检查残留并在启动时补清。
  */
 import { error } from '@tauri-apps/plugin-log'
 import { join } from '@tauri-apps/api/path'
-import {
-  checkRouteOnWindows,
-  executeCmd,
-  replaceLastWithZero,
-  runEasyTierCli
-} from '@/shared/platform/shellUtil'
+import { replaceLastWithZero, runEasyTierCli } from '@/shared/platform/shellUtil'
+import * as systemOps from '@/shared/platform/systemOps'
+import { isAndroid } from '@/shared/platform/platformUtil'
+import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { extractAllPublicIPs, readTextTail } from '@/shared/lib/logText'
 import { processPeerData, routeCost } from '@/shared/lib/monitorFormat'
 import {
@@ -26,9 +24,6 @@ import {
   resolveKernelLogFile,
   writeFileContent
 } from '@/shared/platform/fileUtil'
-import { PS_ADAPTER_FILTER_CLAUSE } from '@/shared/platform/sysUtil'
-import { isAndroid } from '@/shared/platform/platformUtil'
-import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { CONFIG_PATH, RESOURCE_PATH } from '@/shared/constants/easytier'
 import { isExitRouteEnabled } from '@/entities/config/lighttierConfigUtil'
 import * as toml from 'smol-toml'
@@ -176,16 +171,18 @@ const readConfigLog = async (configName: string): Promise<string> => {
 
 const getDefaultGateway = async (): Promise<string | null> => {
   try {
-    const res = await executeCmd('powershell', [
-      '-NoProfile',
-      '-Command',
-      `Get-NetIPConfiguration | Where-Object {${PS_ADAPTER_FILTER_CLAUSE}} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty IPv4DefaultGateway | Select-Object -ExpandProperty NextHop`
-    ])
-    const match = typeof res === 'string' ? res.match(/\d+\.\d+\.\d+\.\d+/) : null
-    return match ? match[0] : null
+    return await systemOps.defaultGateway()
   } catch (e) {
     error(`获取网关失败:${String(e)}`)
     return null
+  }
+}
+
+const routeExists = async (ip: string): Promise<boolean> => {
+  try {
+    return await systemOps.routeExists(ip)
+  } catch {
+    return false
   }
 }
 
@@ -202,27 +199,22 @@ const getPublicIps = async (configName: string): Promise<string[] | null> => {
   return null
 }
 
-// executeCmd 成功返回 stdout 字符串，或空输出时返回 { code: 0 }；非零退出返回 { code: 非 0 }
-const isCmdSuccess = (res: unknown): boolean => {
-  if (typeof res === 'string') return true
-  return !!res && typeof res === 'object' && (res as { code?: number }).code === 0
-}
+// 路由命令只允许三种固定形态；参数校验由 Rust 侧完成，失败直接抛错供调用方回滚
+type RouteCommand =
+  | { op: 'add'; target: string; mask: string; gateway: string; metric: number }
+  | { op: 'delete'; target: string; mask: string; gateway: string }
+  | { op: 'change'; gateway: string; metric: number }
 
-const toCmdError = (res: unknown): string => {
-  if (res && typeof res === 'object') {
-    const { msg, stderr, code } = res as { msg?: string; stderr?: string; code?: number }
-    return msg || stderr || `退出码 ${code ?? '未知'}`
+const runRoute = async (command: RouteCommand): Promise<void> => {
+  if (command.op === 'add') {
+    await systemOps.routeAdd(command.target, command.mask, command.gateway, command.metric)
+    return
   }
-  return String(res)
-}
-
-// 执行单条 route 命令；非零退出直接抛错（由调用方回滚）
-const runRoute = async (args: string[]) => {
-  const res = await executeCmd('route', args, { encoding: 'gbk' })
-  if (!isCmdSuccess(res)) {
-    throw new Error(`route ${args[0]} 失败：${toCmdError(res)}`)
+  if (command.op === 'delete') {
+    await systemOps.routeDelete(command.target, command.mask, command.gateway)
+    return
   }
-  return res
+  await systemOps.routeChangeDefault(command.gateway, command.metric)
 }
 
 // 路由不存在 / 已被外部删除：删除命令会返回非零，但结果上已达成“清除”
@@ -296,7 +288,7 @@ export const setExitRoute = async (
     gateway &&
     publicIps?.length &&
     waitHole === true &&
-    (!localNode || (await checkRouteOnWindows(localNode.ipv4)))
+    (!localNode || (await routeExists(localNode.ipv4)))
   )
   // 显式收窄类型（Boolean() 检查不会缩小 TS 类型）
   if (!canSet || !gateway || !publicIps) return { ok: false, reason: 'precondition' }
@@ -304,7 +296,7 @@ export const setExitRoute = async (
   // 等待退出网段路由出现（最长 20s）
   let exitRouteExists = false
   for (let i = 0; i < 10; i++) {
-    if (await checkRouteOnWindows(replaceLastWithZero(exitNodeIp))) {
+    if (await routeExists(replaceLastWithZero(exitNodeIp))) {
       exitRouteExists = true
       break
     }
@@ -328,7 +320,7 @@ export const setExitRoute = async (
 
   try {
     // 1) 降低原默认路由优先级（保留原 metric，供停止时恢复）
-    await runRoute(['change', '0.0.0.0', 'mask', '0.0.0.0', gateway, 'metric', '30'])
+    await runRoute({ op: 'change', gateway, metric: 30 })
     attempted.push({
       target: '0.0.0.0',
       mask: '0.0.0.0',
@@ -341,7 +333,13 @@ export const setExitRoute = async (
     // 2) 出口节点公网 IP 直连（避免隧道自环）
     for (const publicIp of publicIps) {
       if (hasExactRoute(publicIp, '255.255.255.255', gateway)) continue
-      await runRoute(['add', publicIp, 'mask', '255.255.255.255', gateway, 'metric', '1'])
+      await runRoute({
+        op: 'add',
+        target: publicIp,
+        mask: '255.255.255.255',
+        gateway,
+        metric: 1
+      })
       attempted.push({
         target: publicIp,
         mask: '255.255.255.255',
@@ -353,7 +351,13 @@ export const setExitRoute = async (
 
     // 3) 默认流量改走出口节点
     if (!hasExactRoute('0.0.0.0', '0.0.0.0', exitNodeIp)) {
-      await runRoute(['add', '0.0.0.0', 'mask', '0.0.0.0', exitNodeIp, 'metric', '5'])
+      await runRoute({
+        op: 'add',
+        target: '0.0.0.0',
+        mask: '0.0.0.0',
+        gateway: exitNodeIp,
+        metric: 5
+      })
       attempted.push({
         target: '0.0.0.0',
         mask: '0.0.0.0',
@@ -407,18 +411,14 @@ const deleteRouteEntries = async (entries: RouteEntry[]): Promise<RouteDeleteRes
         if (typeof r.originalMetric !== 'number') {
           throw new Error('缺少原默认路由 metric，拒绝删除系统默认路由')
         }
-        await runRoute([
-          'change',
-          '0.0.0.0',
-          'mask',
-          '0.0.0.0',
-          r.gateway,
-          'metric',
-          String(r.originalMetric)
-        ])
+        await runRoute({
+          op: 'change',
+          gateway: r.gateway,
+          metric: r.originalMetric
+        })
       } else {
         try {
-          await runRoute(['delete', r.target, 'mask', r.mask, r.gateway])
+          await runRoute({ op: 'delete', target: r.target, mask: r.mask, gateway: r.gateway })
         } catch (e) {
           if (isMissingRouteError(e instanceof Error ? e.message : String(e))) {
             cleared++
@@ -518,21 +518,11 @@ export interface ExitRouteCheckResult {
   suspicious: RouteEntry[] // 系统表中目标相同但网关/metric 与记录不符（被外部修改）
 }
 
-// 读取系统 IPv4 路由表（route print -4，取四段 IP + 跃点数行；"在链路上"行自然跳过）
+// 读取系统 IPv4 路由表（Rust 侧解析 route print -4，仅返回活动路由）
 const listSystemRoutes = async (): Promise<RouteEntry[]> => {
   try {
-    const res = await executeCmd('route', ['print', '-4'], { encoding: 'gbk' })
-    if (typeof res !== 'string') return []
-    const entries: RouteEntry[] = []
-    const linePattern =
-      /^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+\d+\.\d+\.\d+\.\d+\s+(\d+)\s*$/
-    for (const line of res.split(/\r?\n/)) {
-      const m = line.match(linePattern)
-      if (m) {
-        entries.push({ target: m[1], mask: m[2], gateway: m[3], metric: parseInt(m[4], 10) })
-      }
-    }
-    return entries
+    const rows = await systemOps.printRoutes()
+    return rows.map(({ target, mask, gateway, metric }) => ({ target, mask, gateway, metric }))
   } catch {
     return []
   }
@@ -544,7 +534,7 @@ const isExitRouteInUse = async (record: ExitRouteRecord): Promise<boolean> => {
     (e) => e.kind !== 'default' && e.target === '0.0.0.0' && e.metric === 5
   )
   if (!exitEntry) return false
-  const inUse = await checkRouteOnWindows(replaceLastWithZero(exitEntry.gateway))
+  const inUse = await routeExists(replaceLastWithZero(exitEntry.gateway))
   return inUse === true
 }
 

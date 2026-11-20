@@ -47,6 +47,16 @@ vi.mock('@/shared/platform/sysUtil', async (importOriginal) => {
   }
 })
 
+const sysopsMocks = vi.hoisted(() => ({
+  listProcesses: vi.fn(),
+  killProcess: vi.fn()
+}))
+
+vi.mock('@/shared/platform/systemOps', () => ({
+  listProcesses: sysopsMocks.listProcesses,
+  killProcess: sysopsMocks.killProcess
+}))
+
 const fileMocks = vi.hoisted(() => ({
   // rpc_portal 用于验证 v2.5.0+ 由 CLI 参数补传
   readFileContent: vi.fn(async () => 'rpc_portal = "0.0.0.0:15888"\n'),
@@ -78,6 +88,7 @@ import {
   checkServiceWithOfficialCli,
   executeCmd,
   getRunningProcesses,
+  killProcess,
   installServiceWithOfficialCli,
   runEasyTierCoreWeb,
   startServiceOnWindows,
@@ -89,6 +100,8 @@ beforeEach(() => {
   mocks.create.mockClear()
   tauriMocks.invoke.mockReset()
   Object.values(logMocks).forEach((fn) => fn.mockClear())
+  sysopsMocks.listProcesses.mockReset()
+  sysopsMocks.killProcess.mockReset()
   // run_command 成功时 Rust 侧返回子进程 PID
   tauriMocks.invoke.mockResolvedValue('4321')
   mocks.platform.current = 'windows'
@@ -138,40 +151,31 @@ describe('executeCmd 返回契约（M-04）', () => {
 })
 
 describe('getRunningProcesses 平台解析（M-10）', () => {
-  it('Windows 单条结果（ConvertTo-Json 输出对象而非数组）也能识别', async () => {
-    mocks.execute.mockResolvedValue({
-      code: 0,
-      stdout: JSON.stringify({
+  it('Windows 进程扫描委托 sysops 并补齐 fileName', async () => {
+    sysopsMocks.listProcesses.mockResolvedValue([
+      {
         name: 'easytier-core.exe',
         commandLine: 'easytier-core --config-file a.toml',
-        path: 'C:\\x\\easytier-core.exe',
+        path: 'C:/x/easytier-core.exe',
         pid: 123,
         memory: 2048
-      }),
-      stderr: ''
-    })
+      }
+    ])
     const list = await getRunningProcesses('easytier-core')
+    expect(sysopsMocks.listProcesses).toHaveBeenCalledWith('easytier-core')
     expect(list).toHaveLength(1)
-    expect(list[0].pid).toBe(123)
-    expect(list[0].name).toBe('easytier-core.exe')
+    expect(list[0]).toMatchObject({ pid: 123, fileName: 'easytier-core' })
   })
 
-  it('Windows 多条结果数组正常解析，powershell 自身被过滤', async () => {
-    mocks.execute.mockResolvedValue({
-      code: 0,
-      stdout: JSON.stringify([
-        { name: 'powershell.exe', commandLine: 'Get-CimInstance easytier-core', pid: 999 },
-        { name: 'easytier-core.exe', commandLine: 'easytier-core --config-file a.toml', pid: 124 }
-      ]),
-      stderr: ''
-    })
-    const list = await getRunningProcesses('easytier-core')
-    expect(list.map((p) => p.pid)).toEqual([124])
-  })
-
-  it('Windows 命令成功但输出为空 → 返回空数组', async () => {
-    mocks.execute.mockResolvedValue({ code: 0, stdout: '', stderr: '' })
+  it('Windows 空列表 → 返回空数组', async () => {
+    sysopsMocks.listProcesses.mockResolvedValue([])
     await expect(getRunningProcesses('easytier-core')).resolves.toEqual([])
+  })
+
+  it('Windows 进程终止委托 sysops', async () => {
+    sysopsMocks.killProcess.mockResolvedValue(true)
+    await expect(killProcess(42)).resolves.toBe(true)
+    expect(sysopsMocks.killProcess).toHaveBeenCalledWith(42)
   })
 
   it('macOS/Linux ps 文本输出按行解析（不再必然 JSON.parse 失败）', async () => {

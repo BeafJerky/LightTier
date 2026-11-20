@@ -10,12 +10,11 @@
  * 避免停止 A 时把仍在运行的 B 的路由优先级改回去。
  */
 import { ref } from 'vue'
-import { executeCmd } from '@/shared/platform/shellUtil'
 import { readFileContent } from '@/shared/platform/fileUtil'
 import { CONFIG_PATH } from '@/shared/constants/easytier'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
-import { PS_ADAPTER_FILTER_CLAUSE } from '@/shared/platform/sysUtil'
+import * as systemOps from '@/shared/platform/systemOps'
 import { isExitRouteEnabled } from '@/entities/config/lighttierConfigUtil'
 import * as toml from 'smol-toml'
 
@@ -45,18 +44,7 @@ const isTauri = (): boolean => {
 const getActiveNetworkAdapter = async (): Promise<string | null> => {
   if (!isTauri()) return null
   try {
-    const res = await executeCmd(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        // PS_ADAPTER_FILTER_CLAUSE 统一维护网卡筛选（含 et_* / easytier* 排除，见 sysUtil）
-        `Get-NetIPConfiguration | Where-Object {${PS_ADAPTER_FILTER_CLAUSE}} | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty NetAdapter | Select-Object -ExpandProperty Name`
-      ],
-      { encoding: 'gbk' }
-    )
-    const adapterName = typeof res === 'string' ? res.trim() : ''
-    return adapterName || null
+    return await systemOps.activeAdapter()
   } catch (e) {
     console.warn(`[AutoMetric] 获取上网网卡失败: ${String(e)}`)
     return null
@@ -67,17 +55,7 @@ const getActiveNetworkAdapter = async (): Promise<string | null> => {
 const disableAutoMetric = async (adapterName: string): Promise<boolean> => {
   if (!isTauri()) return true
   try {
-    // PowerShell 中双引号的转义：将 " 替换为 `"
-    const safeName = adapterName.replace(/"/g, '`"')
-    await executeCmd(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Set-NetIPInterface -InterfaceAlias "${safeName}" -AutomaticMetric Disabled -InterfaceMetric 1`
-      ],
-      { encoding: 'gbk' }
-    )
+    await systemOps.setAdapterMetric(adapterName, false)
     return true
   } catch (e) {
     console.warn(`[AutoMetric] 关闭网卡自动跃点失败: ${String(e)}`)
@@ -89,17 +67,7 @@ const disableAutoMetric = async (adapterName: string): Promise<boolean> => {
 const enableAutoMetric = async (adapterName: string): Promise<boolean> => {
   if (!isTauri()) return true
   try {
-    // PowerShell 中双引号的转义：将 " 替换为 `"
-    const safeName = adapterName.replace(/"/g, '`"')
-    await executeCmd(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Set-NetIPInterface -InterfaceAlias "${safeName}" -AutomaticMetric Enabled`
-      ],
-      { encoding: 'gbk' }
-    )
+    await systemOps.setAdapterMetric(adapterName, true)
     return true
   } catch (e) {
     console.warn(`[AutoMetric] 开启网卡自动跃点失败: ${String(e)}`)
@@ -159,16 +127,7 @@ if (typeof window !== 'undefined' && !('__autoMetricUnloadRegistered' in window)
     const adapter = disabledAutoMetricAdapter.value
     if (adapter) {
       // 触发恢复命令（不等待完成，best-effort）
-      const safeName = adapter.replace(/"/g, '`"')
-      executeCmd(
-        'powershell',
-        [
-          '-NoProfile',
-          '-Command',
-          `Set-NetIPInterface -InterfaceAlias "${safeName}" -AutomaticMetric Enabled`
-        ],
-        { encoding: 'gbk' }
-      ).catch(() => {})
+      void systemOps.setAdapterMetric(adapter, true).catch(() => {})
     }
   })
 }

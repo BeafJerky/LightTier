@@ -4073,6 +4073,8 @@ name = "lighttier-desktop"
 version = "2.7.0"
 dependencies = [
  "log",
+ "serde",
+ "serde_json",
  "tauri",
 ]
 

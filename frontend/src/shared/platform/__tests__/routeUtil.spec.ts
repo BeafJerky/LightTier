@@ -15,10 +15,17 @@ vi.mock('@tauri-apps/api/path', () => ({
 }))
 
 vi.mock('@/shared/platform/shellUtil', () => ({
-  checkRouteOnWindows: vi.fn(),
-  executeCmd: vi.fn(),
   replaceLastWithZero: vi.fn(),
   runEasyTierCli: vi.fn()
+}))
+
+vi.mock('@/shared/platform/systemOps', () => ({
+  defaultGateway: vi.fn(async () => null),
+  routeAdd: vi.fn(async () => undefined),
+  routeDelete: vi.fn(async () => undefined),
+  routeChangeDefault: vi.fn(async () => undefined),
+  printRoutes: vi.fn(async () => []),
+  routeExists: vi.fn(async () => false)
 }))
 
 vi.mock('@/shared/lib/logText', () => ({
