@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.7.0 (2026-11-21)
+
+> 灵动岛新增后台全实例健康采样：监控页关闭后仍按 10s 节奏跟踪连接质量。
+
+- 新增
+  - runtime 健康采样订阅 `health_subscribe` / `health_unsubscribe`：实例去重后最多 8 个，默认 10s、下限 5s，单实例 2s 超时
+  - 事件 `health:snapshot` 推送每个实例的 `ok` / 平均延迟 / 丢包率 / 远端 peer 数；失败按 3/6/12/30s 退避且不低于订阅间隔
+  - 前端灵动岛桥接在桌面、灵动岛与质量提醒均开启时自动订阅，运行列表或设置变化时重建订阅；Android 不订阅
+- 修复
+  - 订阅代际保护：切换或取消订阅后，旧采样任务结果直接丢弃，不覆盖新订阅状态
+- 验证
+  - Rust 单测覆盖间隔下限、实例上限与去重、退避档位、Local 过滤与延迟/丢包解析；cargo check 通过
+  - 前端 vitest（42 文件 / 391 项）、vue-tsc、ESLint、生产构建通过；浏览器 Mock 冒烟无控制台错误
+  - 桌面真实内核采样、监控页互斥切换与灵动岛提醒链路待在桌面环境实测
+
+## 2.6.0 (2026-11-21)
+
+> 备份恢复改为可回滚事务，灵动岛设置纳入备份；代码编辑器不再打包 4 个未使用的 Monaco 语言 worker。
+
+- 新增
+  - 灵动岛设置随应用偏好一起备份与恢复；旧备份缺少该字段时保留本地设置
+  - DHCP / DHCPv6 网段前端轻校验：IPv4 前缀 ≤30，IPv6 限 `fc00::/7` 或 `2000::/3`、前缀 ≤126；非法输入显示无障碍提示，不阻断保存与原值透传
+- 修复
+  - 备份恢复改为“先采集全部快照、逐项应用、失败逆序回滚”：配置文件、Web 配置、偏好（含服务安装记录）、外观、锁屏密码与加速源均恢复至操作前状态；回滚自身失败时如实提示
+  - 清理 `@ts-ignore` / `@ts-nocheck`，恢复编辑器与工具函数的类型检查
+- 优化
+  - Monaco 只引入编辑器 API 与功能，不再打包 json/css/html/ts 语言 worker；`dist` 由 15MB 降至 5.6MB
+  - ESLint 回收 `no-useless-escape`、`vue/no-reserved-component-names`、`@typescript-eslint/ban-ts-comment`、`vue/no-v-html`，并为暂不启用项写明原因
+- 验证
+  - vitest（42 文件 / 389 项）、vue-tsc、ESLint、Stylelint、生产构建通过
+  - 浏览器 Mock 实拍：代码编辑器 TOML 高亮正常；DHCP 前缀与 DHCPv6 范围提示正常，合法值提示消失
+  - 恢复回滚由单测覆盖；Mock 无法制造写入失败，未做 UI 级故障注入
+
 ## 2.5.0 (2026-11-16)
 
 > 适配 EasyTier v2.7.1（新增 DHCP 网段、DHCPv6、Magic DNS、UDP FEC 与 LZO 压缩），修正红白机主题的圆形按钮残留，并按 Claude 官方视觉规范校准 Claude 主题的配色与排版。
