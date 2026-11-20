@@ -4,6 +4,7 @@
 //! 所有系统参数在进入命令前必须经过本模块校验。
 
 pub mod adapter;
+pub mod process;
 pub mod route;
 
 pub fn validate_pid(pid: u32) -> Result<(), String> {
