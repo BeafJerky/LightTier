@@ -5,6 +5,8 @@
 
 pub mod process;
 pub mod runtime;
+#[cfg(desktop)]
+pub mod sysops;
 pub mod system;
 
 #[cfg(desktop)]

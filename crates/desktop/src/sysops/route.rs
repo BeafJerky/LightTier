@@ -3,7 +3,8 @@
 use super::{validate_ipv4, validate_mask};
 use std::process::Command;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RouteRow {
     pub target: String,
     pub mask: String,
