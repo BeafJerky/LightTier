@@ -8,7 +8,10 @@ mod platform;
 mod service;
 
 pub use service::RuntimeService;
-pub use types::{MonitorSnapshot, MonitorSubscription, RunningInstance, RuntimeSnapshot};
+pub use types::{
+    HealthSample, HealthSnapshot, HealthSubscription, MonitorSnapshot, MonitorSubscription,
+    RunningInstance, RuntimeSnapshot,
+};
 
 /// 创建并启动运行态服务（后台扫描线程随应用生命周期存活）。
 pub fn setup(app: &tauri::AppHandle) -> std::sync::Arc<RuntimeService> {

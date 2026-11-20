@@ -4,7 +4,7 @@
 //! 变化时通过 Tauri 事件推送（`runtime:snapshot` / `monitor:snapshot`）。
 //! 前端只做投影，不再各自轮询 PowerShell 或 CLI。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -15,7 +15,10 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use crate::platform;
-use crate::types::{MonitorSnapshot, MonitorSubscription, RunningInstance, RuntimeSnapshot};
+use crate::types::{
+    HealthSample, HealthSnapshot, HealthSubscription, MonitorSnapshot, MonitorSubscription,
+    RunningInstance, RuntimeSnapshot,
+};
 
 /// 工作线程节拍：只做轻量判断，重活（扫描/采样）在线程内异步完成。
 const WORKER_TICK_MS: u64 = 250;
@@ -24,6 +27,12 @@ const QUERY_RETRY_DELAY_MS: u64 = 150;
 const FAILURE_BACKOFF_MS: [u64; 4] = [3_000, 6_000, 12_000, 30_000];
 const DEFAULT_INTERVAL_MS: u64 = 3_000;
 const MIN_INTERVAL_MS: u64 = 1_000;
+
+/// 后台健康采样：默认 10s、下限 5s、最多 8 个实例、单实例查询 2s 超时。
+const HEALTH_INTERVAL_MS: u64 = 10_000;
+const HEALTH_MIN_INTERVAL_MS: u64 = 5_000;
+const HEALTH_MAX_INSTANCES: usize = 8;
+const HEALTH_QUERY_TIMEOUT_MS: u64 = 2_000;
 
 struct CachedProjection {
     mtime: Option<SystemTime>,
@@ -40,6 +49,23 @@ struct MonitorState {
     snapshots: HashMap<String, MonitorSnapshot>,
 }
 
+#[derive(Default)]
+struct HealthState {
+    subscription: Option<HealthSubscription>,
+    last_sample: Option<Instant>,
+    sampling: bool,
+    next_delay: Duration,
+    /// 每个实例的连续失败次数，用于指数退避。
+    failures: HashMap<String, u32>,
+    /// 下次允许采样的时间点（失败退避期间跳过该实例）。
+    next_attempt: HashMap<String, Instant>,
+    /// 最近一次成功/失败结果，快照与退避期间沿用。
+    samples: HashMap<String, HealthSample>,
+    revision: u64,
+    /// 订阅代际：订阅变化后旧采样任务的结果直接丢弃。
+    generation: u64,
+}
+
 pub struct RuntimeService {
     app: AppHandle,
     catalog: Mutex<Vec<String>>,
@@ -48,6 +74,7 @@ pub struct RuntimeService {
     scan_lock: Mutex<()>,
     force_scan: AtomicBool,
     monitor: Mutex<MonitorState>,
+    health: Mutex<HealthState>,
     projections: Mutex<HashMap<String, CachedProjection>>,
 }
 
@@ -62,6 +89,10 @@ impl RuntimeService {
             monitor: Mutex::new(MonitorState {
                 next_delay: Duration::from_millis(DEFAULT_INTERVAL_MS),
                 ..MonitorState::default()
+            }),
+            health: Mutex::new(HealthState {
+                next_delay: Duration::from_millis(HEALTH_INTERVAL_MS),
+                ..HealthState::default()
             }),
             projections: Mutex::new(HashMap::new()),
         }
@@ -84,6 +115,7 @@ impl RuntimeService {
                     service.scan_once().await;
                 }
                 service.monitor_tick().await;
+                service.health_tick().await;
             }
         });
     }
@@ -176,6 +208,211 @@ impl RuntimeService {
             .snapshots
             .get(config_file_name)
             .cloned()
+    }
+
+    /// 订阅后台健康采样；新订阅会清空旧结果与退避状态。
+    pub async fn health_subscribe(&self, subscription: HealthSubscription) {
+        let interval = normalize_health_interval(subscription.interval_ms);
+        let instances = cap_health_instances(subscription.instances);
+        let mut state = self.health.lock().await;
+        state.generation += 1;
+        state.sampling = false;
+        state.subscription = (!instances.is_empty()).then_some(HealthSubscription {
+            instances,
+            interval_ms: Some(interval),
+        });
+        state.failures.clear();
+        state.next_attempt.clear();
+        state.samples.clear();
+        state.last_sample = None;
+        state.next_delay = Duration::from_millis(interval);
+    }
+
+    pub async fn health_unsubscribe(&self) {
+        let mut state = self.health.lock().await;
+        state.generation += 1;
+        state.sampling = false;
+        state.subscription = None;
+        state.failures.clear();
+        state.next_attempt.clear();
+        state.samples.clear();
+    }
+
+    async fn health_tick(self: &Arc<Self>) {
+        let mut state = self.health.lock().await;
+        let Some(subscription) = state.subscription.clone() else {
+            return;
+        };
+        if state.sampling {
+            return;
+        }
+        // 监控页活跃时由 monitor 订阅负责采样，避免两路 CLI 查询互相抢占
+        if self.monitor.lock().await.subscription.is_some() {
+            return;
+        }
+
+        let running = self.snapshot.lock().await.instances.clone();
+        let subscribed: Vec<RunningInstance> = subscription
+            .instances
+            .iter()
+            .filter_map(|wanted| {
+                running
+                    .iter()
+                    .find(|item| item.config_file_name == wanted.config_file_name)
+                    .cloned()
+            })
+            .collect();
+        let alive: HashSet<String> = subscribed
+            .iter()
+            .map(|item| item.config_file_name.clone())
+            .collect();
+        state.failures.retain(|name, _| alive.contains(name));
+        state.next_attempt.retain(|name, _| alive.contains(name));
+        state.samples.retain(|name, _| alive.contains(name));
+
+        if subscribed.is_empty() {
+            // 全部实例已停止：结束订阅，等运行态恢复后由前端重新订阅
+            state.subscription = None;
+            return;
+        }
+
+        let due = match state.last_sample {
+            None => true,
+            Some(at) => at.elapsed() >= state.next_delay,
+        };
+        if !due {
+            return;
+        }
+        state.sampling = true;
+        state.last_sample = Some(Instant::now());
+        state.next_delay = Duration::from_millis(normalize_health_interval(subscription.interval_ms));
+        let generation = state.generation;
+        drop(state);
+
+        let service = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            service.sample_health(subscribed, generation).await;
+        });
+    }
+
+    async fn sample_health(
+        self: &Arc<Self>,
+        instances: Vec<RunningInstance>,
+        generation: u64,
+    ) {
+        for instance in instances {
+            let name = instance.config_file_name.clone();
+            let (interval, should_skip) = {
+                let state = self.health.lock().await;
+                // 订阅已切换：旧任务直接退出，不触碰新代际状态
+                if state.generation != generation {
+                    return;
+                }
+                let Some(current) = state.subscription.as_ref() else {
+                    return;
+                };
+                if !current
+                    .instances
+                    .iter()
+                    .any(|item| item.config_file_name == name)
+                {
+                    continue;
+                }
+                let interval =
+                    Duration::from_millis(normalize_health_interval(current.interval_ms));
+                let skip = state
+                    .next_attempt
+                    .get(&name)
+                    .map(|at| *at > Instant::now())
+                    .unwrap_or(false);
+                (interval, skip)
+            };
+            if should_skip {
+                // 退避期间沿用上一份结果，不重复查询
+                continue;
+            }
+
+            let query = tokio::time::timeout(
+                Duration::from_millis(HEALTH_QUERY_TIMEOUT_MS),
+                platform::query_node_peer(&instance, &self.app),
+            )
+            .await;
+            let sample = match query {
+                Ok(Ok((_node, peers))) => {
+                    let quality = quality_from_peers(&peers);
+                    HealthSample {
+                        config_file_name: name.clone(),
+                        ok: true,
+                        avg_latency_ms: quality.avg_latency_ms,
+                        loss_rate: quality.loss_rate,
+                        peer_count: quality.peer_count,
+                    }
+                }
+                Ok(Err(err)) => {
+                    log::warn!("health sample failed for {name}: {err}");
+                    HealthSample::failed(name.clone())
+                }
+                Err(_) => {
+                    log::warn!(
+                        "health sample timed out for {name} ({}ms)",
+                        HEALTH_QUERY_TIMEOUT_MS
+                    );
+                    HealthSample::failed(name.clone())
+                }
+            };
+
+            let mut state = self.health.lock().await;
+            if state.generation != generation {
+                return;
+            }
+            let still_subscribed = state
+                .subscription
+                .as_ref()
+                .map(|current| {
+                    current
+                        .instances
+                        .iter()
+                        .any(|item| item.config_file_name == name)
+                })
+                .unwrap_or(false);
+            if !still_subscribed {
+                continue;
+            }
+            if sample.ok {
+                state.failures.remove(&name);
+                state.next_attempt.remove(&name);
+            } else {
+                let failures = {
+                    let entry = state.failures.entry(name.clone()).or_insert(0);
+                    *entry += 1;
+                    *entry
+                };
+                state.next_attempt.insert(
+                    name.clone(),
+                    Instant::now() + health_backoff(failures, interval),
+                );
+            }
+            state.samples.insert(name, sample);
+        }
+
+        let mut state = self.health.lock().await;
+        if state.generation != generation {
+            return;
+        }
+        state.sampling = false;
+        if state.subscription.is_none() {
+            return;
+        }
+        state.revision += 1;
+        let mut samples: Vec<HealthSample> = state.samples.values().cloned().collect();
+        samples.sort_by(|a, b| a.config_file_name.cmp(&b.config_file_name));
+        let snapshot = HealthSnapshot {
+            revision: state.revision,
+            sampled_at: now_ms(),
+            instances: samples,
+        };
+        drop(state);
+        self.emit("health:snapshot", &snapshot);
     }
 
     async fn monitor_tick(self: &Arc<Self>) {
@@ -358,6 +595,77 @@ fn normalize_interval(interval: Option<u64>) -> u64 {
     interval.unwrap_or(DEFAULT_INTERVAL_MS).max(MIN_INTERVAL_MS)
 }
 
+fn normalize_health_interval(interval: Option<u64>) -> u64 {
+    interval
+        .unwrap_or(HEALTH_INTERVAL_MS)
+        .max(HEALTH_MIN_INTERVAL_MS)
+}
+
+/// 去重并截断到采样上限；空实例名直接丢弃。
+fn cap_health_instances(instances: Vec<RunningInstance>) -> Vec<RunningInstance> {
+    let mut seen = HashSet::new();
+    instances
+        .into_iter()
+        .filter(|item| {
+            !item.config_file_name.is_empty() && seen.insert(item.config_file_name.clone())
+        })
+        .take(HEALTH_MAX_INSTANCES)
+        .collect()
+}
+
+/// 失败退避：3/6/12/30s，且不低于订阅间隔。
+fn health_backoff(failures: u32, interval: Duration) -> Duration {
+    let index = (failures.saturating_sub(1) as usize).min(FAILURE_BACKOFF_MS.len() - 1);
+    Duration::from_millis(FAILURE_BACKOFF_MS[index]).max(interval)
+}
+
+struct PeerQuality {
+    avg_latency_ms: Option<f64>,
+    loss_rate: Option<f64>,
+    peer_count: usize,
+}
+
+/// 与监控页口径一致：排除 Local 项，延迟/丢包按远端 peer 求平均。
+fn quality_from_peers(peers: &Value) -> PeerQuality {
+    let Some(items) = peers.as_array() else {
+        return PeerQuality {
+            avg_latency_ms: None,
+            loss_rate: None,
+            peer_count: 0,
+        };
+    };
+    let remote: Vec<&Value> = items
+        .iter()
+        .filter(|peer| peer.get("cost").and_then(Value::as_str) != Some("Local"))
+        .collect();
+    let latencies: Vec<f64> = remote
+        .iter()
+        .filter_map(|peer| numeric_metric(peer, "lat_ms"))
+        .collect();
+    let losses: Vec<f64> = remote
+        .iter()
+        .filter_map(|peer| numeric_metric(peer, "loss_rate"))
+        .collect();
+    PeerQuality {
+        avg_latency_ms: (!latencies.is_empty())
+            .then(|| latencies.iter().sum::<f64>() / latencies.len() as f64),
+        loss_rate: Some(if losses.is_empty() {
+            0.0
+        } else {
+            losses.iter().sum::<f64>() / losses.len() as f64
+        }),
+        peer_count: remote.len(),
+    }
+}
+
+fn numeric_metric(peer: &Value, key: &str) -> Option<f64> {
+    let raw = peer.get(key)?.as_str()?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    raw.parse::<f64>().ok().filter(|value| value.is_finite())
+}
+
 fn subscribed_interval(state: &MonitorState) -> Duration {
     Duration::from_millis(
         state
@@ -493,5 +801,81 @@ network_name = "global-mesh"
         assert_eq!(normalize_interval(None), DEFAULT_INTERVAL_MS);
         assert_eq!(normalize_interval(Some(10)), MIN_INTERVAL_MS);
         assert_eq!(normalize_interval(Some(10_000)), 10_000);
+    }
+
+    #[test]
+    fn health_interval_is_clamped_to_five_seconds() {
+        assert_eq!(normalize_health_interval(None), HEALTH_INTERVAL_MS);
+        assert_eq!(
+            normalize_health_interval(Some(100)),
+            HEALTH_MIN_INTERVAL_MS
+        );
+        assert_eq!(normalize_health_interval(Some(15_000)), 15_000);
+    }
+
+    #[test]
+    fn health_instances_are_deduplicated_and_capped() {
+        let instances = (0..12)
+            .map(|index| RunningInstance {
+                config_file_name: format!("cfg-{index}"),
+                file_name: format!("cfg-{index}.toml"),
+                ..RunningInstance::default()
+            })
+            .chain(std::iter::once(RunningInstance {
+                config_file_name: "cfg-0".to_string(),
+                file_name: "cfg-0.toml".to_string(),
+                ..RunningInstance::default()
+            }))
+            .collect();
+        let capped = cap_health_instances(instances);
+        assert_eq!(capped.len(), HEALTH_MAX_INSTANCES);
+        let names: std::collections::HashSet<_> = capped
+            .iter()
+            .map(|item| item.config_file_name.as_str())
+            .collect();
+        assert_eq!(names.len(), capped.len());
+    }
+
+    #[test]
+    fn health_backoff_grows_and_never_drops_below_interval() {
+        let interval = Duration::from_millis(10_000);
+        assert_eq!(health_backoff(1, interval), interval);
+        assert_eq!(
+            health_backoff(2, Duration::from_millis(1_000)),
+            Duration::from_millis(6_000)
+        );
+        assert_eq!(
+            health_backoff(3, Duration::from_millis(1_000)),
+            Duration::from_millis(12_000)
+        );
+        assert_eq!(
+            health_backoff(9, Duration::from_millis(1_000)),
+            Duration::from_millis(30_000)
+        );
+    }
+
+    #[test]
+    fn quality_ignores_local_peer_and_parses_string_metrics() {
+        let peers = serde_json::json!([
+            { "cost": "Local", "lat_ms": "1", "loss_rate": "0" },
+            { "cost": "p2p", "lat_ms": "20", "loss_rate": "1.5" },
+            { "cost": "relay", "lat_ms": "", "loss_rate": "0.5" },
+            { "cost": "relay", "lat_ms": "40", "loss_rate": "" }
+        ]);
+        let quality = quality_from_peers(&peers);
+        assert_eq!(quality.peer_count, 3);
+        assert_eq!(quality.avg_latency_ms, Some(30.0));
+        assert_eq!(quality.loss_rate, Some(1.0));
+    }
+
+    #[test]
+    fn quality_without_latency_reports_none() {
+        let peers = serde_json::json!([
+            { "cost": "p2p", "lat_ms": "", "loss_rate": "0" }
+        ]);
+        let quality = quality_from_peers(&peers);
+        assert_eq!(quality.peer_count, 1);
+        assert_eq!(quality.avg_latency_ms, None);
+        assert_eq!(quality.loss_rate, Some(0.0));
     }
 }

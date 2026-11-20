@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use lighttier_runtime::{
-    MonitorSnapshot, MonitorSubscription, RuntimeService, RuntimeSnapshot,
+    HealthSubscription, MonitorSnapshot, MonitorSubscription, RuntimeService, RuntimeSnapshot,
 };
 use tauri::State;
 
@@ -57,4 +57,20 @@ pub async fn monitor_get_snapshot(
     config_file_name: String,
 ) -> Result<Option<MonitorSnapshot>, String> {
     Ok(state.monitor_snapshot(&config_file_name).await)
+}
+
+/// 订阅后台健康采样（灵动岛在监控页关闭时仍跟踪连接质量）。
+#[tauri::command]
+pub async fn health_subscribe(
+    state: State<'_, Arc<RuntimeService>>,
+    subscription: HealthSubscription,
+) -> Result<(), String> {
+    state.health_subscribe(subscription).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn health_unsubscribe(state: State<'_, Arc<RuntimeService>>) -> Result<(), String> {
+    state.health_unsubscribe().await;
+    Ok(())
 }

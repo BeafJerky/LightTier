@@ -1,5 +1,36 @@
 export const EXPECTED_STOP_TTL_MS = 15_000
 
+/** 后台健康采样输入：与 `RuntimeHealthSample` 结构兼容 */
+export interface HealthQualityInput {
+  configFileName: string
+  ok: boolean
+  avgLatencyMs?: number
+  lossRate?: number
+  peerCount: number
+}
+
+export interface HealthQualityEntry {
+  name: string
+  sample: { avgLatencyMs: number; lossRate: number; peerCount: number }
+}
+
+/** 把后端健康快照转成灵动岛可消费的质量样本：失败或缺少延迟的实例直接跳过 */
+export function collectQualitySamples(instances: HealthQualityInput[]): HealthQualityEntry[] {
+  const result: HealthQualityEntry[] = []
+  for (const item of instances) {
+    if (!item.ok || item.avgLatencyMs === undefined) continue
+    result.push({
+      name: item.configFileName,
+      sample: {
+        avgLatencyMs: item.avgLatencyMs,
+        lossRate: item.lossRate ?? 0,
+        peerCount: item.peerCount
+      }
+    })
+  }
+  return result
+}
+
 export function diffRunningNames(
   previous: Iterable<string>,
   next: Iterable<string>

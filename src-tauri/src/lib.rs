@@ -45,7 +45,9 @@ pub fn run() {
             commands::runtime::runtime_refresh,
             commands::runtime::monitor_subscribe,
             commands::runtime::monitor_unsubscribe,
-            commands::runtime::monitor_get_snapshot
+            commands::runtime::monitor_get_snapshot,
+            commands::runtime::health_subscribe,
+            commands::runtime::health_unsubscribe
         ]);
     }
 
@@ -62,6 +64,8 @@ pub fn run() {
             commands::runtime::monitor_subscribe,
             commands::runtime::monitor_unsubscribe,
             commands::runtime::monitor_get_snapshot,
+            commands::runtime::health_subscribe,
+            commands::runtime::health_unsubscribe,
             android::instance::start_instance,
             android::instance::stop_instance,
             android::instance::list_instances,

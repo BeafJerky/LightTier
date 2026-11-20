@@ -1,15 +1,27 @@
 // frontend/src/shared/composables/useIslandBridge.ts
 import { onScopeDispose, watch } from 'vue'
 import { isTauri } from '@tauri-apps/api/core'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { t } from '@/shared/i18n/t'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useIslandStore } from '@/shared/store/island'
 import { useRunningListSync } from '@/shared/composables/useRunningListSync'
 import { pickLatestManagerRelease } from '@/shared/lib/releaseUtil'
+import { collectQualitySamples } from '@/shared/lib/island/health'
 import { compareVersions, getAppVersion } from '@/shared/platform/sysUtil'
+import { isAndroid } from '@/shared/platform/platformUtil'
+import {
+  onHealthSnapshot,
+  runtimeAvailable,
+  subscribeHealth,
+  toRuntimeInstance,
+  unsubscribeHealth
+} from '@/shared/platform/runtimeApi'
 import { DEFAULT_CORE_VERSION } from '@/entities/kernel/kernelCompat'
 
 const INITIAL_RETRY_DELAYS = [5_000, 15_000]
+/** 后台健康采样节奏；后端下限 5s，监控页活跃时由后端自动让行 */
+const HEALTH_INTERVAL_MS = 10_000
 
 async function readAppVersion(): Promise<string> {
   try {
@@ -34,6 +46,9 @@ export function useIslandBridge() {
   let initialSyncOk = false
   let disposed = false
   let retryTimer = 0
+  let healthUnlisten: UnlistenFn | null = null
+  let healthKey = ''
+  let healthSyncChain: Promise<void> = Promise.resolve()
 
   const sync = useRunningListSync({
     onError: () => {
@@ -46,10 +61,72 @@ export function useIslandBridge() {
 
   const names = () => easy.runningList.map((item) => item.configFileName)
 
+  const healthWanted = (): boolean =>
+    !isAndroid() && island.settings.enabled && island.settings.types.quality
+
+  const stopHealth = async (): Promise<void> => {
+    if (!runtimeAvailable() || !healthKey) return
+    healthKey = ''
+    try {
+      await unsubscribeHealth()
+    } catch {
+      /* 后端已随应用退出时忽略 */
+    }
+  }
+
+  const syncHealth = async (): Promise<void> => {
+    if (!runtimeAvailable() || disposed) return
+    if (!healthWanted()) {
+      await stopHealth()
+      return
+    }
+    const instances = easy.runningList.map(toRuntimeInstance)
+    if (!instances.length) {
+      await stopHealth()
+      return
+    }
+    const key = instances.map((item) => item.configFileName).join('|')
+    if (key === healthKey) return
+    healthKey = key
+    try {
+      await subscribeHealth(instances, HEALTH_INTERVAL_MS)
+    } catch {
+      // 失败后允许下一次运行态变化重新订阅
+      healthKey = ''
+    }
+  }
+
+  const scheduleHealthSync = (): void => {
+    healthSyncChain = healthSyncChain.then(syncHealth).catch(() => {})
+  }
+
+  if (runtimeAvailable()) {
+    void onHealthSnapshot((snapshot) => {
+      if (!healthWanted()) return
+      for (const { name, sample } of collectQualitySamples(snapshot.instances)) {
+        island.reportQuality(name, sample)
+      }
+    })
+      .then((unlisten) => {
+        if (disposed) {
+          void unlisten()
+          return
+        }
+        healthUnlisten = unlisten
+      })
+      .catch(() => {})
+  }
+
   watch(names, (next) => {
     if (initializing) return
     island.applyRunningNames(next)
+    scheduleHealthSync()
   })
+
+  watch(
+    () => [island.settings.enabled, island.settings.types.quality],
+    () => scheduleHealthSync()
+  )
 
   watch(
     () => easy.detectedCoreVersion,
@@ -124,6 +201,7 @@ export function useIslandBridge() {
     if (initialSyncOk) {
       initializing = false
       island.markBaseline(names())
+      scheduleHealthSync()
       void refreshUpdateNotices()
       return
     }
@@ -142,11 +220,15 @@ export function useIslandBridge() {
   }
 
   document.addEventListener('visibilitychange', onVisibility)
+  scheduleHealthSync()
   void initialSync()
 
   onScopeDispose(() => {
     disposed = true
     window.clearTimeout(retryTimer)
     document.removeEventListener('visibilitychange', onVisibility)
+    healthUnlisten?.()
+    healthUnlisten = null
+    void stopHealth()
   })
 }

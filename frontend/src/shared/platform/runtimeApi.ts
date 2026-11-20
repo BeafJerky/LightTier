@@ -36,6 +36,21 @@ export interface RuntimeMonitorSnapshot {
   error?: string
 }
 
+/** 后台健康采样（灵动岛使用）；失败时仅 `ok=false`，不携带指标 */
+export interface RuntimeHealthSample {
+  configFileName: string
+  ok: boolean
+  avgLatencyMs?: number
+  lossRate?: number
+  peerCount: number
+}
+
+export interface RuntimeHealthSnapshot {
+  revision: number
+  sampledAt: number
+  instances: RuntimeHealthSample[]
+}
+
 /** 后端运行态服务是否可用（Tauri 桌面/Android） */
 export const runtimeAvailable = (): boolean => {
   try {
@@ -85,6 +100,19 @@ export const onMonitorSnapshot = (
   handler: (snapshot: RuntimeMonitorSnapshot) => void
 ): Promise<UnlistenFn> =>
   listen<RuntimeMonitorSnapshot>('monitor:snapshot', (event) => handler(event.payload))
+
+/** 订阅后台健康采样（监控页关闭时由后端按 10s 节奏采样） */
+export const subscribeHealth = (instances: RuntimeInstance[], intervalMs: number): Promise<void> =>
+  invoke<void>('health_subscribe', {
+    subscription: { instances, intervalMs }
+  })
+
+export const unsubscribeHealth = (): Promise<void> => invoke<void>('health_unsubscribe')
+
+export const onHealthSnapshot = (
+  handler: (snapshot: RuntimeHealthSnapshot) => void
+): Promise<UnlistenFn> =>
+  listen<RuntimeHealthSnapshot>('health:snapshot', (event) => handler(event.payload))
 
 /** 后端实例 → 前端运行记录（PID 为 0 时视为无 PID，与 Android 一致） */
 export const toRunningItem = (instance: RuntimeInstance): RunningItem => ({

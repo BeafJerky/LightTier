@@ -54,3 +54,47 @@ pub struct MonitorSubscription {
     #[serde(default)]
     pub interval_ms: Option<u64>,
 }
+
+/// 后台健康采样订阅：监控页关闭时仍跟踪运行中实例的连接质量。
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthSubscription {
+    pub instances: Vec<RunningInstance>,
+    #[serde(default)]
+    pub interval_ms: Option<u64>,
+}
+
+/// 单个实例的健康采样结果；失败时 `ok = false`，指标为空。
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthSample {
+    pub config_file_name: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_latency_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loss_rate: Option<f64>,
+    pub peer_count: usize,
+}
+
+impl HealthSample {
+    /// 采样失败：不携带指标，由前端跳过质量上报。
+    pub fn failed(config_file_name: String) -> Self {
+        Self {
+            config_file_name,
+            ok: false,
+            avg_latency_ms: None,
+            loss_rate: None,
+            peer_count: 0,
+        }
+    }
+}
+
+/// 健康采样快照：每次采样轮次递增 revision。
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthSnapshot {
+    pub revision: u64,
+    pub sampled_at: u64,
+    pub instances: Vec<HealthSample>,
+}

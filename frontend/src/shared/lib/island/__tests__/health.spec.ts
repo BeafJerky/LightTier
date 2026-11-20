@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { diffRunningNames, ExpectedStops, EXPECTED_STOP_TTL_MS } from '../health'
+import {
+  collectQualitySamples,
+  diffRunningNames,
+  ExpectedStops,
+  EXPECTED_STOP_TTL_MS
+} from '../health'
 
 describe('diffRunningNames', () => {
   it('返回新增与消失的配置名，并稳定排序', () => {
@@ -39,5 +44,25 @@ describe('ExpectedStops', () => {
     stops.expect('b', 9_000)
     stops.prune(1_000 + EXPECTED_STOP_TTL_MS + 1)
     expect(stops.size).toBe(1)
+  })
+})
+
+describe('collectQualitySamples', () => {
+  it('只保留成功且带延迟的采样，缺省丢包按 0', () => {
+    expect(
+      collectQualitySamples([
+        { configFileName: 'ok', ok: true, avgLatencyMs: 20, peerCount: 3 },
+        { configFileName: 'loss', ok: true, avgLatencyMs: 40, lossRate: 1.5, peerCount: 2 },
+        { configFileName: 'no-latency', ok: true, peerCount: 1 },
+        { configFileName: 'down', ok: false, avgLatencyMs: 10, peerCount: 0 }
+      ])
+    ).toEqual([
+      { name: 'ok', sample: { avgLatencyMs: 20, lossRate: 0, peerCount: 3 } },
+      { name: 'loss', sample: { avgLatencyMs: 40, lossRate: 1.5, peerCount: 2 } }
+    ])
+  })
+
+  it('空快照返回空数组', () => {
+    expect(collectQualitySamples([])).toEqual([])
   })
 })
