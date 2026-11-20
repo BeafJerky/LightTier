@@ -77,23 +77,8 @@
         },
         {
           "args": true,
-          "cmd": "powershell",
-          "name": "powershell"
-        },
-        {
-          "args": true,
-          "cmd": "taskkill",
-          "name": "taskkill"
-        },
-        {
-          "args": true,
           "cmd": "kill",
           "name": "kill"
-        },
-        {
-          "args": true,
-          "cmd": "route",
-          "name": "route"
         },
         {
           "args": true,
