@@ -29,6 +29,33 @@ $ErrorActionPreference = 'Stop'
 Set-NetIPInterface -InterfaceAlias $env:LT_ADAPTER -AutomaticMetric $env:LT_METRIC_MODE
 "#;
 
+const STATE_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$item = Get-NetIPInterface -InterfaceAlias $env:LT_ADAPTER -AddressFamily IPv4
+[pscustomobject]@{ automatic = [string]$item.AutomaticMetric; metric = [int]$item.InterfaceMetric } | ConvertTo-Json -Compress
+"#;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdapterState {
+    pub automatic: String,
+    pub metric: u32,
+}
+
+fn parse_adapter_state(raw: &str) -> Result<AdapterState, String> {
+    let parsed: serde_json::Value = serde_json::from_str(raw.trim()).map_err(|e| e.to_string())?;
+    Ok(AdapterState {
+        automatic: parsed
+            .get("automatic")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        metric: parsed
+            .get("metric")
+            .and_then(|value| value.as_u64())
+            .unwrap_or_default() as u32,
+    })
+}
+
 pub fn adapter_metric_script() -> &'static str {
     METRIC_SCRIPT
 }
@@ -134,6 +161,11 @@ pub fn set_adapter_metric(adapter: &str, enabled: bool) -> Result<(), String> {
     .map(|_| ())
 }
 
+pub fn adapter_state(adapter: &str) -> Result<AdapterState, String> {
+    validate_adapter_name(adapter)?;
+    parse_adapter_state(&run_powershell(STATE_SCRIPT, Some(adapter), None)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +195,21 @@ mod tests {
     fn parses_adapter_entry() {
         let raw = r#"{"alias":"以太网","gateway":"192.168.1.1"}"#;
         let parsed = parse_adapter_entry(raw).unwrap();
-        assert_eq!(parsed.as_ref().map(|(alias, _)| alias.as_str()), Some("以太网"));
+        assert_eq!(
+            parsed.as_ref().map(|(alias, _)| alias.as_str()),
+            Some("以太网")
+        );
+    }
+
+    #[test]
+    fn parses_adapter_state() {
+        let state = parse_adapter_state(r#"{"automatic":"Disabled","metric":1}"#).unwrap();
+        assert_eq!(
+            state,
+            AdapterState {
+                automatic: "Disabled".to_string(),
+                metric: 1
+            }
+        );
     }
 }
