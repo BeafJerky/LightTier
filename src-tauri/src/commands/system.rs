@@ -13,3 +13,9 @@ pub fn check_port_available(port: u16) -> bool {
 pub fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     lighttier_core::system::open_external_url(&app, &url)
 }
+
+/// 打开本地路径（资源管理器/文件管理器）或 http(s) 链接。
+#[tauri::command]
+pub fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    lighttier_core::system::open_path(&app, &path)
+}

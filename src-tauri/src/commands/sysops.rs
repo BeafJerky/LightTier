@@ -3,6 +3,7 @@
 //! 安全边界：前端不再直接执行 powershell / route / taskkill；
 //! 所有参数在 `lighttier-desktop::sysops` 内校验后按固定模板执行。
 
+use lighttier_desktop::sysops::exec::CommandResult;
 use lighttier_desktop::sysops::{adapter, process::ProcessInfo, route::RouteRow};
 
 #[tauri::command]
@@ -58,4 +59,25 @@ pub fn sysops_list_processes(filter: String) -> Result<Vec<ProcessInfo>, String>
 #[tauri::command]
 pub fn sysops_kill_process(pid: u32) -> Result<bool, String> {
     lighttier_desktop::sysops::process::kill_process(pid)
+}
+
+#[tauri::command]
+pub fn sysops_nssm_run(
+    app: tauri::AppHandle,
+    args: Vec<String>,
+) -> Result<CommandResult, String> {
+    lighttier_desktop::sysops::nssm::run(&app, args)
+}
+
+#[tauri::command]
+pub fn sysops_cli_run(app: tauri::AppHandle, args: Vec<String>) -> Result<CommandResult, String> {
+    lighttier_desktop::sysops::cli::run(&app, args)
+}
+
+#[tauri::command]
+pub fn sysops_ensure_executable(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    lighttier_desktop::sysops::exec::ensure_executable(&app, paths)
 }

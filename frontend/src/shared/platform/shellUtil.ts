@@ -10,8 +10,7 @@
 import { CONFIG_PATH, CORE_PATH, NSSM_NAME } from '@/shared/constants/easytier'
 import { invoke } from '@tauri-apps/api/core'
 import { join, resourceDir } from '@tauri-apps/api/path'
-import { attachConsole, debug, error, info, warn } from '@tauri-apps/plugin-log'
-import { Command, type SpawnOptions } from '@tauri-apps/plugin-shell'
+import { attachConsole, error, info, warn } from '@tauri-apps/plugin-log'
 import {
   getCoreDir,
   getKernelLogsDir,
@@ -172,41 +171,6 @@ const maskSecretArgs = (program: string, args: string[]): string[] => {
  * info('命令输出:', output)
  * ```
  */
-export async function executeCmd(
-  program: string,
-  args: string[] = [],
-  options: SpawnOptions = {}
-): Promise<any> {
-  try {
-    // 创建命令实例
-    const command = Command.create(program, args, {
-      cwd: options.cwd,
-      env: options.env,
-      encoding: options.encoding
-    })
-    // 执行并等待完成
-    const output = await command.execute()
-    // 注：output.code 为 null（信号终止等）时按 0 处理；不少 Windows 工具成功时也会向 stderr 输出进度/告警
-    const code = output.code ?? 0
-    const stdout = output.stdout || ''
-    const stderr = output.stderr || ''
-    if (code !== 0) {
-      warn(`执行参数:${JSON.stringify(maskSecretArgs(program, args))}`)
-      warn(`执行程序失败(code=${code}):${stderr || stdout || '未知错误'}`)
-      return {
-        code,
-        msg: stderr.trim() || stdout.trim() || String(output),
-        stdout: stdout.trim(),
-        stderr: stderr.trim()
-      }
-    }
-    return stdout.trim() || { code: 0, stdout: '', stderr: stderr.trim() }
-  } catch (e: any) {
-    error(`执行程序失败:${JSON.stringify(e)}`)
-    throw e
-  }
-}
-
 // 扫描所有 easytier-core 进程，提取已占用的 rpc-portal 端口号
 const getUsedRpcPortals = async (): Promise<Set<number>> => {
   const res = await getRunningProcesses('easytier-core')
@@ -413,7 +377,7 @@ export async function runEasyTierCoreWeb(url: string): Promise<number> {
 export async function runEasyTierCli(args: string[]): Promise<any> {
   try {
     // 注：改用 Rust 侧 run_cli 会出现卡顿，故统一走 shell 执行
-    const res = await executeCmd('easytier-cli', args)
+    const res = await systemOps.runCliCommand(args)
     if (!isCommandSuccess(res)) {
       throw new Error((res as { msg?: string })?.msg || 'easytier-cli 执行失败')
     }
@@ -439,31 +403,16 @@ export async function runEasyTierCli(args: string[]): Promise<any> {
  * await killProcess(1234, true)
  * ```
  */
-export async function killProcess(pid: number, force: boolean = true): Promise<boolean> {
+export async function killProcess(pid: number, _force: boolean = true): Promise<boolean> {
   if (!Number.isInteger(pid) || pid <= 0) {
     warn(`终止进程失败：无效 PID(${pid})`)
     return false
   }
   try {
-    const platform = await getPlatform()
-    // Windows 统一走 Rust sysops（固定 taskkill 模板，前端不再持有该权限）
-    if (platform === 'windows') {
-      const ok = await systemOps.killProcess(pid)
-      if (!ok) warn(`终止进程 ${pid} 失败`)
-      else info(`进程 ${pid} 已终止`)
-      return ok
-    }
-    // Unix-like 系统使用 kill 命令
-    const signal = force ? '-9' : '-15' // SIGKILL vs SIGTERM
-    const result = await executeCmd('kill', [signal, pid.toString()])
-    debug(`强制终止进程 ${JSON.stringify(result)}`)
-    // 退出码非 0（进程不存在/权限不足）不能视为停止成功，否则 UI 会误报并掩盖残留进程
-    if (!isCommandSuccess(result)) {
-      warn(`终止进程 ${pid} 失败:${JSON.stringify(result)}`)
-      return false
-    }
-    info(`进程 ${pid} 已终止`)
-    return true
+    const ok = await systemOps.killProcess(pid)
+    if (!ok) warn(`终止进程 ${pid} 失败`)
+    else info(`进程 ${pid} 已终止`)
+    return ok
   } catch (e: any) {
     error(`终止进程 ${pid} 失败:${e}`)
     return false
@@ -501,43 +450,8 @@ export async function stopAllNodes() {
 export const getRunningProcesses = async (
   programName: string = 'easytier-core'
 ): Promise<Array<any>> => {
-  const platform = await getPlatform()
-  // Windows 统一走 Rust sysops：过滤词通过环境变量传入，前端不再执行 PowerShell
-  if (platform === 'windows') {
-    const list = await systemOps.listProcesses(programName)
-    return list.map((item) => ({ ...item, fileName: programName }))
-  }
-  if (platform !== 'macos' && platform !== 'linux') {
-    throw new Error('Unsupported OS')
-  }
-
-  // macOS / Linux 使用 ps 命令（Task 11 迁移 chmod 后再收口 sh）
-  const psCommand = `ps -eo comm,args,pid,rss | grep ${programName}`
-  const res = await executeCmd('sh', ['-c', psCommand])
-  // 命令失败或 grep 无匹配（Unix 下 grep 退出码 1）时视为无匹配进程
-  if (typeof res !== 'string') return []
-  const processInfo: any[] = []
-  const lines = res.trim().split(/\r?\n/)
-  lines.forEach((line: string) => {
-    const parts = line.trim().split(/\s+/)
-    if (parts.length >= 4) {
-      const rss = parts[parts.length - 1]
-      const pid = parts[parts.length - 2]
-      const comm = parts[0]
-      const commandLine = parts.slice(1, parts.length - 2).join(' ')
-      if (commandLine.includes(programName)) {
-        processInfo.push({
-          name: comm,
-          commandLine,
-          path: comm, // ps 命令不直接提供可执行文件路径
-          pid: parseInt(pid, 10),
-          memory: parseInt(rss, 10) * 1024, // rss 单位是 KB
-          fileName: programName
-        })
-      }
-    }
-  })
-  return processInfo
+  const list = await systemOps.listProcesses(programName)
+  return list.map((item) => ({ ...item, fileName: programName }))
 }
 
 /**
@@ -578,7 +492,7 @@ export const fetchRunningList = async (configNames: string[]): Promise<RunningIt
  */
 export const checkServiceOnWindows = async (serviceName: string): Promise<string | false> => {
   try {
-    const output = await executeCmd(NSSM_NAME, ['status', serviceName], { encoding: 'gbk' })
+    const output = await systemOps.runNssmCommand(['status', serviceName])
     if (typeof output !== 'string') return false
     const status = output.trim()
     if (!status || status.includes('does not exist')) return false
@@ -625,7 +539,7 @@ export const installServiceOnWindows = async (
         resolve(true)
         return
       }
-      // 注意：Tauri Command.create 会将每个数组元素作为独立参数传递，不需要手动添加引号
+      // 注意：参数按数组逐项传递，不需要手动添加引号
       // 引号只在通过 shell 解析字符串时需要
       const args1 = ['install', serviceName, `${corePath}`]
 
@@ -657,7 +571,7 @@ export const installServiceOnWindows = async (
 
       const args8 = ['set', serviceName, 'Start', 'SERVICE_AUTO_START']
       const args9 = ['set', serviceName, 'Type', 'SERVICE_WIN32_OWN_PROCESS']
-      const installRes: any = await executeCmd(NSSM_NAME, args1, { encoding: 'gbk' })
+      const installRes: any = await systemOps.runNssmCommand(args1)
       info(`安装服务结果:${JSON.stringify(installRes)}`)
       if (
         !installRes ||
@@ -673,7 +587,7 @@ export const installServiceOnWindows = async (
       }
       // 后续 nssm set 决定实际运行参数：任一步失败都算安装失败，避免留下半配置服务
       for (const step of [args2, args3, args4, args5, args6, args7, args8, args9]) {
-        const stepRes = await executeCmd(NSSM_NAME, step, { encoding: 'gbk' })
+        const stepRes = await systemOps.runNssmCommand(step)
         if (!isCommandSuccess(stepRes)) {
           error(`配置服务失败:${JSON.stringify(maskSecretArgs(NSSM_NAME, step))}`)
           resolve(false)
@@ -696,7 +610,7 @@ export const uninstallServiceOnWindows = (serviceName: string) => {
   return new Promise(async (resolve) => {
     try {
       const args = ['remove', serviceName, 'confirm']
-      const res: any = await executeCmd(NSSM_NAME, args, { encoding: 'gbk' })
+      const res: any = await systemOps.runNssmCommand(args)
       info(`删除服务:${JSON.stringify(res)}`)
       resolve(isCommandSuccess(res))
     } catch (e: any) {
@@ -732,7 +646,7 @@ export const startServiceOnWindows = (serviceName: string) => {
   return new Promise(async (resolve) => {
     try {
       // 服务已运行时 nssm start 可能返回非 0，状态轮询才是唯一成功依据
-      const res = await executeCmd(NSSM_NAME, ['start', serviceName], { encoding: 'gbk' })
+      const res = await systemOps.runNssmCommand(['start', serviceName])
       const running = await waitServiceStatus(
         () => checkServiceOnWindows(serviceName),
         'SERVICE_RUNNING'
@@ -754,7 +668,7 @@ export const startServiceOnWindows = (serviceName: string) => {
 export const stopServiceOnWindows = (serviceName: string) => {
   return new Promise(async (resolve) => {
     try {
-      const res = await executeCmd(NSSM_NAME, ['stop', serviceName], { encoding: 'gbk' })
+      const res = await systemOps.runNssmCommand(['stop', serviceName])
       const stopped = await waitServiceStatus(
         () => checkServiceOnWindows(serviceName),
         'SERVICE_STOPPED'
@@ -780,7 +694,7 @@ const runOfficialServiceCmd = (serviceName: string, action: string, extra: strin
   const args = ['service']
   if (serviceName) args.push('-n', serviceName)
   args.push(action, ...extra)
-  return executeCmd('easytier-cli', args, { encoding: 'gbk' })
+  return systemOps.runCliCommand(args)
 }
 
 /** 解析 service status 输出：未安装 false / 运行中 SERVICE_RUNNING / 已停止 SERVICE_STOPPED */
@@ -891,7 +805,7 @@ export const installServiceWithOfficialCli = async (
         args.push('--disable-autostart', 'true')
       }
 
-      // 注意：Tauri Command.create 会将每个数组元素作为独立参数传递，不需要手动添加引号
+      // 注意：参数按数组逐项传递，不需要手动添加引号
       args.push('--core-path', `${corePath}`)
       args.push('--service-work-dir', appDirectory)
 
@@ -921,7 +835,7 @@ export const installServiceWithOfficialCli = async (
       }
 
       // 执行安装
-      const res: any = await executeCmd('easytier-cli', args, { encoding: 'gbk' })
+      const res: any = await systemOps.runCliCommand(args)
 
       info(`官方CLI安装服务结果: ${JSON.stringify(res)}`)
 

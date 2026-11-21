@@ -54,39 +54,6 @@
     "core:path:allow-is-absolute",
     "dialog:default",
     "dialog:allow-open",
-    "shell:default",
-    "shell:allow-open",
-    "shell:allow-stdin-write",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "args": true,
-          "cmd": "$RESOURCE/resource/nssm",
-          "name": "nssm"
-        },
-        {
-          "args": true,
-          "cmd": "$RESOURCE/resource/core/easytier-core",
-          "name": "easytier-core"
-        },
-        {
-          "args": true,
-          "cmd": "$RESOURCE/resource/core/easytier-cli",
-          "name": "easytier-cli"
-        },
-        {
-          "args": true,
-          "cmd": "kill",
-          "name": "kill"
-        },
-        {
-          "args": true,
-          "cmd": "sh",
-          "name": "sh"
-        }
-      ]
-    },
     {
       "identifier": "http:default",
       "allow": [

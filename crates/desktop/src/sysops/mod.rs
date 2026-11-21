@@ -4,6 +4,9 @@
 //! 所有系统参数在进入命令前必须经过本模块校验。
 
 pub mod adapter;
+pub mod cli;
+pub mod exec;
+pub mod nssm;
 pub mod process;
 pub mod route;
 

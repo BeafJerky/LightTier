@@ -97,8 +97,60 @@ pub fn list_processes(filter: &str) -> Result<Vec<ProcessInfo>, String> {
 }
 
 #[cfg(not(windows))]
-pub fn list_processes(_filter: &str) -> Result<Vec<ProcessInfo>, String> {
-    Err("process listing is only supported on Windows".into())
+pub fn list_processes(filter: &str) -> Result<Vec<ProcessInfo>, String> {
+    use std::process::{Command, Stdio};
+
+    validate_process_filter(filter)?;
+    let output = Command::new("ps")
+        .args(["-eo", "comm,args,pid,rss"])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("ps 执行失败: {e}"))?;
+    if !output.status.success() {
+        return Err(decode_native(&output.stderr).trim().to_string());
+    }
+    let text = decode_native(&output.stdout);
+    let mut result = Vec::new();
+    for line in text.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 4 {
+            continue;
+        }
+        let rss = fields[fields.len() - 1];
+        let pid = fields[fields.len() - 2];
+        let name = fields[0];
+        let command_line = fields[1..fields.len() - 2].join(" ");
+        if !command_line.contains(filter) {
+            continue;
+        }
+        let Ok(pid) = pid.parse::<u32>() else {
+            continue;
+        };
+        if pid == 0 {
+            continue;
+        }
+        result.push(ProcessInfo {
+            name: name.to_string(),
+            command_line,
+            path: name.to_string(),
+            pid,
+            memory: rss.parse::<u64>().unwrap_or_default() * 1024,
+        });
+    }
+    Ok(result)
+}
+
+#[cfg(not(windows))]
+pub fn kill_process(pid: u32) -> Result<bool, String> {
+    use std::process::{Command, Stdio};
+
+    super::validate_pid(pid)?;
+    let output = Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("kill 执行失败: {e}"))?;
+    Ok(output.status.success())
 }
 
 #[cfg(windows)]
@@ -112,11 +164,6 @@ pub fn kill_process(pid: u32) -> Result<bool, String> {
         .output()
         .map_err(|e| format!("taskkill 执行失败: {e}"))?;
     Ok(output.status.success())
-}
-
-#[cfg(not(windows))]
-pub fn kill_process(_pid: u32) -> Result<bool, String> {
-    Err("process termination is only supported on Windows".into())
 }
 
 #[cfg(test)]

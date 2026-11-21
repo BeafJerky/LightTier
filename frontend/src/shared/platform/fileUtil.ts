@@ -30,9 +30,9 @@ import {
 } from '@tauri-apps/plugin-fs'
 import { fetch } from '@tauri-apps/plugin-http'
 import { attachConsole, error, info } from '@tauri-apps/plugin-log'
-import { Command, open } from '@tauri-apps/plugin-shell'
 import { unzipSync } from 'fflate'
 import { isAndroid } from './platformUtil'
+import * as systemOps from './systemOps'
 import { getPlatform } from './sysUtil'
 import {
   getConfigLogBaseName,
@@ -97,12 +97,7 @@ export const isSafeZipEntryPath = (entryPath: string): boolean => {
  */
 const grantExecutableBits = async (paths: string[]): Promise<boolean> => {
   try {
-    const command = Command.create('sh', ['-c', 'chmod +x "$@"', 'lt-chmod', ...paths])
-    const output = await command.execute()
-    if (output.code !== 0) {
-      error(`chmod 失败(code=${output.code}):${output.stderr || output.stdout}`)
-      return false
-    }
+    await systemOps.ensureExecutable(paths)
     return true
   } catch (e: any) {
     error(`chmod 执行出错:${JSON.stringify(e)}`)
@@ -752,7 +747,7 @@ export async function downloadFile(
  */
 export async function openPath(path: string): Promise<boolean> {
   try {
-    await open(path)
+    await systemOps.openPath(path)
     return true
   } catch (e: any) {
     error(`打开资源管理器失败:${JSON.stringify(e)}`)

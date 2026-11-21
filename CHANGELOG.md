@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.9.0 (2026-11-21)
+
+> 服务管理与内核 CLI 改由 Rust 受控执行，前端 shell 插件权限、JS 依赖与 `open: "*"` 通配配置全部移除。
+
+- 新增
+  - `sysops_nssm_run` / `sysops_cli_run`：Rust 校验服务动词、`nssm set` 键白名单、内核路径、RPC 地址、core 参数与 service 子命令
+  - Unix 进程扫描/终止下沉 Rust；`chmod +x` 与打开本地路径改走 Rust 命令
+  - 输出统一按 GBK 解码，中文服务名/路径/错误信息保持可读
+- 优化
+  - capability 删除全部 `shell:*` 权限；`tauri.conf` 删除 `plugins.shell.open: "*"`；移除前端 `@tauri-apps/plugin-shell` 依赖
+  - Rust 侧仅保留 plugin-shell 用于系统浏览器打开外链，不再向 WebView 暴露执行能力
+- 验证
+  - `cargo test -p lighttier-desktop`（26 项）、`cargo check -p lighttier`、vitest（43 文件 / 387 项）、`vue-tsc`、ESLint、生产构建通过
+  - 服务安装/启停/卸载需要真实内核与管理员环境，本机未执行；参数白名单由单测覆盖
+
 ## 2.8.0 (2026-11-21)
 
 > 收口管理员命令面：路由、网卡跃点、进程扫描与终止改由 Rust 固定模板执行，前端不再持有 powershell / route / taskkill 权限。

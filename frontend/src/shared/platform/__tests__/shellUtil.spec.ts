@@ -2,7 +2,7 @@
  * shellUtil 命令层单测（M-04 / M-10 回归）
  *
  * 覆盖：
- * - executeCmd 返回契约：退出码是唯一成功依据（0 + stderr 告警仍为成功；非 0 返回 {code,msg} 结构；异常原样重抛）
+ * - 服务与 CLI 经 Rust 受控执行（systemOps），测试只校验参数透传与状态轮询
  * - getRunningProcesses 平台解析：Windows 单条 JSON 对象归一化、数组解析与 powershell 过滤、
  *   Unix ps 文本行解析（不再必然 JSON.parse 失败）、grep 无匹配返回空数组
  */
@@ -52,10 +52,30 @@ const sysopsMocks = vi.hoisted(() => ({
   killProcess: vi.fn()
 }))
 
-vi.mock('@/shared/platform/systemOps', () => ({
-  listProcesses: sysopsMocks.listProcesses,
-  killProcess: sysopsMocks.killProcess
-}))
+vi.mock('@/shared/platform/systemOps', () => {
+  // 复刻已删除的 executeCmd 返回契约，保持既有服务/CLI 断言有效
+  const toResult = async (program: string, args: string[]) => {
+    const output = await mocks.create(program, args).execute()
+    const code = output?.code ?? 0
+    const stdout = output?.stdout || ''
+    const stderr = output?.stderr || ''
+    if (code !== 0) {
+      return {
+        code,
+        msg: stderr.trim() || stdout.trim() || String(output),
+        stdout: stdout.trim(),
+        stderr: stderr.trim()
+      }
+    }
+    return stdout.trim() || { code: 0, stdout: '', stderr: stderr.trim() }
+  }
+  return {
+    listProcesses: sysopsMocks.listProcesses,
+    killProcess: sysopsMocks.killProcess,
+    runNssmCommand: (args: string[]) => toResult('nssm', args),
+    runCliCommand: (args: string[]) => toResult('easytier-cli', args)
+  }
+})
 
 const fileMocks = vi.hoisted(() => ({
   // rpc_portal 用于验证 v2.5.0+ 由 CLI 参数补传
@@ -86,7 +106,6 @@ vi.mock('@tauri-apps/api/path', () => ({
 import {
   buildCoreArgsList,
   checkServiceWithOfficialCli,
-  executeCmd,
   getRunningProcesses,
   killProcess,
   installServiceWithOfficialCli,
@@ -105,49 +124,6 @@ beforeEach(() => {
   // run_command 成功时 Rust 侧返回子进程 PID
   tauriMocks.invoke.mockResolvedValue('4321')
   mocks.platform.current = 'windows'
-})
-
-describe('executeCmd 返回契约（M-04）', () => {
-  it('退出码 0 且 stderr 有告警 → 视为成功，返回 stdout 字符串', async () => {
-    mocks.execute.mockResolvedValue({
-      code: 0,
-      stdout: 'SERVICE_RUNNING\n',
-      stderr: 'warning: noise'
-    })
-    await expect(executeCmd('nssm', ['status', 'svc'])).resolves.toBe('SERVICE_RUNNING')
-  })
-
-  it('退出码 0 且 stdout 为空 → 返回 { code: 0, stdout, stderr } 结构', async () => {
-    mocks.execute.mockResolvedValue({ code: 0, stdout: '', stderr: 'note' })
-    await expect(executeCmd('taskkill', ['/F', '/PID', '1'])).resolves.toEqual({
-      code: 0,
-      stdout: '',
-      stderr: 'note'
-    })
-  })
-
-  it('退出码非 0 → 返回 { code, msg, stdout, stderr }，msg 取 stderr', async () => {
-    mocks.execute.mockResolvedValue({
-      code: 3,
-      stdout: '',
-      stderr: 'Can not open service! does not exist'
-    })
-    const res = await executeCmd('nssm', ['status', 'missing'])
-    expect(res.code).toBe(3)
-    expect(res.msg).toContain('does not exist')
-    expect(res.stderr).toContain('does not exist')
-  })
-
-  it('退出码为 null（信号终止）按 0 处理，stdout 正常返回', async () => {
-    mocks.execute.mockResolvedValue({ code: null, stdout: 'done', stderr: '' })
-    await expect(executeCmd('sh', ['-c', 'true'])).resolves.toBe('done')
-  })
-
-  it('执行抛错时原样重抛原始异常对象（而非日志函数）', async () => {
-    const origin = new Error('spawn failed')
-    mocks.execute.mockRejectedValue(origin)
-    await expect(executeCmd('nssm', [])).rejects.toBe(origin)
-  })
 })
 
 describe('getRunningProcesses 平台解析（M-10）', () => {
@@ -176,27 +152,6 @@ describe('getRunningProcesses 平台解析（M-10）', () => {
     sysopsMocks.killProcess.mockResolvedValue(true)
     await expect(killProcess(42)).resolves.toBe(true)
     expect(sysopsMocks.killProcess).toHaveBeenCalledWith(42)
-  })
-
-  it('macOS/Linux ps 文本输出按行解析（不再必然 JSON.parse 失败）', async () => {
-    mocks.platform.current = 'linux'
-    mocks.execute.mockResolvedValue({
-      code: 0,
-      stdout:
-        'easytier-core easytier-core --rpc-portal 15888 --config-file /home/u/a.toml 4321 102400\n',
-      stderr: ''
-    })
-    const list = await getRunningProcesses('easytier-core')
-    expect(list).toHaveLength(1)
-    expect(list[0].pid).toBe(4321)
-    expect(list[0].memory).toBe(102400 * 1024)
-    expect(list[0].commandLine).toContain('--config-file /home/u/a.toml')
-  })
-
-  it('Unix 下 grep 无匹配（sh 退出码 1）→ 返回空数组', async () => {
-    mocks.platform.current = 'macos'
-    mocks.execute.mockResolvedValue({ code: 1, stdout: '', stderr: '' })
-    await expect(getRunningProcesses('easytier-core')).resolves.toEqual([])
   })
 })
 
@@ -337,17 +292,6 @@ describe('Windows 服务启动状态判定（服务启停可靠性回归）', ()
       return { code: 0, stdout: 'SERVICE_STOPPED', stderr: '' }
     })
     await expect(startServiceOnWindows('easytier-a')).resolves.toBe(false)
-  })
-})
-
-describe('命令失败日志脱敏（服务账户密码不落盘）', () => {
-  it('nssm set ObjectName 的密码在失败日志中被遮蔽', async () => {
-    mocks.execute.mockResolvedValue({ code: 1, stdout: '', stderr: 'denied' })
-    await executeCmd('nssm', ['set', 'easytier-a', 'ObjectName', '.\\user', 'p@ssw0rd'])
-    const output = logMocks.warn.mock.calls.map((c) => String(c[0])).join('\n')
-    expect(output).not.toContain('p@ssw0rd')
-    expect(output).toContain('ObjectName')
-    expect(output).toContain('***')
   })
 })
 
