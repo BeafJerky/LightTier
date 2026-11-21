@@ -81,3 +81,12 @@ pub fn sysops_ensure_executable(
 ) -> Result<(), String> {
     lighttier_desktop::sysops::exec::ensure_executable(&app, paths)
 }
+
+#[tauri::command]
+pub fn sysops_verify_core_package(
+    app: tauri::AppHandle,
+    version: String,
+    path: String,
+) -> Result<(), String> {
+    lighttier_desktop::sysops::exec::verify_core_package(&app, &version, &path)
+}

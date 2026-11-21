@@ -92,3 +92,17 @@ pub fn ensure_executable(app: &tauri::AppHandle, paths: Vec<String>) -> Result<(
     }
     Ok(())
 }
+
+/// 安装前校验内核 zip：路径必须在 resource/core，哈希必须匹配内置清单。
+pub fn verify_core_package(
+    app: &tauri::AppHandle,
+    version: &str,
+    path: &str,
+) -> Result<(), String> {
+    let core = core_dir(app)?;
+    let path = Path::new(path);
+    if !is_under(path, &core) {
+        return Err("内核包不在 resource/core 目录".into());
+    }
+    crate::kernel_manifest::verify_package(version, path)
+}

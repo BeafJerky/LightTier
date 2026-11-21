@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.10.0 (2026-11-21)
+
+> 内核包与可执行文件增加 SHA-256 校验，下载只允许 HTTPS，阻断镜像替换与资源目录篡改链。
+
+- 新增
+  - 内置 v2.7.1 / v2.6.4 / v2.5.0 / v2.4.5 Windows x86_64 内核包与 core/cli 两个 exe 的 SHA-256 清单
+  - 安装前校验 zip；启动内核与执行 easytier-cli 前校验 exe，只接受清单内的官方文件（按路径+大小+mtime 缓存，避免每次查询重复哈希）
+- 优化
+  - 内核与安装包下载只允许 `https://`；自定义 HTTP 镜像被忽略
+- 说明
+  - v2.7.1 包哈希已与官方 `SHA256SUMS` 核对；本机已安装 v2.7.1 的两个 exe 哈希与清单一致
+  - `fs:allow-resource-write*` 暂未收窄：内核解压仍在 WebView 侧，且 exe 哈希校验已阻断“替换后启动”链路；资源目录迁移到 AppData 单独立项
+- 验证
+  - `cargo test -p lighttier-desktop`（29 项）、`cargo check -p lighttier`、vitest（43 文件 / 388 项）、`vue-tsc`、ESLint、生产构建通过
+  - 真实内核下载/安装/启动需管理员环境，本机未重新安装；已安装 v2.7.1 的 exe 哈希核对通过
+
 ## 2.9.0 (2026-11-21)
 
 > 服务管理与内核 CLI 改由 Rust 受控执行，前端 shell 插件权限、JS 依赖与 `open: "*"` 通配配置全部移除。

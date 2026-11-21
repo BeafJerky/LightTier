@@ -61,6 +61,17 @@ pub fn run_command(
     args: Vec<String>,
 ) -> Result<String, String> {
     ensure_core_program_allowed(app, &program)?;
+    let stem = std::path::Path::new(&program)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    let kind = if stem == "easytier-cli" {
+        crate::kernel_manifest::CoreFile::Cli
+    } else {
+        crate::kernel_manifest::CoreFile::Core
+    };
+    crate::kernel_manifest::verify_exe(std::path::Path::new(&program), kind)?;
     let mut cmd = Command::new(&program);
     cmd.args(args)
         .stdout(std::process::Stdio::null())

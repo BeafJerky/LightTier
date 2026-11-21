@@ -103,6 +103,8 @@ const loadCustomSources = (): string[] => {
   for (const raw of readStringList(MIRROR_CUSTOM_KEY)) {
     const value = normalizeMirrorPrefix(raw)
     if (!value || value === OFFICIAL_PREFIX || BUILTIN_MIRROR_VALUES.has(value)) continue
+    // 下载只允许 HTTPS：自定义 http 镜像会被静默忽略
+    if (!/^https:\/\//i.test(value)) continue
     if (!result.includes(value)) result.push(value)
   }
   return result

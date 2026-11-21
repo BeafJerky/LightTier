@@ -614,7 +614,7 @@ export async function downloadFile(
   const controller = new AbortController()
   let responseTimer: ReturnType<typeof setTimeout> | null = null
   try {
-    // 协议层防线：仅允许 http/https（镜像源可自定义，不做域名白名单）
+    // 只允许 HTTPS：内核与安装包必须走加密通道，避免镜像/中间人替换内容
     let url: URL
     try {
       url = new URL(fileUrl)
@@ -622,8 +622,8 @@ export async function downloadFile(
       error(`下载地址非法:${fileUrl}`)
       return false
     }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      error(`不支持的下载协议:${url.protocol}`)
+    if (url.protocol !== 'https:') {
+      error(`不支持的下载协议:${url.protocol}（仅允许 https）`)
       return false
     }
 

@@ -158,6 +158,12 @@ describe('downloadFile（流式进度）', () => {
   const fileUrl = 'https://example.com/easytier-windows-x86_64-v2.7.0.zip'
   const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4])
 
+  it('拒绝 http 下载，避免明文镜像替换内核', async () => {
+    vi.mocked(fetch).mockClear()
+    await expect(downloadFile('http://example.com/easytier.zip')).resolves.toBe(false)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   const mockResponse = (options: {
     chunks?: Uint8Array[]
     contentLength?: number | null

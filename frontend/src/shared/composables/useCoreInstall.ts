@@ -1,9 +1,11 @@
 import { ref } from 'vue'
-import { join } from '@tauri-apps/api/path'
+import { join, resourceDir } from '@tauri-apps/api/path'
+import { isTauri } from '@tauri-apps/api/core'
 import { CORE_PATH, getCoreFileName } from '@/shared/constants/easytier'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useMockData } from '@/shared/platform/mockData'
 import { cleanCoreDirExceptPackages, extractFile } from '@/shared/platform/fileUtil'
+import * as systemOps from '@/shared/platform/systemOps'
 import { stopAllNodes } from '@/shared/platform/shellUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getArch, getOsType } from '@/shared/platform/sysUtil'
@@ -67,6 +69,10 @@ export const useCoreInstall = () => {
       // 按平台/架构生成压缩包文件名（与下载文件名一致；纯字符串拼接，避免 CSP 拦截 eval）
       const filename = getCoreFileName(getOsType(), getArch(), version)
       const zipPath = await join(CORE_PATH, filename)
+      // 安装前校验官方 SHA-256：manifest 未收录的版本直接拒绝
+      if (isTauri()) {
+        await systemOps.verifyCorePackage(version, await join(await resourceDir(), zipPath))
+      }
       // 工具函数基于 BaseDirectory.Resource，必须传相对路径，不能用 resourceDir() 拼绝对路径。
       // extractFile 会先完成压缩包读取与安全校验，再回调清理旧内核文件（保留各版本 zip），
       // 最后写入新内核；压缩包损坏时不会误删当前可用内核。

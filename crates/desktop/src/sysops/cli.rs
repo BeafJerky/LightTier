@@ -140,6 +140,7 @@ pub fn run(app: &tauri::AppHandle, args: Vec<String>) -> Result<CommandResult, S
     } else {
         "easytier-cli"
     });
+    crate::kernel_manifest::verify_exe(&cli, crate::kernel_manifest::CoreFile::Cli)?;
     run_program(&cli, &args)
 }
 
