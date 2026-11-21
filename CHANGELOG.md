@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.10.2 (2026-11-21)
+
+> 修复 Windows `\\?\` 长路径导致“内核包不在 resource/core 目录”，并记录哈希不匹配的实际值。
+
+- 修复
+  - `is_under` 统一去除 Windows verbatim 前缀后再比较，安装校验不再误判路径
+  - 哈希不匹配时在日志写入 `path` / `actual` / `kind`，便于定位是文件版本还是清单问题
+- 验证
+  - `cargo test -p lighttier-desktop`（31 项）、`cargo check -p lighttier` 通过
+  - 本机对已安装 CLI 直接调用 `verify_exe` 返回 `Ok`
+
 ## 2.10.1 (2026-11-21)
 
 > 修复内核校验回归与 PowerShell 闪窗，并把内核安装失败原因显示到界面/日志。

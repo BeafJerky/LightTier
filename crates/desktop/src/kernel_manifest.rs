@@ -115,6 +115,12 @@ pub fn verify_exe(path: &Path, file: CoreFile) -> Result<(), String> {
     }
     let actual = sha256_file(&path)?;
     if !is_known_exe(&actual, file) {
+        log::warn!(
+            "kernel hash mismatch: path={} actual={} kind={:?}",
+            path.display(),
+            actual,
+            file
+        );
         return Err(format!("内核文件校验失败: {}", path.display()));
     }
     if let Some(key) = key {

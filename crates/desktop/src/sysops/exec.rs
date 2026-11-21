@@ -24,17 +24,22 @@ pub(crate) fn core_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn is_under(path: &Path, base: &Path) -> bool {
-    let normalize = |value: &Path| {
-        value
-            .to_string_lossy()
-            .replace('\\', "/")
-            .to_ascii_lowercase()
-            .trim_end_matches('/')
-            .to_string()
-    };
-    let normalized = normalize(path);
-    let base = normalize(base);
+    let normalized = normalize_path(path);
+    let base = normalize_path(base);
     normalized == base || normalized.starts_with(&format!("{base}/"))
+}
+
+/// Windows 的 `resource_dir()` 可能返回 `\\?\D:\...` 长路径前缀，
+/// 而前端 path API 返回普通 `D:\...`；比较前必须统一去掉 verbatim 前缀。
+pub(crate) fn normalize_path(value: &Path) -> String {
+    let mut text = value.to_string_lossy().replace('\\', "/");
+    let lower = text.to_ascii_lowercase();
+    if lower.starts_with("//?/unc/") {
+        text = format!("//{}", &text[8..]);
+    } else if lower.starts_with("//?/") {
+        text = text[4..].to_string();
+    }
+    text.to_ascii_lowercase().trim_end_matches('/').to_string()
 }
 
 pub(crate) fn is_core_path(path: &Path, core: &Path) -> bool {

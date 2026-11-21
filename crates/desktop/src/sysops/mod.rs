@@ -139,4 +139,16 @@ mod tests {
         let bytes = [0xD2, 0xD4, 0xCC, 0xAB, 0xCD, 0xF8];
         assert_eq!(decode_native(&bytes), "以太网");
     }
+
+    #[test]
+    fn compares_verbatim_and_normal_windows_paths() {
+        use std::path::Path;
+        let verbatim = Path::new(r"\\?\D:\Program Files\LightTier\resource\core\a.zip");
+        let normal = Path::new(r"D:\Program Files\LightTier\resource\core");
+        assert!(exec::is_under(verbatim, normal));
+        assert!(exec::is_under(
+            Path::new(r"D:\Program Files\LightTier\resource\core\a.zip"),
+            Path::new(r"\\?\D:\Program Files\LightTier\resource\core")
+        ));
+    }
 }
