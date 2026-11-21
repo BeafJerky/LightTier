@@ -7,6 +7,20 @@ pub mod adapter;
 pub mod process;
 pub mod route;
 
+/// Windows 命令与 PowerShell 输出为系统 OEM 代码页（中文系统为 GBK），
+/// 直接按 UTF-8 解码会把中文网卡名/错误信息变成乱码。
+pub fn decode_native(bytes: &[u8]) -> String {
+    #[cfg(windows)]
+    {
+        let (text, _, _) = encoding_rs::GBK.decode(bytes);
+        text.into_owned()
+    }
+    #[cfg(not(windows))]
+    {
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+}
+
 pub fn validate_pid(pid: u32) -> Result<(), String> {
     if pid == 0 {
         return Err("invalid pid".into());
@@ -114,5 +128,12 @@ mod tests {
         assert!(validate_config_name("../evil").is_err());
         assert!(validate_config_name("a/b").is_err());
         assert!(validate_config_name("a\\b").is_err());
+    }
+
+    #[test]
+    fn decodes_gbk_adapter_names() {
+        // 中文 Windows 的 OEM 输出为 GBK：「以太网」
+        let bytes = [0xD2, 0xD4, 0xCC, 0xAB, 0xCD, 0xF8];
+        assert_eq!(decode_native(&bytes), "以太网");
     }
 }

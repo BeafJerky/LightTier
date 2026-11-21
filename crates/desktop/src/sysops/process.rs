@@ -2,6 +2,8 @@
 
 use serde_json::Value;
 
+use super::decode_native;
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcessInfo {
@@ -89,9 +91,9 @@ pub fn list_processes(filter: &str) -> Result<Vec<ProcessInfo>, String> {
         .output()
         .map_err(|e| format!("powershell 执行失败: {e}"))?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        return Err(decode_native(&output.stderr).trim().to_string());
     }
-    parse_process_json(&String::from_utf8_lossy(&output.stdout))
+    parse_process_json(&decode_native(&output.stdout))
 }
 
 #[cfg(not(windows))]

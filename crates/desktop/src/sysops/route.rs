@@ -1,6 +1,6 @@
 //! 路由表操作：固定参数调用 `route.exe`，不接受任意参数数组。
 
-use super::{validate_ipv4, validate_mask};
+use super::{decode_native, validate_ipv4, validate_mask};
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -50,6 +50,14 @@ mod tests {
     }
 
     #[test]
+    fn builds_route_delete_arguments_with_mask_keyword() {
+        assert_eq!(
+            build_delete_args("10.0.0.0", "255.0.0.0", "192.168.1.1"),
+            vec!["delete", "10.0.0.0", "mask", "255.0.0.0", "192.168.1.1"]
+        );
+    }
+
+    #[test]
     fn parses_default_route_with_zero_mask() {
         let text = "          0.0.0.0          0.0.0.0      192.168.5.1     192.168.5.35     30\n";
         let rows = parse_route_print(text).unwrap();
@@ -83,16 +91,19 @@ fn run_route(args: &[String]) -> Result<String, String> {
         .output()
         .map_err(|e| format!("route 执行失败: {e}"))?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = decode_native(&output.stderr);
+        let stdout = decode_native(&output.stdout);
         let message = if stderr.trim().is_empty() {
             stdout.trim()
         } else {
             stderr.trim()
         };
-        return Err(format!("route {} 失败: {message}", args.first().unwrap_or(&String::new())));
+        return Err(format!(
+            "route {} 失败: {message}",
+            args.first().map(String::as_str).unwrap_or_default()
+        ));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(decode_native(&output.stdout))
 }
 
 pub fn add_route(target: &str, mask: &str, gateway: &str, metric: u32) -> Result<(), String> {
@@ -106,7 +117,17 @@ pub fn delete_route(target: &str, mask: &str, gateway: &str) -> Result<(), Strin
     validate_ipv4(target)?;
     validate_mask(mask)?;
     validate_ipv4(gateway)?;
-    run_route(&["delete".into(), target.into(), mask.into(), gateway.into()]).map(|_| ())
+    run_route(&build_delete_args(target, mask, gateway)).map(|_| ())
+}
+
+fn build_delete_args(target: &str, mask: &str, gateway: &str) -> Vec<String> {
+    vec![
+        "delete".into(),
+        target.into(),
+        "mask".into(),
+        mask.into(),
+        gateway.into(),
+    ]
 }
 
 pub fn change_default_route(gateway: &str, metric: u32) -> Result<(), String> {

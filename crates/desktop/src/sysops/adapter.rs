@@ -2,7 +2,7 @@
 //!
 //! PowerShell 只执行静态脚本，网卡名通过环境变量传入，避免命令拼接注入。
 
-use super::validate_adapter_name;
+use super::{decode_native, validate_adapter_name};
 
 const ACTIVE_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
@@ -95,9 +95,9 @@ fn run_powershell(script: &str, adapter: Option<&str>, mode: Option<&str>) -> Re
         .output()
         .map_err(|e| format!("powershell 执行失败: {e}"))?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        return Err(decode_native(&output.stderr).trim().to_string());
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(decode_native(&output.stdout).trim().to_string())
 }
 
 #[cfg(not(windows))]

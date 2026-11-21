@@ -4072,6 +4072,7 @@ dependencies = [
 name = "lighttier-desktop"
 version = "2.7.0"
 dependencies = [
+ "encoding_rs",
  "log",
  "serde",
  "serde_json",
