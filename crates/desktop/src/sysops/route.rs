@@ -50,6 +50,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_default_route_with_zero_mask() {
+        let text = "          0.0.0.0          0.0.0.0      192.168.5.1     192.168.5.35     30\n";
+        let rows = parse_route_print(text).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].target, "0.0.0.0");
+        assert_eq!(rows[0].mask, "0.0.0.0");
+        assert_eq!(rows[0].metric, 30);
+    }
+
+    #[test]
     fn rejects_host_bits_in_mask() {
         assert!(validate_mask("255.0.255.0").is_err());
     }

@@ -42,9 +42,7 @@ fn mask_bits(mask: &str) -> Result<u32, String> {
     let value = mask.split('.').fold(0u32, |acc, part| {
         (acc << 8) | part.parse::<u32>().unwrap_or_default()
     });
-    if value == 0 {
-        return Err(format!("invalid mask: {mask}"));
-    }
+    // 0.0.0.0 是默认路由的合法掩码；只需保证高位连续
     let inverted = !value;
     if inverted & inverted.wrapping_add(1) != 0 {
         return Err(format!("invalid mask: {mask}"));
@@ -103,7 +101,8 @@ mod tests {
         assert!(validate_ipv4("01.0.0.1").is_err());
         assert!(validate_mask("255.255.255.0").is_ok());
         assert!(validate_mask("255.0.255.0").is_err());
-        assert!(validate_mask("0.0.0.0").is_err());
+        // 默认路由使用 0.0.0.0 掩码，必须放行
+        assert!(validate_mask("0.0.0.0").is_ok());
     }
 
     #[test]
