@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.8.0 (2026-11-21)
+
+> 收口管理员命令面：路由、网卡跃点、进程扫描与终止改由 Rust 固定模板执行，前端不再持有 powershell / route / taskkill 权限。
+
+- 新增
+  - `lighttier-desktop::sysops`：PID / IPv4 / 掩码 / 网卡名 / 配置名校验，路由增删改查，网卡枚举与跃点，进程扫描与终止
+  - Tauri 命令 `sysops_*` 与前端 `shared/platform/systemOps.ts`；PowerShell 只执行静态脚本，网卡名/过滤词通过环境变量传入
+  - 系统命令输出按 Windows OEM 代码页（GBK）解码，中文网卡名与错误信息不再乱码
+- 修复
+  - 路由列表改用 `Get-NetRoute` 的真实 `RouteMetric`，避免把“路由 metric + 接口 metric”的合计值当原值回写（默认路由 30→60 的问题）
+  - `route delete` 补回 `mask` 关键字；关闭自动跃点时补回 `-InterfaceMetric 1`
+- 优化
+  - capability 删除 `powershell`、`taskkill`、`route`；`kill` / `sh` / `nssm` / `easytier-*` 与 shell 插件留待阶段 B
+- 验证
+  - DevTools 调用 `plugin:shell|execute(powershell)` 被拒绝（program not allowed on the configured shell scope）
+  - 路由探针：TEST-NET-2 添加、查询、删除均成功；网卡跃点探针：`Disabled/metric=1` 后恢复 `Enabled/metric=30`
+  - Web 配置停止时进程被新路径终止，无残留
+  - `cargo test -p lighttier-desktop`（19 项）、`cargo check -p lighttier`、vitest（43 文件 / 395 项）、`vue-tsc`、ESLint、生产构建通过
+  - App 内“手动出口路由开关”因内核会自动接管出口路由，未覆盖；命令层与单测已覆盖，留待有手动接管场景时补验
+
 ## 2.7.0 (2026-11-21)
 
 > 灵动岛新增后台全实例健康采样：监控页关闭后仍按 10s 节奏跟踪连接质量。
