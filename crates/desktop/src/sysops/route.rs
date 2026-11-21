@@ -1,7 +1,16 @@
 //! 路由表操作：固定参数调用 `route.exe`，不接受任意参数数组。
 
+use serde_json::Value;
+
 use super::{decode_native, validate_ipv4, validate_mask};
 use std::process::Command;
+
+const NET_ROUTE_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+Get-NetRoute -AddressFamily IPv4 |
+  ForEach-Object { [pscustomobject]@{ destination = $_.DestinationPrefix; gateway = $_.NextHop; metric = [int]$_.RouteMetric } } |
+  ConvertTo-Json -Compress
+"#;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,13 +42,25 @@ mod tests {
     }
 
     #[test]
-    fn parses_five_column_route_rows_and_uses_last_metric() {
-        let text = "Network Destination        Netmask          Gateway       Interface  Metric\n\
-                    \x20         10.0.0.0        255.0.0.0      192.168.1.1    192.168.1.100      5\n";
-        let rows = parse_route_print(text).unwrap();
+    fn parses_net_route_json_and_filters_on_link() {
+        let raw = r#"[
+            {"destination":"0.0.0.0/0","gateway":"192.168.5.1","metric":0},
+            {"destination":"192.168.5.0/24","gateway":"0.0.0.0","metric":256}
+        ]"#;
+        let rows = parse_net_route_json(raw).unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].metric, 5);
-        assert_eq!(rows[0].gateway, "192.168.1.1");
+        assert_eq!(rows[0].target, "0.0.0.0");
+        assert_eq!(rows[0].mask, "0.0.0.0");
+        assert_eq!(rows[0].metric, 0);
+    }
+
+    #[test]
+    fn parses_single_net_route_object() {
+        let raw = r#"{"destination":"10.199.0.0/24","gateway":"10.199.0.3","metric":1}"#;
+        let rows = parse_net_route_json(raw).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].target, "10.199.0.0");
+        assert_eq!(rows[0].mask, "255.255.255.0");
     }
 
     #[test]
@@ -55,16 +76,6 @@ mod tests {
             build_delete_args("10.0.0.0", "255.0.0.0", "192.168.1.1"),
             vec!["delete", "10.0.0.0", "mask", "255.0.0.0", "192.168.1.1"]
         );
-    }
-
-    #[test]
-    fn parses_default_route_with_zero_mask() {
-        let text = "          0.0.0.0          0.0.0.0      192.168.5.1     192.168.5.35     30\n";
-        let rows = parse_route_print(text).unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].target, "0.0.0.0");
-        assert_eq!(rows[0].mask, "0.0.0.0");
-        assert_eq!(rows[0].metric, 30);
     }
 
     #[test]
@@ -145,7 +156,21 @@ pub fn change_default_route(gateway: &str, metric: u32) -> Result<(), String> {
 }
 
 pub fn print_routes() -> Result<Vec<RouteRow>, String> {
-    parse_route_print(&run_route(&["print".into(), "-4".into()])?)
+    #[cfg(windows)]
+    {
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", NET_ROUTE_SCRIPT])
+            .output()
+            .map_err(|e| format!("powershell 执行失败: {e}"))?;
+        if !output.status.success() {
+            return Err(decode_native(&output.stderr).trim().to_string());
+        }
+        parse_net_route_json(&decode_native(&output.stdout))
+    }
+    #[cfg(not(windows))]
+    {
+        Err("route listing is only supported on Windows".into())
+    }
 }
 
 pub fn route_exists(ip: &str) -> Result<bool, String> {
@@ -154,31 +179,72 @@ pub fn route_exists(ip: &str) -> Result<bool, String> {
     Ok(table_contains_ip(&table, ip))
 }
 
-fn parse_route_print(text: &str) -> Result<Vec<RouteRow>, String> {
+fn parse_net_route_json(raw: &str) -> Result<Vec<RouteRow>, String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(Vec::new());
+    }
+    let parsed: Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    let items: Vec<&Value> = match &parsed {
+        Value::Null => Vec::new(),
+        Value::Array(items) => items.iter().collect(),
+        Value::Object(_) => vec![&parsed],
+        _ => return Err("unexpected route payload".into()),
+    };
     let mut rows = Vec::new();
-    for line in text.lines() {
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        // route print -4 的活动路由为 5 列：目标 / 掩码 / 网关 / 接口 / metric
-        if cols.len() != 5 {
+    for item in items {
+        let Some(destination) = item.get("destination").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(gateway) = item.get("gateway").and_then(Value::as_str) else {
+            continue;
+        };
+        // 与 route print 旧口径一致：跳过 on-link（NextHop 0.0.0.0）
+        if gateway.is_empty() || gateway == "0.0.0.0" {
             continue;
         }
-        let (target, mask, gateway, metric) = (cols[0], cols[1], cols[2], cols[4]);
-        if validate_ipv4(target).is_err()
-            || validate_mask(mask).is_err()
-            || validate_ipv4(gateway).is_err()
-        {
+        let Some((target, mask)) = prefix_to_target_mask(destination) else {
             continue;
-        }
-        if let Ok(metric) = metric.parse::<u32>() {
-            rows.push(RouteRow {
-                target: target.into(),
-                mask: mask.into(),
-                gateway: gateway.into(),
-                metric,
-            });
-        }
+        };
+        rows.push(RouteRow {
+            target,
+            mask,
+            gateway: gateway.to_string(),
+            metric: item.get("metric").and_then(Value::as_u64).unwrap_or(0) as u32,
+        });
     }
     Ok(rows)
+}
+
+fn prefix_to_target_mask(prefix: &str) -> Option<(String, String)> {
+    let (ip, len) = prefix.split_once('/')?;
+    validate_ipv4(ip).ok()?;
+    let len: u32 = len.parse().ok()?;
+    if len > 32 {
+        return None;
+    }
+    let ip_value = ip.split('.').fold(0u32, |acc, part| {
+        (acc << 8) | part.parse::<u32>().unwrap_or_default()
+    });
+    let mask_value = if len == 0 {
+        0
+    } else {
+        u32::MAX << (32 - len)
+    };
+    Some((
+        u32_to_ip(ip_value & mask_value),
+        u32_to_ip(mask_value),
+    ))
+}
+
+fn u32_to_ip(value: u32) -> String {
+    format!(
+        "{}.{}.{}.{}",
+        value >> 24,
+        (value >> 16) & 0xff,
+        (value >> 8) & 0xff,
+        value & 0xff
+    )
 }
 
 fn table_contains_ip(table: &str, ip: &str) -> bool {
