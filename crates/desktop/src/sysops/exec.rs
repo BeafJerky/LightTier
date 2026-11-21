@@ -52,11 +52,7 @@ pub(crate) fn run_program(program: &Path, args: &[String]) -> Result<CommandResu
     }
     let mut command = Command::new(program);
     command.args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
+    hide_console(&mut command);
     let output = command
         .output()
         .map_err(|e| format!("执行 {} 失败: {e}", program.display()))?;
@@ -69,6 +65,15 @@ pub(crate) fn run_program(program: &Path, args: &[String]) -> Result<CommandResu
             .trim_end()
             .to_string(),
     })
+}
+
+/// 隐藏控制台窗口（Windows 下所有子进程统一使用）。
+pub(crate) fn hide_console(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
 }
 
 /// Unix 桌面为内核补可执行位；Windows 为 no-op。

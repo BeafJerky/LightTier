@@ -102,7 +102,8 @@ pub fn verify_exe(path: &Path, file: CoreFile) -> Result<(), String> {
     if CORE_MANIFEST.is_empty() {
         return Err("内核校验清单为空，拒绝启动".into());
     }
-    let key = cache_key(path);
+    let path = resolve_exe_path(path);
+    let key = cache_key(&path);
     if let Some(key) = &key {
         if verified_cache()
             .lock()
@@ -112,7 +113,7 @@ pub fn verify_exe(path: &Path, file: CoreFile) -> Result<(), String> {
             return Ok(());
         }
     }
-    let actual = sha256_file(path)?;
+    let actual = sha256_file(&path)?;
     if !is_known_exe(&actual, file) {
         return Err(format!("内核文件校验失败: {}", path.display()));
     }
@@ -122,6 +123,21 @@ pub fn verify_exe(path: &Path, file: CoreFile) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Windows 的 `Command::new("...\\easytier-core")` 会自动补 `.exe`，
+/// 但文件哈希必须读取真实存在的文件，这里做同样的扩展名解析。
+fn resolve_exe_path(path: &Path) -> std::path::PathBuf {
+    if path.exists() {
+        return path.to_path_buf();
+    }
+    if path.extension().is_none() {
+        let with_exe = path.with_extension("exe");
+        if with_exe.exists() {
+            return with_exe;
+        }
+    }
+    path.to_path_buf()
 }
 
 #[cfg(test)]
@@ -136,6 +152,18 @@ mod tests {
                 "missing manifest for {version}"
             );
         }
+    }
+
+    #[test]
+    fn resolves_extensionless_windows_path() {
+        let dir = std::env::temp_dir().join("lighttier-hash-ext");
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("easytier-core.exe");
+        std::fs::write(&exe, b"MZ").unwrap();
+        let resolved = resolve_exe_path(&dir.join("easytier-core"));
+        assert_eq!(resolved, exe);
+        let _ = std::fs::remove_file(&exe);
+        let _ = std::fs::remove_dir(&dir);
     }
 
     #[test]

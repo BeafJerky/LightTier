@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.10.1 (2026-11-21)
+
+> 修复内核校验回归与 PowerShell 闪窗，并把内核安装失败原因显示到界面/日志。
+
+- 修复
+  - 内核启动路径不带 `.exe` 时，哈希校验按原路径读文件报“找不到文件”；现与 `Command::new` 一致自动解析 `.exe`
+  - 网卡/路由/进程扫描的 PowerShell 子进程统一隐藏窗口，不再闪黑框
+  - 内核安装失败时 toast 显示具体原因，并写入 `lighttier.log`
+- 验证
+  - `cargo test -p lighttier-desktop`（30 项）、`cargo check -p lighttier`、vitest（43 文件 / 388 项）、`vue-tsc`、ESLint 通过
+
 ## 2.10.0 (2026-11-21)
 
 > 内核包与可执行文件增加 SHA-256 校验，下载只允许 HTTPS，阻断镜像替换与资源目录篡改链。

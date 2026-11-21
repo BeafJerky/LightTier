@@ -50,7 +50,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   const store = useEasyTierStore()
   const toast = useCreamToast()
   const { t } = useI18n()
-  const { installing: installingCore, installCore } = useCoreInstall()
+  const { installing: installingCore, installCore, lastInstallError } = useCoreInstall()
 
   // 内核版本展示：优先用全局探测结果（规范化前原文），探测中显示占位
   const coreVersion = computed(() => {
@@ -505,7 +505,10 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
       // 切换后恢复自动运行循环的停止标记，允许后续手动启动新实例
       store.stopLoop = false
     } else {
-      toast.error(t('newSettings.installFail'))
+      const detail = lastInstallError.value
+      toast.error(
+        detail ? `${t('newSettings.installFail')}：${detail}` : t('newSettings.installFail')
+      )
     }
   }
 

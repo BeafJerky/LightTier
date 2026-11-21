@@ -84,7 +84,9 @@ pub fn list_processes(filter: &str) -> Result<Vec<ProcessInfo>, String> {
     use std::process::{Command, Stdio};
 
     validate_process_filter(filter)?;
-    let output = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    super::exec::hide_console(&mut command);
+    let output = command
         .args(["-NoProfile", "-NonInteractive", "-Command", PROCESS_SCRIPT])
         .env("LT_FILTER", filter)
         .stdin(Stdio::null())

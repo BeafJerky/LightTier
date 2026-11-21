@@ -158,7 +158,9 @@ pub fn change_default_route(gateway: &str, metric: u32) -> Result<(), String> {
 pub fn print_routes() -> Result<Vec<RouteRow>, String> {
     #[cfg(windows)]
     {
-        let output = Command::new("powershell.exe")
+        let mut command = Command::new("powershell.exe");
+        super::exec::hide_console(&mut command);
+        let output = command
             .args(["-NoProfile", "-NonInteractive", "-Command", NET_ROUTE_SCRIPT])
             .output()
             .map_err(|e| format!("powershell 执行失败: {e}"))?;

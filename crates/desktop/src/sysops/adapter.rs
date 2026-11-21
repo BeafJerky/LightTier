@@ -2,6 +2,7 @@
 //!
 //! PowerShell 只执行静态脚本，网卡名通过环境变量传入，避免命令拼接注入。
 
+use super::exec::hide_console;
 use super::{decode_native, validate_adapter_name};
 
 const ACTIVE_SCRIPT: &str = r#"
@@ -111,6 +112,7 @@ fn run_powershell(script: &str, adapter: Option<&str>, mode: Option<&str>) -> Re
     use std::process::{Command, Stdio};
 
     let mut command = Command::new("powershell.exe");
+    hide_console(&mut command);
     command
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .stdin(Stdio::null())

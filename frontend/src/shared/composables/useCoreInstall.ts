@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { join, resourceDir } from '@tauri-apps/api/path'
 import { isTauri } from '@tauri-apps/api/core'
+import { error as logError } from '@tauri-apps/plugin-log'
 import { CORE_PATH, getCoreFileName } from '@/shared/constants/easytier'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useMockData } from '@/shared/platform/mockData'
@@ -20,6 +21,7 @@ import { getArch, getOsType } from '@/shared/platform/sysUtil'
  */
 export const useCoreInstall = () => {
   const installing = ref(false)
+  const lastInstallError = ref('')
   const store = useEasyTierStore()
 
   // 停止桌面端已安装的全部内核服务（普通配置 + Web 配置服务）
@@ -55,6 +57,7 @@ export const useCoreInstall = () => {
    */
   const installCore = async (version: string): Promise<boolean> => {
     installing.value = true
+    lastInstallError.value = ''
     try {
       // 切换前先停服务与所有运行中的节点，并清理运行态记录
       // 列表未加载时（如首次进入设置页）先补齐，避免漏停 Web 配置服务
@@ -83,6 +86,9 @@ export const useCoreInstall = () => {
       }
       return ok
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      lastInstallError.value = message
+      logError(`安装内核失败 ${version}: ${message}`)
       console.error('安装核心失败:', e)
       return false
     } finally {
@@ -90,5 +96,5 @@ export const useCoreInstall = () => {
     }
   }
 
-  return { installing, installCore }
+  return { installing, installCore, lastInstallError }
 }
