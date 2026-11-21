@@ -24,9 +24,14 @@ $items = @(Get-NetIPConfiguration |
 if ($items.Count -gt 0) { $items | ConvertTo-Json -Compress }
 "#;
 
-const METRIC_SCRIPT: &str = r#"
+const DISABLE_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
-Set-NetIPInterface -InterfaceAlias $env:LT_ADAPTER -AutomaticMetric $env:LT_METRIC_MODE
+Set-NetIPInterface -InterfaceAlias $env:LT_ADAPTER -AutomaticMetric Disabled -InterfaceMetric 1
+"#;
+
+const ENABLE_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+Set-NetIPInterface -InterfaceAlias $env:LT_ADAPTER -AutomaticMetric Enabled
 "#;
 
 const STATE_SCRIPT: &str = r#"
@@ -57,7 +62,7 @@ fn parse_adapter_state(raw: &str) -> Result<AdapterState, String> {
 }
 
 pub fn adapter_metric_script() -> &'static str {
-    METRIC_SCRIPT
+    DISABLE_SCRIPT
 }
 
 fn ensure_known_adapter(adapter: &str, known: &[String]) -> Result<(), String> {
@@ -153,12 +158,8 @@ pub fn list_adapters() -> Result<Vec<String>, String> {
 pub fn set_adapter_metric(adapter: &str, enabled: bool) -> Result<(), String> {
     let known = list_adapters()?;
     ensure_known_adapter(adapter, &known)?;
-    run_powershell(
-        METRIC_SCRIPT,
-        Some(adapter),
-        Some(if enabled { "Enabled" } else { "Disabled" }),
-    )
-    .map(|_| ())
+    let script = if enabled { ENABLE_SCRIPT } else { DISABLE_SCRIPT };
+    run_powershell(script, Some(adapter), None).map(|_| ())
 }
 
 pub fn adapter_state(adapter: &str) -> Result<AdapterState, String> {
@@ -174,7 +175,7 @@ mod tests {
     fn metric_script_is_static_and_reads_env() {
         let script = adapter_metric_script();
         assert!(script.contains("$env:LT_ADAPTER"));
-        assert!(script.contains("$env:LT_METRIC_MODE"));
+        assert!(script.contains("-InterfaceMetric 1"));
         assert!(!script.contains("-InterfaceAlias \""));
     }
 
