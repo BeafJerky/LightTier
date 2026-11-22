@@ -341,13 +341,17 @@ const onPrimary = () => {
 
 .island-card-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  row-gap: 6px;
   min-height: 28px;
 }
 
 .island-queue {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   color: var(--theme-text-muted, #c8bdb2);
@@ -355,7 +359,23 @@ const onPrimary = () => {
 
 .island-card-actions {
   display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+  min-width: 0;
   margin-left: auto;
+}
+
+/* 窄卡片或长文案时按钮收缩并省略，不允许撑出卡片 */
+.island-card-actions :deep(.lt-btn) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.island-card-actions :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

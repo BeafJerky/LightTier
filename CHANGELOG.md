@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.10.3 (2026-11-21)
+
+> 修复停止配置时 taskkill/route 闪窗，以及灵动岛操作按钮在窄卡片或长文案下溢出。
+
+- 修复
+  - `taskkill.exe` 与 `route.exe` 统一使用 `CREATE_NO_WINDOW`，停止配置、清理路由不再闪 shell 窗口
+  - 灵动岛 footer 允许换行，操作区与队列文本可收缩，按钮在窄卡片/长文案下省略而不是撑出卡片
+- 验证
+  - 注入后实测：280px + 长英文按钮 `scrollWidth` 287→280，按钮换行收在卡片内；352px 中文仍单行
+  - `cargo test -p lighttier-desktop`（31 项）、`cargo check -p lighttier`、vitest（43 文件 / 388 项）、`vue-tsc`、ESLint、Stylelint 通过
+
 ## 2.10.2 (2026-11-21)
 
 > 修复 Windows `\\?\` 长路径导致“内核包不在 resource/core 目录”，并记录哈希不匹配的实际值。

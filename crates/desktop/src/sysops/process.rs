@@ -160,7 +160,9 @@ pub fn kill_process(pid: u32) -> Result<bool, String> {
     use std::process::{Command, Stdio};
 
     super::validate_pid(pid)?;
-    let output = Command::new("taskkill.exe")
+    let mut command = Command::new("taskkill.exe");
+    super::exec::hide_console(&mut command);
+    let output = command
         .args(["/F", "/PID", &pid.to_string()])
         .stdin(Stdio::null())
         .output()

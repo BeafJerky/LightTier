@@ -97,7 +97,9 @@ fn build_add_args(target: &str, mask: &str, gateway: &str, metric: u32) -> Vec<S
 }
 
 fn run_route(args: &[String]) -> Result<String, String> {
-    let output = Command::new("route.exe")
+    let mut command = Command::new("route.exe");
+    super::exec::hide_console(&mut command);
+    let output = command
         .args(args)
         .output()
         .map_err(|e| format!("route 执行失败: {e}"))?;
