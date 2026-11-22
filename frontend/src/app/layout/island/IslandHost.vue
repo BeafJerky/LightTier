@@ -23,8 +23,8 @@ const island = useIslandStore()
 const easy = useEasyTierStore()
 useIslandBridge()
 
-const IDLE_WIDTH = 118
-const IDLE_NARROW_WIDTH = 74
+const IDLE_WIDTH = 132
+const IDLE_NARROW_WIDTH = 80
 const DOT_WIDTH = 46
 const COMPACT_WIDTH = 280
 const CARD_WIDTH = 352
@@ -420,7 +420,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .island-root {
   position: fixed;
-  right: calc(24px + 40px + 12px);
+  right: calc(24px + 40px + 18px);
   bottom: calc(24px + var(--lt-safe-area-bottom, 0px));
   z-index: 8900;
   overflow: hidden;
@@ -456,12 +456,12 @@ onBeforeUnmount(() => {
   display: flex;
   width: var(--island-bar-width, 280px);
   height: 40px;
-  padding: 0 12px;
+  padding: 0 14px;
   pointer-events: none;
   opacity: 0;
   transform: translateY(-50%);
   transition: opacity 120ms ease;
-  gap: 7px;
+  gap: 9px;
   align-items: center;
 }
 
@@ -493,7 +493,7 @@ onBeforeUnmount(() => {
 }
 
 .island-count {
-  margin-left: 1px;
+  margin-left: 2px;
   font-size: 12.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -512,7 +512,7 @@ onBeforeUnmount(() => {
 .island-chevron {
   position: absolute;
   top: 50%;
-  right: 12px;
+  right: 14px;
   color: var(--theme-text-muted, #c8bdb2);
   opacity: 0;
   transform: translateY(-50%) translateX(-2px);
@@ -640,16 +640,16 @@ onBeforeUnmount(() => {
 
 @media (width <= 560px) {
   .island-root {
-    right: calc(16px + 48px + 10px);
+    right: calc(16px + 48px + 14px);
     bottom: calc(16px + var(--lt-safe-area-bottom, 0px));
   }
 
   .island-bar {
-    padding: 0 10px;
+    padding: 0 12px;
   }
 
   .island-chevron {
-    right: 10px;
+    right: 12px;
   }
 }
 
