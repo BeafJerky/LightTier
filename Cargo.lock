@@ -4017,7 +4017,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier"
-version = "2.10.4"
+version = "2.10.5"
 dependencies = [
  "lighttier-android",
  "lighttier-core",
@@ -4043,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-android"
-version = "2.10.4"
+version = "2.10.5"
 dependencies = [
  "easytier",
  "humansize",
@@ -4059,7 +4059,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-core"
-version = "2.10.4"
+version = "2.10.5"
 dependencies = [
  "chrono",
  "log",
@@ -4071,7 +4071,7 @@ dependencies = [
 
 [[package]]
 name = "lighttier-desktop"
-version = "2.10.4"
+version = "2.10.5"
 dependencies = [
  "encoding_rs",
  "lighttier-core",
@@ -4081,11 +4081,12 @@ dependencies = [
  "serde_json",
  "sha2",
  "tauri",
+ "tokio",
 ]
 
 [[package]]
 name = "lighttier-runtime"
-version = "2.10.4"
+version = "2.10.5"
 dependencies = [
  "lighttier-android",
  "lighttier-core",

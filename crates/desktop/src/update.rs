@@ -28,6 +28,8 @@ const FILE_SHARE_READ: u32 = 0x0000_0001;
 
 const OFFICIAL_RELEASES_API: &str = "https://api.github.com/repos/BeafJerky/LightTier/releases";
 const OFFICIAL_API_TIMEOUT: Duration = Duration::from_secs(10);
+const OFFICIAL_API_ATTEMPTS: u32 = 2;
+const OFFICIAL_API_RETRY_DELAY: Duration = Duration::from_millis(300);
 const OFFICIAL_API_USER_AGENT: &str = concat!("LightTier/", env!("CARGO_PKG_VERSION"));
 const OFFICIAL_API_ACCEPT: &str = "application/vnd.github+json";
 
@@ -82,25 +84,69 @@ fn parse_official_installer_digest(
     digest.ok_or_else(|| "官方发布中未找到安装包摘要，拒绝安装".to_string())
 }
 
-async fn fetch_installer_digest(
+/// 传输类失败可重试；接口返回内容非法（状态码、非 JSON）重试也没用。
+enum ReleaseFetchError {
+    Retryable(String),
+    Fatal(String),
+}
+
+async fn fetch_releases_once(
     client: &reqwest::Client,
     api_url: &str,
-    installer: &str,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, ReleaseFetchError> {
     let response = client
         .get(api_url)
         .header(reqwest::header::USER_AGENT, OFFICIAL_API_USER_AGENT)
         .header(reqwest::header::ACCEPT, OFFICIAL_API_ACCEPT)
         .send()
         .await
-        .map_err(|error| format!("获取官方安装包摘要失败: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("官方安装包摘要接口请求失败: {error}"))?;
-    let releases = response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|error| format!("解析官方安装包摘要失败: {error}"))?;
-    parse_official_installer_digest(&releases, installer)
+        .map_err(|error| {
+            ReleaseFetchError::Retryable(format!("请求官方安装包摘要接口失败: {error}"))
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(ReleaseFetchError::Fatal(format!(
+            "官方安装包摘要接口请求失败: HTTP {status}"
+        )));
+    }
+    // Response::json() 把响应体读取失败与 JSON 解析失败都映射成 "error decoding
+    // response body"；先单独取字节，才能把传输中断和返回内容非法区分开。
+    let body = response.bytes().await.map_err(|error| {
+        let cause = if error.is_timeout() {
+            "读取官方安装包摘要响应超时"
+        } else {
+            "读取官方安装包摘要响应失败"
+        };
+        ReleaseFetchError::Retryable(format!("{cause}: {error}"))
+    })?;
+    serde_json::from_slice(&body)
+        .map_err(|error| ReleaseFetchError::Fatal(format!("解析官方安装包摘要失败: {error}")))
+}
+
+async fn fetch_installer_digest(
+    client: &reqwest::Client,
+    api_url: &str,
+    installer: &str,
+) -> Result<String, String> {
+    let mut last_error = String::new();
+    for attempt in 1..=OFFICIAL_API_ATTEMPTS {
+        match fetch_releases_once(client, api_url).await {
+            Ok(releases) => return parse_official_installer_digest(&releases, installer),
+            Err(ReleaseFetchError::Fatal(message)) => return Err(message),
+            Err(ReleaseFetchError::Retryable(message)) => {
+                if attempt < OFFICIAL_API_ATTEMPTS {
+                    log::warn!(
+                        "官方安装包摘要第 {attempt}/{OFFICIAL_API_ATTEMPTS} 次获取失败，稍后重试: {message}"
+                    );
+                    tokio::time::sleep(OFFICIAL_API_RETRY_DELAY).await;
+                }
+                last_error = message;
+            }
+        }
+    }
+    Err(format!(
+        "获取官方安装包摘要失败（共 {OFFICIAL_API_ATTEMPTS} 次尝试）: {last_error}"
+    ))
 }
 
 /// 校验已从官方 API 解析出的纯 hex 摘要；不再接受 IPC 可自报的带前缀字符串。
@@ -423,6 +469,143 @@ mod tests {
     fn rejects_malformed_official_release_payload() {
         assert!(parse_official_installer_digest(&serde_json::json!({}), "setup.exe").is_err());
         assert!(parse_official_installer_digest(&serde_json::json!([]), "setup.exe").is_err());
+    }
+
+    fn installer_release_payload(installer: &str) -> Vec<u8> {
+        serde_json::json!([{
+            "assets": [{ "name": installer, "digest": format!("sha256:{}", "a".repeat(64)) }]
+        }])
+        .to_string()
+        .into_bytes()
+    }
+
+    fn http_response(status_line: &str, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    /// 声明完整 Content-Length 却只发送一半字节后断开，模拟响应体传输中断。
+    fn truncated_response(body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(&body[..body.len() / 2]);
+        response
+    }
+
+    /// 按脚本逐次返回响应；实际受理的连接数可用于断言是否发生重试。
+    fn spawn_scripted_server(
+        responses: Vec<Vec<u8>>,
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&hits);
+        std::thread::spawn(move || {
+            for response in responses {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut request = [0_u8; 2048];
+                let _ = std::io::Read::read(&mut stream, &mut request);
+                let _ = std::io::Write::write_all(&mut stream, &response);
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+            }
+        });
+        (format!("http://{address}"), hits)
+    }
+
+    fn test_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn reports_truncated_response_body_as_read_failure() {
+        let payload = installer_release_payload("setup.exe");
+        let (url, hits) = spawn_scripted_server(vec![
+            truncated_response(&payload),
+            truncated_response(&payload),
+        ]);
+
+        let error = tauri::async_runtime::block_on(fetch_installer_digest(
+            &test_client(),
+            &url,
+            "setup.exe",
+        ))
+        .unwrap_err();
+
+        assert!(error.contains("读取官方安装包摘要响应失败"), "{error}");
+        assert!(!error.contains("解析官方安装包摘要失败"), "{error}");
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn retries_truncated_response_then_succeeds() {
+        let payload = installer_release_payload("setup.exe");
+        let (url, hits) = spawn_scripted_server(vec![
+            truncated_response(&payload),
+            http_response("200 OK", &payload),
+        ]);
+
+        let digest = tauri::async_runtime::block_on(fetch_installer_digest(
+            &test_client(),
+            &url,
+            "setup.exe",
+        ))
+        .unwrap();
+
+        assert_eq!(digest, "a".repeat(64));
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn reports_non_json_body_as_parse_failure_without_retry() {
+        let body = b"<html>blocked</html>".to_vec();
+        let (url, hits) = spawn_scripted_server(vec![
+            http_response("200 OK", &body),
+            http_response("200 OK", &body),
+        ]);
+
+        let error = tauri::async_runtime::block_on(fetch_installer_digest(
+            &test_client(),
+            &url,
+            "setup.exe",
+        ))
+        .unwrap_err();
+
+        assert!(error.contains("解析官方安装包摘要失败"), "{error}");
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn reports_http_status_without_retry() {
+        let body = b"missing";
+        let (url, hits) = spawn_scripted_server(vec![
+            http_response("404 Not Found", body),
+            http_response("404 Not Found", body),
+        ]);
+
+        let error = tauri::async_runtime::block_on(fetch_installer_digest(
+            &test_client(),
+            &url,
+            "setup.exe",
+        ))
+        .unwrap_err();
+
+        assert!(error.contains("HTTP 404"), "{error}");
+        assert!(error.contains("官方安装包摘要接口请求失败"), "{error}");
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[cfg(windows)]
