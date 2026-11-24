@@ -522,7 +522,7 @@ const applyPreferencesPayload = (
   // store 已由 pinia 持久化插件管理，$patch 会同步写回 localStorage
   useEasyTierStore().$patch(patch)
   if (payload.store.islandSettings) {
-    useIslandStore().$patch({ settings: payload.store.islandSettings })
+    useIslandStore().restoreSettings(payload.store.islandSettings)
   }
 }
 

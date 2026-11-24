@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
       motion: 'system',
       face: true
     },
+    restoreSettings: vi.fn(),
     $patch: vi.fn()
   }
   const state = {
@@ -299,9 +300,9 @@ describe('useAppBackup（快照与原子恢复）', () => {
     const result = await applyRestore(plan, { preferences: 'backup', 'config:a.toml': 'backup' })
 
     expect(result).toEqual({ applied: 0, failed: ['config:a.toml'], rolledBack: true })
-    expect(mocks.islandState.$patch).toHaveBeenCalledWith({
-      settings: expect.objectContaining({ enabled: true, idle: 'count', motion: 'system' })
-    })
+    expect(mocks.islandState.restoreSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, idle: 'count', motion: 'system' })
+    )
   })
 
   it('偏好回滚精确恢复原始 service-config 全集，包括损坏和空记录', async () => {
@@ -678,8 +679,8 @@ describe('useAppBackup（快照与原子恢复）', () => {
     const result = await applyRestore(plan, { preferences: 'backup' })
 
     expect(result).toEqual({ applied: 1, failed: [], rolledBack: false })
-    expect(mocks.islandState.$patch).toHaveBeenCalledWith({
-      settings: expect.objectContaining({
+    expect(mocks.islandState.restoreSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
         enabled: false,
         idle: 'dot',
         silent: true,
@@ -687,6 +688,6 @@ describe('useAppBackup（快照与原子恢复）', () => {
         face: false,
         types: { error: false, update: true, quality: false, feedback: true }
       })
-    })
+    )
   })
 })

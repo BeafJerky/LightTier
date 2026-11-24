@@ -267,6 +267,8 @@
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { formatBytes, routeCost } from '@/shared/lib/monitorFormat'
 import { useIslandStore } from '@/shared/store/island'
+import { collectQualitySamples } from '@/shared/lib/island/health'
+import { resolveMonitorTarget } from '@/features/instances/lib/monitorSelection'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as coreApi from '@/shared/platform/coreApi'
 import { isAndroid } from '@/shared/platform/platformUtil'
@@ -376,12 +378,19 @@ const handleSnapshotSuccess = (configName: string, snapshot: MonitorSnapshot) =>
     .filter((peer) => peer.loss_rate.trim() !== '')
     .map((peer) => Number(peer.loss_rate))
     .filter((value) => Number.isFinite(value))
-  if (latencies.length) {
-    islandStore.reportQuality(configName, {
-      avgLatencyMs: latencies.reduce((sum, value) => sum + value, 0) / latencies.length,
+  const qualitySamples = collectQualitySamples([
+    {
+      configFileName: configName,
+      ok: true,
+      avgLatencyMs: latencies.length
+        ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length
+        : undefined,
       lossRate: losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : 0,
       peerCount: qualityPeers.length
-    })
+    }
+  ])
+  for (const entry of qualitySamples) {
+    islandStore.reportQuality(entry.name, entry.sample)
   }
   // 5.4：全部远端 Peer 均 P2P 直连时一次性通知（排除本机项，去重复用 p2pNotify 标志位）
   if (!easyTierStore.p2pNotifySetting || !easyTierStore.p2pNotify) return
@@ -452,16 +461,16 @@ const loadConfigs = async () => {
     // 从运行中的配置（displayList）中选择，避免选中已停止的配置导致左侧无高亮卡片。
     // 总览卡片跳转携带 ?name= 时优先命中目标；窄屏仅在显式指定目标时自动进入详情，
     // 其余情况保持清单视图。
-    if (!isAndroidPlatform && displayList.value.length > 0) {
+    if (!isAndroidPlatform) {
       const requestedName = typeof route.query.name === 'string' ? route.query.name : ''
-      const requested = requestedName
-        ? displayList.value.find((c) => c.configFileName === requestedName)
-        : undefined
       const last = easyTierStore.getLastRunConfigName()
-      const fallback =
-        (last ? displayList.value.find((c) => c.configFileName === last) : undefined) ||
-        displayList.value[0]
-      const target = requested || (window.innerWidth > 900 ? fallback : undefined)
+      const target = resolveMonitorTarget(
+        easyTierStore.configList,
+        easyTierStore.runningList,
+        requestedName,
+        last || '',
+        window.innerWidth > 900
+      )
       if (target) selectConfig(target)
       if (requestedName) clearRequestedName()
     }
@@ -532,8 +541,15 @@ const syncAndroidSelection = async () => {
 watch(
   () => route.query.name,
   (name) => {
-    if (isAndroidPlatform || typeof name !== 'string' || !name) return
-    const target = displayList.value.find((c) => c.configFileName === name)
+    if (isAndroidPlatform || !easyTierStore.configListLoaded || typeof name !== 'string' || !name)
+      return
+    const target = resolveMonitorTarget(
+      easyTierStore.configList,
+      easyTierStore.runningList,
+      name,
+      '',
+      false
+    )
     if (target) selectConfig(target)
     clearRequestedName()
   }

@@ -120,9 +120,16 @@ export function useInstanceActions(options: InstanceActionsOptions) {
           })
         )
         if (!confirmed) throw new Error('switch-cancelled')
-        if (reportIsland) island.expectStop(current.configFileName)
-        const stopped = await coreApi.stopConfig(current)
+        island.expectStop(current.configFileName)
+        let stopped: boolean
+        try {
+          stopped = await coreApi.stopConfig(current)
+        } catch (error) {
+          island.cancelExpectedStop(current.configFileName)
+          throw error
+        }
         if (!stopped) {
+          island.cancelExpectedStop(current.configFileName)
           toast(t('newCommon.stoppedFail'), 'error')
           throw new Error('stop-old-failed')
         }
@@ -181,10 +188,16 @@ export function useInstanceActions(options: InstanceActionsOptions) {
     const running = easyTierStore.runningList.find((r) => r.configFileName === item.configFileName)
     let stopped = true
     // 主动停止是预期行为：先登记，运行态差集才不会误报为掉线
-    if (reportIsland) island.expectStop(item.configFileName)
+    island.expectStop(item.configFileName)
     // Android：停 VPN + 内核实例（无 pid）；桌面：结束子进程
     if (isAndroidPlatform || running?.pid) {
-      const ok = await coreApi.stopConfig(running ?? item)
+      let ok: boolean
+      try {
+        ok = await coreApi.stopConfig(running ?? item)
+      } catch (error) {
+        island.cancelExpectedStop(item.configFileName)
+        throw error
+      }
       if (ok) {
         easyTierStore.stopLoop = true
         easyTierStore.removeRunningList(item.configFileName)
@@ -196,6 +209,7 @@ export function useInstanceActions(options: InstanceActionsOptions) {
           })
         if (!handledByIsland) toast(t('newCommon.stoppedSuccess'), 'success')
       } else {
+        island.cancelExpectedStop(item.configFileName)
         stopped = false
         toast(t('newCommon.stoppedFail'), 'error')
         if (reportIsland) {

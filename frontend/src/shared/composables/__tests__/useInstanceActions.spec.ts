@@ -39,7 +39,8 @@ const platform = vi.hoisted(() => ({ android: false }))
 
 const islandMock = vi.hoisted(() => ({
   notify: vi.fn(),
-  expectStop: vi.fn()
+  expectStop: vi.fn(),
+  cancelExpectedStop: vi.fn()
 }))
 
 const cream = vi.hoisted(() => ({
@@ -199,6 +200,18 @@ describe('useInstanceActions.startInstance', () => {
     expect(api.startConfig).toHaveBeenCalledWith('home.toml')
   })
 
+  it('Android 停旧起新失败时取消旧实例的预期停止', async () => {
+    platform.android = true
+    storeMock.runningList = [{ configFileName: 'old.toml', fileName: 'old.toml' }]
+    api.stopConfig.mockResolvedValueOnce(false)
+    const { startInstance } = useInstanceActions({ confirm: async () => true })
+
+    await expect(startInstance(item)).rejects.toThrow('stop-old-failed')
+
+    expect(islandMock.cancelExpectedStop).toHaveBeenCalledWith('old.toml')
+    expect(api.startConfig).not.toHaveBeenCalled()
+  })
+
   it('Android 停旧起新取消时不启动', async () => {
     platform.android = true
     storeMock.runningList = [{ configFileName: 'old.toml', fileName: 'old.toml' }]
@@ -235,6 +248,7 @@ describe('useInstanceActions.stopInstance', () => {
     expect(route.clearExitRoute).toHaveBeenCalledWith('home.toml')
     // 主动停止先登记预期停止，避免灵动岛误报掉线
     expect(islandMock.expectStop).toHaveBeenCalledWith('home.toml')
+    expect(islandMock.cancelExpectedStop).not.toHaveBeenCalled()
     expect(islandMock.notify).toHaveBeenCalledWith({
       type: 'feedback',
       title: 'newIsland.stopOk:{"name":"home.toml"}'
@@ -254,9 +268,30 @@ describe('useInstanceActions.stopInstance', () => {
     expect(storeMock.removeRunningList).not.toHaveBeenCalled()
     expect(metric.afterStop).not.toHaveBeenCalled()
     expect(route.clearExitRoute).not.toHaveBeenCalled()
+    expect(islandMock.cancelExpectedStop).toHaveBeenCalledWith('home.toml')
     expect(cream.show).toHaveBeenCalled()
     expect(islandMock.notify).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'error', quiet: true })
     )
+  })
+
+  it('Android 停止失败时取消预期停止', async () => {
+    platform.android = true
+    storeMock.runningList = [{ configFileName: 'home.toml', fileName: 'home.toml' }]
+    api.stopConfig.mockResolvedValueOnce(false)
+    const { stopInstance } = useInstanceActions({ confirm: async () => true })
+
+    await expect(stopInstance(item)).resolves.toBe(false)
+
+    expect(islandMock.cancelExpectedStop).toHaveBeenCalledWith('home.toml')
+  })
+
+  it('停止请求抛错时取消预期停止并保留原错误', async () => {
+    api.stopConfig.mockRejectedValueOnce(new Error('stop rejected'))
+    const { stopInstance } = useInstanceActions({ confirm: async () => true })
+
+    await expect(stopInstance(item)).rejects.toThrow('stop rejected')
+
+    expect(islandMock.cancelExpectedStop).toHaveBeenCalledWith('home.toml')
   })
 })

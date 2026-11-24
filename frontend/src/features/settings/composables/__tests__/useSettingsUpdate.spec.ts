@@ -13,6 +13,18 @@ const mocks = vi.hoisted(() => ({
   downloadFromMirrors: vi.fn(),
   invoke: vi.fn(),
   installApk: vi.fn(),
+  refreshManagerReleaseInfo: vi.fn(),
+  generation: 0,
+  island: {
+    invalidateManagerUpdate: vi.fn(),
+    dismissSource: vi.fn(),
+    absorbManagerRelease: vi.fn(),
+    notify: vi.fn(),
+    beginManagerUpdateCheck: vi.fn(),
+    isManagerUpdateCheckCurrent: vi.fn(),
+    finishManagerUpdateCheck: vi.fn(),
+    markManagerUpdatePresented: vi.fn()
+  },
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }
 }))
 
@@ -21,16 +33,11 @@ vi.mock('@/shared/ui/useCreamToast', () => ({ useCreamToast: () => mocks.toast }
 vi.mock('@/shared/store/easytier', () => ({
   useEasyTierStore: () => ({
     updateStableOnly: true,
-    refreshManagerReleaseInfo: vi.fn(async () => [mocks.release])
+    refreshManagerReleaseInfo: mocks.refreshManagerReleaseInfo
   })
 }))
 vi.mock('@/shared/store/island', () => ({
-  useIslandStore: () => ({
-    invalidateManagerUpdate: vi.fn(),
-    dismissSource: vi.fn(),
-    absorbManagerRelease: vi.fn(),
-    notify: vi.fn()
-  })
+  useIslandStore: () => mocks.island
 }))
 vi.mock('@/shared/platform/fileUtil', () => ({
   downloadFile: mocks.downloadFile,
@@ -83,6 +90,19 @@ describe('useSettingsUpdate 安装包完整性', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.release = RELEASE
+    mocks.generation = 0
+    mocks.refreshManagerReleaseInfo.mockImplementation(async () => [mocks.release])
+    mocks.island.invalidateManagerUpdate.mockImplementation(() => {
+      mocks.generation += 1
+    })
+    mocks.island.beginManagerUpdateCheck.mockImplementation(() => {
+      mocks.generation += 1
+      return mocks.generation
+    })
+    mocks.island.isManagerUpdateCheckCurrent.mockImplementation(
+      (generation: number) => generation === mocks.generation
+    )
+    mocks.island.finishManagerUpdateCheck.mockReturnValue(true)
     mocks.files.clear()
     mocks.listFiles.mockResolvedValue([FILE_NAME])
     mocks.readFileContent.mockImplementation(async (path: string) => mocks.files.get(path))
@@ -95,6 +115,26 @@ describe('useSettingsUpdate 安装包完整性', () => {
     )
     vi.stubGlobal('window', { LTAndroidInstaller: { installApk: mocks.installApk } })
     vi.stubGlobal('localStorage', { getItem: vi.fn(() => null) })
+  })
+
+  it('灵动岛缓存失效后，设置页旧请求不得回写版本或安装包', async () => {
+    let resolve!: (releases: unknown[]) => void
+    mocks.refreshManagerReleaseInfo.mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      })
+    )
+    const update = createUpdate()
+    await update.loadAppVersion()
+    const pending = update.handleCheckUpdate()
+    await Promise.resolve()
+    mocks.island.invalidateManagerUpdate()
+    resolve([RELEASE])
+    await pending
+
+    expect(mocks.island.absorbManagerRelease).not.toHaveBeenCalled()
+    expect(update.latestManagerVersion.value).toBe('')
+    expect(update.updateDownloaded.value).toBe(false)
   })
 
   it('恢复缓存前重新校验完整包体，匹配才允许安装', async () => {

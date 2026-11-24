@@ -20,6 +20,7 @@ import {
 import { DEFAULT_CORE_VERSION } from '@/entities/kernel/kernelCompat'
 
 const INITIAL_RETRY_DELAYS = [5_000, 15_000]
+const INITIAL_RETRY_MAX_MS = 30_000
 /** 后台健康采样节奏；后端下限 5s，监控页活跃时由后端自动让行 */
 const HEALTH_INTERVAL_MS = 10_000
 
@@ -165,27 +166,32 @@ export function useIslandBridge() {
     // 缓存内不重复请求，但仍要把已记录的新版本恢复成角标（应用重启后常见）。
     let version = island.latestManagerVersion
     if (island.shouldCheckManagerUpdate()) {
-      island.setUpdateChecking(true)
+      const generation = island.beginManagerUpdateCheck()
       try {
         const releases = await easy.refreshManagerReleaseInfo()
+        if (!island.isManagerUpdateCheckCurrent(generation)) return
         version = pickLatestManagerRelease(releases, easy.updateStableOnly)?.tag_name ?? ''
         island.absorbManagerRelease(version)
       } catch {
         // 网络失败静默：沿用已记录的版本，不把临时错误变成常驻红点
       } finally {
-        island.setUpdateChecking(false)
+        island.finishManagerUpdateCheck(generation)
       }
     }
 
     const appVersion = await readAppVersion()
+    if (version !== island.latestManagerVersion) return
     if (version && appVersion && compareVersions(version, appVersion) > 0) {
+      const present = island.shouldPresentManagerUpdate(version)
       island.notify({
         type: 'update',
         title: t('newIsland.managerUpdate', { version }),
         detail: t('newIsland.managerUpdateDesc'),
         sourceKey: 'update:manager',
-        action: { kind: 'open-settings', tab: 'about' }
+        action: { kind: 'open-settings', tab: 'about' },
+        quiet: !present
       })
+      if (present) island.markManagerUpdatePresented(version)
     } else {
       island.dismissSource('update:manager')
     }
@@ -193,29 +199,45 @@ export function useIslandBridge() {
     refreshKernelNotice()
   }
 
-  async function initialSync(attempt = 0): Promise<void> {
+  let initialSyncing = false
+  let initialAttempt = 0
+
+  async function initialSync(): Promise<void> {
+    if (initialSyncing || disposed) return
+    initialSyncing = true
     initialSyncOk = false
-    await sync.updateRunningList({ force: true })
+    try {
+      await sync.updateRunningList({ force: true })
+    } finally {
+      initialSyncing = false
+    }
     if (disposed) return
 
     if (initialSyncOk) {
       initializing = false
+      initialAttempt = 0
       island.markBaseline(names())
       scheduleHealthSync()
       void refreshUpdateNotices()
       return
     }
 
-    const delay = INITIAL_RETRY_DELAYS[attempt]
-    if (delay === undefined) return
+    const delay = INITIAL_RETRY_DELAYS[initialAttempt] ?? INITIAL_RETRY_MAX_MS
+    initialAttempt += 1
     retryTimer = window.setTimeout(() => {
-      void initialSync(attempt + 1)
+      retryTimer = 0
+      void initialSync()
     }, delay)
   }
 
   const onVisibility = () => {
     if (document.hidden) return
-    if (initializing) return
+    if (initializing) {
+      window.clearTimeout(retryTimer)
+      retryTimer = 0
+      void initialSync()
+      return
+    }
     void refreshUpdateNotices()
   }
 

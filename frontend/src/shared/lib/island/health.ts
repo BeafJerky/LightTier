@@ -14,15 +14,16 @@ export interface HealthQualityEntry {
   sample: { avgLatencyMs: number; lossRate: number; peerCount: number }
 }
 
-/** 把后端健康快照转成灵动岛可消费的质量样本：失败或缺少延迟的实例直接跳过 */
+/** 把后端健康快照转成灵动岛可消费的质量样本：失败或有 peer 但缺延迟时跳过 */
 export function collectQualitySamples(instances: HealthQualityInput[]): HealthQualityEntry[] {
   const result: HealthQualityEntry[] = []
   for (const item of instances) {
-    if (!item.ok || item.avgLatencyMs === undefined) continue
+    if (!item.ok) continue
+    if (item.peerCount > 0 && item.avgLatencyMs === undefined) continue
     result.push({
       name: item.configFileName,
       sample: {
-        avgLatencyMs: item.avgLatencyMs,
+        avgLatencyMs: item.avgLatencyMs ?? 0,
         lossRate: item.lossRate ?? 0,
         peerCount: item.peerCount
       }
@@ -54,6 +55,10 @@ export class ExpectedStops {
 
   expect(name: string, now = Date.now()): void {
     this.expires.set(name, now + this.ttlMs)
+  }
+
+  cancel(name: string): void {
+    this.expires.delete(name)
   }
 
   consume(name: string, now = Date.now()): boolean {

@@ -1,19 +1,11 @@
-import { onBeforeUnmount, watch, type Ref } from 'vue'
+import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { ISLAND_SPRINGS, Spring } from '@/shared/lib/island/spring'
 
-/** 减弱动效档的短补间：不做超调，与圆角/内容淡出同步完成 */
 const TWEEN_MS = 160
-
 const easeOutCubic = (progress: number) => 1 - Math.pow(1 - progress, 3)
+const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
 
-/**
- * 只驱动外壳宽高，直接写 DOM，绕过逐帧响应式更新：
- * 形态动画期间不触发组件重渲染，也不让内容随宽度逐帧重排。
- * 内容层由外壳裁切、用固定目标尺寸排版，收展时只做透明度交叉淡入淡出。
- *
- * 标准档用弹簧（保留回弹）；减弱档用 160ms ease-out 补间，
- * 避免尺寸瞬跳而圆角仍在过渡的“胶囊突变圆角矩形”。
- */
 export function useIslandMorph(
   el: Ref<HTMLElement | null>,
   reduced: Ref<boolean>,
@@ -22,18 +14,55 @@ export function useIslandMorph(
 ) {
   const width = new Spring(initialWidth, ISLAND_SPRINGS.width)
   const height = new Spring(initialHeight, ISLAND_SPRINGS.height)
+  const cardVisible = ref(false)
 
   let targetWidth = initialWidth
   let targetHeight = initialHeight
+  let minWidth = 0
+  let minHeight = 0
+  let cardHeight = initialHeight
+  let pillRadius = initialHeight / 2
+  let cardRadius = 18
   let frame = 0
   let last = 0
   let tween: { fromWidth: number; fromHeight: number; startedAt: number } | null = null
 
-  const applySize = () => {
+  const readRadii = () => {
     const node = el.value
     if (!node) return
-    node.style.width = `${width.x}px`
-    node.style.height = `${height.x}px`
+    const style = getComputedStyle(node)
+    const themePill = Number.parseFloat(style.getPropertyValue('--theme-radius-pill'))
+    const themeCard = Number.parseFloat(style.getPropertyValue('--theme-radius-xl'))
+    pillRadius = Math.min(Number.isFinite(themePill) ? themePill : 100, initialHeight / 2)
+    cardRadius = Number.isFinite(themeCard) ? themeCard : 18
+  }
+
+  const applyShape = () => {
+    const node = el.value
+    if (!node) return
+    const heightRange = cardHeight - initialHeight
+    const rawProgress =
+      cardVisible.value && heightRange > 0 ? clamp01((height.x - initialHeight) / heightRange) : 0
+    const progress = smoothstep(rawProgress)
+    const radius = pillRadius + (cardRadius - pillRadius) * progress
+    const bar = node.querySelector<HTMLElement>('.island-bar')
+    const card = node.querySelector<HTMLElement>('.island-card-wrap')
+
+    const displayWidth = Math.max(minWidth, width.x)
+    const displayHeight = Math.max(minHeight, height.x)
+    node.style.width = `${displayWidth}px`
+    node.style.height = `${displayHeight}px`
+    node.style.borderRadius = `${radius}px`
+    if (bar) bar.style.opacity = `${1 - progress}`
+    if (card) card.style.opacity = `${progress}`
+    if (targetHeight <= initialHeight && height.x <= initialHeight) cardVisible.value = false
+  }
+
+  const finish = () => {
+    width.snapTo(targetWidth)
+    height.snapTo(targetHeight)
+    cardVisible.value = targetHeight > initialHeight
+    applyShape()
   }
 
   const beginTween = () => {
@@ -42,7 +71,6 @@ export function useIslandMorph(
       fromHeight: height.x,
       startedAt: performance.now()
     }
-    // 切回标准档时从静止重新起步，不继承补间前的弹簧速度
     width.v = 0
     height.v = 0
     if (!frame) frame = requestAnimationFrame(loop)
@@ -50,18 +78,15 @@ export function useIslandMorph(
 
   const stepTween = (now: number) => {
     if (!tween) return false
-    const progress = Math.min(1, Math.max(0, (now - tween.startedAt) / TWEEN_MS))
+    const progress = clamp01((now - tween.startedAt) / TWEEN_MS)
     const eased = easeOutCubic(progress)
     width.x = tween.fromWidth + (targetWidth - tween.fromWidth) * eased
     height.x = tween.fromHeight + (targetHeight - tween.fromHeight) * eased
-    applySize()
-
+    applyShape()
     if (progress < 1) return true
 
     tween = null
-    width.snapTo(targetWidth)
-    height.snapTo(targetHeight)
-    applySize()
+    finish()
     return false
   }
 
@@ -80,7 +105,7 @@ export function useIslandMorph(
     last = now
     const movingWidth = width.step(dt)
     const movingHeight = height.step(dt)
-    applySize()
+    applyShape()
 
     if (movingWidth || movingHeight) {
       frame = requestAnimationFrame(loop)
@@ -89,9 +114,7 @@ export function useIslandMorph(
 
     frame = 0
     last = 0
-    width.snapTo(targetWidth)
-    height.snapTo(targetHeight)
-    applySize()
+    finish()
   }
 
   const kick = () => {
@@ -101,8 +124,15 @@ export function useIslandMorph(
   }
 
   const setTarget = (nextWidth: number, nextHeight: number) => {
+    readRadii()
+    minWidth = nextWidth < targetWidth ? nextWidth : minWidth
+    minHeight = nextHeight < targetHeight ? nextHeight : minHeight
     targetWidth = nextWidth
     targetHeight = nextHeight
+    if (nextHeight > initialHeight) {
+      cardHeight = nextHeight
+      cardVisible.value = true
+    }
 
     if (reduced.value) {
       beginTween()
@@ -117,6 +147,7 @@ export function useIslandMorph(
 
   watch(reduced, (value) => {
     if (value) {
+      readRadii()
       beginTween()
       return
     }
@@ -128,12 +159,11 @@ export function useIslandMorph(
     kick()
   })
 
-  // 元素挂载后立刻写入初始尺寸，避免首帧按 0 宽高绘制
-  watch(el, () => applySize(), { immediate: true })
+  watch(el, () => applyShape(), { immediate: true })
 
-  onBeforeUnmount(() => {
+  onScopeDispose(() => {
     if (frame) cancelAnimationFrame(frame)
   })
 
-  return { setTarget }
+  return { setTarget, cardVisible }
 }

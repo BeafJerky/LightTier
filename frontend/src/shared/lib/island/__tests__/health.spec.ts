@@ -38,6 +38,13 @@ describe('ExpectedStops', () => {
     expect(new ExpectedStops().consume('missing', 1_000)).toBe(false)
   })
 
+  it('取消预期停止后，真实掉线不再被抑制', () => {
+    const stops = new ExpectedStops()
+    stops.expect('a', 1_000)
+    stops.cancel('a')
+    expect(stops.consume('a', 1_500)).toBe(false)
+  })
+
   it('prune 清掉过期项', () => {
     const stops = new ExpectedStops()
     stops.expect('a', 1_000)
@@ -60,6 +67,18 @@ describe('collectQualitySamples', () => {
       { name: 'ok', sample: { avgLatencyMs: 20, lossRate: 0, peerCount: 3 } },
       { name: 'loss', sample: { avgLatencyMs: 40, lossRate: 1.5, peerCount: 2 } }
     ])
+  })
+
+  it('无 peer 的成功快照可报告恢复，不需要延迟字段', () => {
+    expect(collectQualitySamples([{ configFileName: 'alone', ok: true, peerCount: 0 }])).toEqual([
+      { name: 'alone', sample: { avgLatencyMs: 0, lossRate: 0, peerCount: 0 } }
+    ])
+  })
+
+  it('有 peer 但缺少延迟仍跳过，避免把采样缺失误判为恢复', () => {
+    expect(collectQualitySamples([{ configFileName: 'unknown', ok: true, peerCount: 1 }])).toEqual(
+      []
+    )
   })
 
   it('空快照返回空数组', () => {

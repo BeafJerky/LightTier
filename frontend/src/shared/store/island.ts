@@ -35,8 +35,10 @@ export const useIslandStore = defineStore(
     const latestManagerVersion = ref('')
     const lastUpdateCheckAt = ref(0)
     const updateChecking = ref(false)
+    const presentedManagerVersion = ref('')
 
     let baseline = new Set<string>()
+    let updateGeneration = 0
     const expectedStops = new ExpectedStops()
     const qualityEpisodes = new Map<string, QualityEpisode>()
 
@@ -84,12 +86,24 @@ export const useIslandStore = defineStore(
       return true
     }
 
+    function endQuality(sourceKey?: string): void {
+      if (!sourceKey?.startsWith('quality:')) return
+      qualityEpisodes.delete(sourceKey.slice('quality:'.length))
+    }
+
     function dismiss(id?: string): void {
+      const notice = id
+        ? queueState.value.current?.id === id
+          ? queueState.value.current
+          : queueState.value.queue.find((item) => item.id === id)
+        : queueState.value.current
+      endQuality(notice?.sourceKey)
       queueState.value = dismissNotice(queueState.value, id)
       if (!queueState.value.current) expanded.value = false
     }
 
     function dismissSource(sourceKey: string): void {
+      endQuality(sourceKey)
       queueState.value = dismissNoticeBySource(queueState.value, sourceKey)
       if (!queueState.value.current) expanded.value = false
     }
@@ -111,11 +125,15 @@ export const useIslandStore = defineStore(
       const diff = diffRunningNames(baseline, names)
       baseline = new Set(names)
 
-      for (const name of diff.started) qualityEpisodes.delete(name)
+      for (const name of diff.started) {
+        qualityEpisodes.delete(name)
+        dismissSource(`quality:${name}`)
+      }
 
       for (const name of diff.stopped) {
         const expected = expectedStops.consume(name)
         qualityEpisodes.delete(name)
+        dismissSource(`quality:${name}`)
         if (expected) continue
         notify({
           type: 'error',
@@ -133,6 +151,10 @@ export const useIslandStore = defineStore(
 
     function expectStop(name: string): void {
       expectedStops.expect(name)
+    }
+
+    function cancelExpectedStop(name: string): void {
+      expectedStops.cancel(name)
     }
 
     function reportQuality(name: string, sample: QualitySample): void {
@@ -165,8 +187,34 @@ export const useIslandStore = defineStore(
     }
 
     function invalidateManagerUpdate(): void {
+      updateGeneration += 1
+      updateChecking.value = false
       latestManagerVersion.value = ''
       lastUpdateCheckAt.value = 0
+    }
+
+    function beginManagerUpdateCheck(): number {
+      updateGeneration += 1
+      updateChecking.value = true
+      return updateGeneration
+    }
+
+    function isManagerUpdateCheckCurrent(generation: number): boolean {
+      return generation === updateGeneration
+    }
+
+    function finishManagerUpdateCheck(generation: number): boolean {
+      if (!isManagerUpdateCheckCurrent(generation)) return false
+      updateChecking.value = false
+      return true
+    }
+
+    function shouldPresentManagerUpdate(version: string): boolean {
+      return presentedManagerVersion.value !== version
+    }
+
+    function markManagerUpdatePresented(version: string): void {
+      presentedManagerVersion.value = version
     }
 
     function shouldCheckManagerUpdate(now = Date.now()): boolean {
@@ -174,13 +222,10 @@ export const useIslandStore = defineStore(
       return now - lastUpdateCheckAt.value >= UPDATE_CHECK_INTERVAL_MS
     }
 
-    function setUpdateChecking(value: boolean): void {
-      updateChecking.value = value
-    }
-
     function setEnabled(value: boolean): void {
       settings.value = { ...settings.value, enabled: value }
       if (!value) {
+        qualityEpisodes.clear()
         queueState.value = { current: null, queue: [] }
         expanded.value = false
       }
@@ -196,6 +241,7 @@ export const useIslandStore = defineStore(
         types: { ...settings.value.types, [type]: value }
       }
       queueState.value = pruneNotices(queueState.value, settings.value.types)
+      if (!value && type === 'quality') qualityEpisodes.clear()
       if (!queueState.value.current) expanded.value = false
     }
 
@@ -211,6 +257,13 @@ export const useIslandStore = defineStore(
       settings.value = { ...settings.value, face: value }
     }
 
+    function restoreSettings(next: IslandSettings): void {
+      settings.value = normalizeIslandSettings(next)
+      qualityEpisodes.clear()
+      queueState.value = { current: null, queue: [] }
+      expanded.value = false
+    }
+
     function resetSettings(): void {
       settings.value = createDefaultIslandSettings()
     }
@@ -223,6 +276,7 @@ export const useIslandStore = defineStore(
       latestManagerVersion,
       lastUpdateCheckAt,
       updateChecking,
+      presentedManagerVersion,
       current,
       queueLength,
       pendingCount,
@@ -236,18 +290,24 @@ export const useIslandStore = defineStore(
       markBaseline,
       applyRunningNames,
       expectStop,
+      cancelExpectedStop,
       reportQuality,
       forgetQuality,
       absorbManagerRelease,
       invalidateManagerUpdate,
+      beginManagerUpdateCheck,
+      isManagerUpdateCheckCurrent,
+      finishManagerUpdateCheck,
+      shouldPresentManagerUpdate,
+      markManagerUpdatePresented,
       shouldCheckManagerUpdate,
-      setUpdateChecking,
       setEnabled,
       setIdle,
       setTypeEnabled,
       setSilent,
       setMotion,
       setFace,
+      restoreSettings,
       resetSettings
     }
   },
@@ -255,7 +315,13 @@ export const useIslandStore = defineStore(
     persist: {
       key: 'lighttier.island',
       storage: localStorage,
-      omit: ['queueState', 'expanded', 'baselineReady', 'updateChecking'],
+      omit: [
+        'queueState',
+        'expanded',
+        'baselineReady',
+        'updateChecking',
+        'presentedManagerVersion'
+      ],
       afterHydrate: (ctx) => {
         const store = ctx.store as unknown as { settings: IslandSettings }
         store.settings = normalizeIslandSettings(store.settings)

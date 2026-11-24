@@ -403,7 +403,7 @@
     @open-settings="openIslandSettings"
     @open-overview="openIslandOverview"
   />
-  <FloatingMenu v-if="!isAndroidPlatform" @check-update="openCheckUpdate" />
+  <FloatingMenu v-if="!isAndroidPlatform" v-model="fabMenuOpen" @check-update="openCheckUpdate" />
 </template>
 
 <script setup lang="ts">
@@ -419,6 +419,7 @@ import { useLocaleStore } from '@/shared/store/locale'
 import { changeLocale } from '@/shared/i18n'
 import Icon from '@/shared/ui/Icon.vue'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { useIslandStore } from '@/shared/store/island'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import newLayoutRouterMap from '@/app/router/newLayout'
@@ -426,6 +427,7 @@ import { useCreamToast } from '@/shared/ui/useCreamToast'
 import ThemeDialog from '@/features/themes/components/ThemeDialog.vue'
 import SettingsDialog from '@/features/settings/components/SettingsDialog/index.vue'
 import FloatingMenu from '@/app/layout/FloatingMenu.vue'
+import { useOverlayExclusion } from './useOverlayExclusion'
 import IslandHost from '@/app/layout/island/IslandHost.vue'
 import { LtButton } from '@/shared/ui'
 import { restoreTheme } from '@/shared/composables/useExternalThemes'
@@ -434,7 +436,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getAppVersion } from '@/shared/platform/sysUtil'
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, toRef, onMounted, onBeforeUnmount } from 'vue'
 
 const { toasts } = useCreamToast()
 const { t } = useI18n()
@@ -451,6 +453,9 @@ const settingsDialogRef = ref<{ focusAboutAndCheck: () => void } | null>(null)
 
 const localeStore = useLocaleStore()
 const easyTierStore = useEasyTierStore()
+const islandStore = useIslandStore()
+const fabMenuOpen = ref(false)
+useOverlayExclusion(toRef(islandStore, 'expanded'), fabMenuOpen)
 
 const langMap = computed(() => localeStore.getLocaleMap)
 const currentLang = computed(() => localeStore.getCurrentLocale.lang)

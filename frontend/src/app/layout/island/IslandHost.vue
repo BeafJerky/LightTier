@@ -10,6 +10,7 @@ import type { IslandAction } from '@/shared/lib/island/types'
 import IslandFace from './IslandFace.vue'
 import IslandCard from './IslandCard.vue'
 import { useIslandMorph } from './useIslandMorph'
+import { usePausableTimer } from './usePausableTimer'
 
 const props = withDefaults(defineProps<{ suspended?: boolean }>(), { suspended: false })
 const emit = defineEmits<{
@@ -35,12 +36,12 @@ const rootRef = ref<HTMLElement | null>(null)
 const hitRef = ref<HTMLButtonElement | null>(null)
 const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 const peek = ref(false)
-const paused = ref(false)
+const hovered = ref(false)
+const focused = ref(false)
+const restoreFocusOnCollapse = ref(false)
 const systemReduced = ref(false)
 
 let mediaQuery: MediaQueryList | null = null
-let collapseTimer = 0
-let feedbackTimer = 0
 let removeOutsideListener: (() => void) | null = null
 
 const onResize = () => {
@@ -56,6 +57,9 @@ const reducedMotion = computed(
     island.settings.motion === 'reduced' ||
     (island.settings.motion === 'system' && systemReduced.value)
 )
+const paused = computed(() => hovered.value || focused.value || island.expanded)
+const collapseTimer = usePausableTimer(paused)
+const feedbackTimer = usePausableTimer(paused)
 
 const initialIdleWidth =
   island.settings.idle === 'dot'
@@ -64,7 +68,30 @@ const initialIdleWidth =
       ? IDLE_NARROW_WIDTH
       : IDLE_WIDTH
 
-const { setTarget } = useIslandMorph(rootRef, reducedMotion, initialIdleWidth, BAR_HEIGHT)
+const { setTarget, cardVisible } = useIslandMorph(
+  rootRef,
+  reducedMotion,
+  initialIdleWidth,
+  BAR_HEIGHT
+)
+
+const restoreFocusToHit = () => {
+  void nextTick(() => {
+    const active = document.activeElement
+    if (active && active !== document.body && !rootRef.value?.contains(active)) return
+    hitRef.value?.focus()
+  })
+}
+
+watch(
+  cardVisible,
+  (visible) => {
+    if (visible || !restoreFocusOnCollapse.value) return
+    restoreFocusOnCollapse.value = false
+    restoreFocusToHit()
+  },
+  { flush: 'post' }
+)
 
 const narrow = computed(() => viewportWidth.value < 560)
 const maxWidth = computed(() => Math.max(160, viewportWidth.value - 96))
@@ -91,6 +118,15 @@ const mode = computed<'idle' | 'compact' | 'card' | 'overview'>(() => {
 })
 
 const isCardMode = computed(() => mode.value === 'card' || mode.value === 'overview')
+const lastBarMode = ref<'idle' | 'compact'>('idle')
+const barMode = computed(() => {
+  if (mode.value === 'idle' || mode.value === 'compact') return mode.value
+  return lastBarMode.value
+})
+
+watch(mode, (value) => {
+  if (value === 'idle' || value === 'compact') lastBarMode.value = value
+})
 
 const runningCount = computed(() => easy.runningList.length)
 
@@ -102,7 +138,7 @@ const health = computed<'idle' | 'healthy' | 'attention' | 'error'>(() => {
 })
 
 const badge = computed(() => {
-  if (isCardMode.value || mode.value !== 'idle' || island.pendingCount === 0) return null
+  if (cardVisible.value || mode.value !== 'idle' || island.pendingCount === 0) return null
   return island.badgeType
 })
 
@@ -150,18 +186,16 @@ watch(
 )
 
 function clearCollapse() {
-  window.clearTimeout(collapseTimer)
-  collapseTimer = 0
+  collapseTimer.cancel()
 }
 
 function scheduleCollapse() {
   clearCollapse()
   const notice = island.current
-  if (!notice || paused.value || island.settings.silent || island.expanded) return
-  collapseTimer = window.setTimeout(() => {
-    collapseTimer = 0
+  if (!notice || island.settings.silent || island.expanded) return
+  collapseTimer.schedule(noticeDuration(notice.type), () => {
     if (!paused.value && !island.expanded) peek.value = false
-  }, noticeDuration(notice.type))
+  })
 }
 
 watch(
@@ -186,16 +220,14 @@ watch(
 watch(
   () => [island.current?.id, island.current?.updatedAt] as const,
   ([id]) => {
-    window.clearTimeout(feedbackTimer)
-    feedbackTimer = 0
+    feedbackTimer.cancel()
     const notice = island.current
     if (!id || !notice || notice.type !== 'feedback' || island.expanded) return
     // 反馈即使处于静默/点状模式也会自行退场，不把确认信息留成常驻角标
-    feedbackTimer = window.setTimeout(() => {
-      feedbackTimer = 0
+    feedbackTimer.schedule(noticeDuration('feedback'), () => {
       if (island.expanded || island.current?.id !== id) return
       island.dismiss(id)
-    }, noticeDuration('feedback'))
+    })
   },
   { immediate: true }
 )
@@ -227,23 +259,13 @@ watch(
   { immediate: true }
 )
 
-function pauseTimers() {
-  paused.value = true
-  clearCollapse()
-}
-
-function resumeTimers() {
-  paused.value = false
-  if (peek.value) scheduleCollapse()
-}
-
 function onFocusOut(event: FocusEvent) {
   const next = event.relatedTarget as Node | null
-  if (next && rootRef.value?.contains(next)) return
-  resumeTimers()
+  focused.value = Boolean(next && rootRef.value?.contains(next))
 }
 
 function open() {
+  restoreFocusOnCollapse.value = false
   island.setExpanded(true)
   peek.value = false
   clearCollapse()
@@ -266,9 +288,8 @@ function collapse() {
   clearCollapse()
   // 操作反馈是一次性确认：收起即清除；其余类型保留角标等待处理或忽略
   if (notice?.type === 'feedback') island.dismiss(notice.id)
-  if (hadFocus) {
-    void nextTick(() => hitRef.value?.focus())
-  }
+  restoreFocusOnCollapse.value = hadFocus
+  if (hadFocus && !cardVisible.value) restoreFocusToHit()
 }
 
 function dismissCurrent() {
@@ -334,8 +355,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   mediaQuery?.removeEventListener('change', onMotionChange)
   removeOutsideListener?.()
-  clearCollapse()
-  window.clearTimeout(feedbackTimer)
 })
 </script>
 
@@ -344,17 +363,17 @@ onBeforeUnmount(() => {
     v-if="island.settings.enabled && !props.suspended"
     ref="rootRef"
     class="island-root"
-    :class="[`is-${mode}`, `health-${health}`, { 'is-card-shape': isCardMode }]"
+    :class="[`is-${mode}`, `health-${health}`]"
     :style="shellStyle"
     :data-motion="reducedMotion ? 'reduced' : 'full'"
-    @pointerenter="pauseTimers"
-    @pointerleave="resumeTimers"
-    @focusin="pauseTimers"
+    @pointerenter="hovered = true"
+    @pointerleave="hovered = false"
+    @focusin="focused = true"
     @focusout="onFocusOut"
     @keydown.esc="onEsc"
   >
     <button
-      v-if="!isCardMode"
+      v-if="!cardVisible"
       ref="hitRef"
       type="button"
       class="island-hit"
@@ -363,9 +382,9 @@ onBeforeUnmount(() => {
       @click="activate"
     ></button>
 
-    <div class="island-bar" :class="{ 'is-visible': !isCardMode }" aria-hidden="true">
+    <div class="island-bar" aria-hidden="true">
       <IslandFace :mood="faceMood" :animate="faceAnimate" />
-      <template v-if="mode === 'idle'">
+      <template v-if="barMode === 'idle'">
         <span class="island-count">{{ runningCount }}</span>
         <span v-if="!narrow && island.settings.idle === 'count'" class="island-label">
           {{ t('newIsland.running') }}
@@ -378,7 +397,7 @@ onBeforeUnmount(() => {
     </div>
 
     <svg
-      v-if="mode === 'idle'"
+      v-if="mode === 'idle' && !cardVisible"
       class="island-chevron"
       width="12"
       height="12"
@@ -394,21 +413,19 @@ onBeforeUnmount(() => {
       {{ island.pendingCount }}
     </span>
 
-    <Transition name="island-card-fade">
-      <div v-if="isCardMode" class="island-card-wrap">
-        <IslandCard
-          :kind="mode === 'overview' ? 'overview' : 'notice'"
-          :notice="island.current"
-          :instances="easy.runningList"
-          :summary="easy.monitorSummaryMap"
-          :pending-count="island.pendingCount"
-          @close="collapse"
-          @dismiss="dismissAndAdvance"
-          @action="handleAction"
-          @overview="openOverview"
-        />
-      </div>
-    </Transition>
+    <div v-if="cardVisible" class="island-card-wrap">
+      <IslandCard
+        :kind="mode === 'overview' ? 'overview' : 'notice'"
+        :notice="island.current"
+        :instances="easy.runningList"
+        :summary="easy.monitorSummaryMap"
+        :pending-count="island.pendingCount"
+        @close="collapse"
+        @dismiss="dismissAndAdvance"
+        @action="handleAction"
+        @overview="openOverview"
+      />
+    </div>
 
     <div class="island-sr" role="status" aria-live="polite">{{ politeAnnouncement }}</div>
     <div class="island-sr" role="alert" aria-live="assertive">
@@ -439,13 +456,8 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(14px) saturate(1.1);
   contain: layout paint;
   transition:
-    border-radius 500ms cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 200ms ease,
     opacity 200ms ease;
-}
-
-.island-root.is-card-shape {
-  border-radius: var(--theme-radius-xl, 18px);
 }
 
 /* 内容层按目标尺寸固定排版，外壳只负责裁切，避免形变时文字逐帧重排 */
@@ -460,13 +472,8 @@ onBeforeUnmount(() => {
   pointer-events: none;
   opacity: 0;
   transform: translateY(-50%);
-  transition: opacity 120ms ease;
   gap: 9px;
   align-items: center;
-}
-
-.island-bar.is-visible {
-  opacity: 1;
 }
 
 .island-hit {
@@ -592,15 +599,6 @@ onBeforeUnmount(() => {
   left: 0;
   width: var(--island-card-width, 352px);
   height: var(--island-card-height, 196px);
-}
-
-.island-card-fade-enter-active,
-.island-card-fade-leave-active {
-  transition: opacity 160ms ease;
-}
-
-.island-card-fade-enter-from,
-.island-card-fade-leave-to {
   opacity: 0;
 }
 
@@ -622,20 +620,12 @@ onBeforeUnmount(() => {
 
 /* 减弱档尺寸走 160ms 补间，圆角与淡入淡出必须同速，避免形状先行突变 */
 .island-root[data-motion='reduced'] {
-  transition:
-    border-radius 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 160ms ease-out;
+  transition: opacity 160ms ease-out;
 }
 
 .island-root[data-motion='reduced'] .island-face,
 .island-root[data-motion='reduced'] .island-face-eye {
   animation: none;
-}
-
-.island-root[data-motion='reduced'] .island-bar,
-.island-root[data-motion='reduced'] .island-card-fade-enter-active,
-.island-root[data-motion='reduced'] .island-card-fade-leave-active {
-  transition-duration: 160ms;
 }
 
 @media (width <= 560px) {
@@ -650,14 +640,6 @@ onBeforeUnmount(() => {
 
   .island-chevron {
     right: 12px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .island-bar,
-  .island-card-fade-enter-active,
-  .island-card-fade-leave-active {
-    transition-duration: 160ms;
   }
 }
 </style>

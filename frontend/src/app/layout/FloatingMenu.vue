@@ -100,7 +100,7 @@
  * “打开配置目录”（交给系统文件管理器）；菜单展开时点击组件外部自动收起，
  * 组件卸载时移除全局点击监听。
  */
-import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { join, resourceDir } from '@tauri-apps/api/path'
@@ -112,13 +112,20 @@ import { LtButton } from '@/shared/ui'
 
 defineOptions({ name: 'FloatingMenu' })
 
-const emit = defineEmits<{ 'check-update': [] }>()
+const props = withDefaults(defineProps<{ modelValue?: boolean }>(), { modelValue: false })
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'check-update': []
+}>()
 
 const { t } = useI18n()
 const { show: toast } = useCreamToast()
 const easyTierStore = useEasyTierStore()
 
-const menuOpen = ref(false)
+const menuOpen = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit('update:modelValue', value)
+})
 const fabRoot = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLElement | null>(null)
 

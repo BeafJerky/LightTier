@@ -112,9 +112,12 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     // 每次重新检查都丢弃上一次的资产与下载状态，避免拿旧版本的包安装
     resetManagerUpdateState()
     const generation = managerUpdateGeneration
+    const islandGeneration = island.beginManagerUpdateCheck()
+    const isCurrent = () =>
+      generation === managerUpdateGeneration && island.isManagerUpdateCheckCurrent(islandGeneration)
     try {
       const data = await store.refreshManagerReleaseInfo()
-      if (generation !== managerUpdateGeneration) return
+      if (!isCurrent()) return
       // 空列表是接口异常，不能误报“已是最新”
       if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
       // 默认只认正式版：nightly 等预发布只在该开关关闭时参与比较
@@ -141,6 +144,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
           action: { kind: 'open-settings', tab: 'about' },
           quiet: true
         })
+        island.markManagerUpdatePresented(latestVersion)
         toast.info(t('newSettings.updateAvailable', { version: latestManagerVersion.value }))
         // 应用目录里已有同版本安装包时直接进入“立即安装”，不必重复下载
         void restoreManagerUpdatePackage(generation)
@@ -149,12 +153,13 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
         toast.success(t('newSettings.upToDate'))
       }
     } catch (e) {
-      if (generation !== managerUpdateGeneration) return
+      if (!isCurrent()) return
       console.error('检查更新失败:', e)
       latestManagerVersion.value = ''
       updateCheckError.value = true
       toast.error(t('newSettings.checkUpdateFail'))
     } finally {
+      island.finishManagerUpdateCheck(islandGeneration)
       if (generation === managerUpdateGeneration) checkingUpdate.value = false
     }
   }
