@@ -3,8 +3,16 @@
 //! 安装包位于 `<resource>/resource/update`，覆盖安装会与自身文件句柄冲突，
 //! 因此先复制到临时目录再启动；启动后延迟退出，避免 NSIS 写文件时旧 exe 仍被占用。
 
+#[cfg(windows)]
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
+#[cfg(windows)]
+use std::io::Read;
 use std::io::Write;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStringExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -108,6 +116,60 @@ fn verify_sha256(bytes: &[u8], expected_hex: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
+fn lock_staged_installer(staged: &Path, expected_bytes: &[u8]) -> Result<File, String> {
+    let mut options = OpenOptions::new();
+    options.read(true).share_mode(FILE_SHARE_READ);
+    let mut lock = options
+        .open(staged)
+        .map_err(|e| format!("锁定安装包暂存文件失败: {e}"))?;
+    // 路径在关写与加锁之间可能被替换；只认可锁句柄指向的已验证字节。
+    let mut actual = Vec::with_capacity(expected_bytes.len());
+    (&mut lock)
+        .take(expected_bytes.len() as u64 + 1)
+        .read_to_end(&mut actual)
+        .map_err(|e| format!("复读安装包暂存文件失败: {e}"))?;
+    if actual.as_slice() != expected_bytes {
+        return Err("安装包暂存文件在锁定前被替换，拒绝安装".into());
+    }
+    Ok(lock)
+}
+
+#[cfg(windows)]
+fn locked_file_final_path(file: &File) -> Result<PathBuf, String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetFinalPathNameByHandleW(
+            file: *mut std::os::raw::c_void,
+            buffer: *mut u16,
+            length: u32,
+            flags: u32,
+        ) -> u32;
+    }
+
+    let mut buffer = vec![0u16; 32_768];
+    // SAFETY: 句柄来自 File，缓冲区长度与实际分配一致，返回值按文档校验后再读取。
+    let length = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle(),
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            0,
+        )
+    };
+    if length == 0 {
+        return Err(format!(
+            "解析安装包暂存路径失败: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if length as usize >= buffer.len() {
+        return Err("安装包暂存路径过长，拒绝安装".into());
+    }
+    buffer.truncate(length as usize);
+    Ok(PathBuf::from(OsString::from_wide(&buffer)))
+}
+
 fn create_staged_installer(temp_dir: &Path, bytes: &[u8]) -> Result<(PathBuf, File), String> {
     for _ in 0..16 {
         let nonce = std::time::SystemTime::now()
@@ -121,7 +183,6 @@ fn create_staged_installer(temp_dir: &Path, bytes: &[u8]) -> Result<(PathBuf, Fi
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(windows)]
-        // 只共享读取：验证后到 spawn 返回前，其他进程无法写入、截断或删除暂存 exe。
         options.share_mode(FILE_SHARE_READ);
         let mut file = match options.open(&staged) {
             Ok(file) => file,
@@ -133,7 +194,30 @@ fn create_staged_installer(temp_dir: &Path, bytes: &[u8]) -> Result<(PathBuf, Fi
             let _ = std::fs::remove_file(&staged);
             return Err(format!("写入安装包暂存文件失败: {e}"));
         }
-        return Ok((staged, file));
+        #[cfg(windows)]
+        // CreateProcess 拒绝仍有可写句柄的 exe；关闭写入后改用只读共享锁，继续禁止写入和删除。
+        let lock = {
+            drop(file);
+            match lock_staged_installer(&staged, bytes) {
+                Ok(lock) => lock,
+                Err(e) => {
+                    let _ = std::fs::remove_file(&staged);
+                    return Err(e);
+                }
+            }
+        };
+        #[cfg(windows)]
+        let staged = match locked_file_final_path(&lock) {
+            Ok(path) => path,
+            Err(error) => {
+                drop(lock);
+                let _ = std::fs::remove_file(&staged);
+                return Err(error);
+            }
+        };
+        #[cfg(not(windows))]
+        let lock = file;
+        return Ok((staged, lock));
     }
     Err("无法创建唯一安装包暂存文件".into())
 }
@@ -339,6 +423,134 @@ mod tests {
     fn rejects_malformed_official_release_payload() {
         assert!(parse_official_installer_digest(&serde_json::json!({}), "setup.exe").is_err());
         assert!(parse_official_installer_digest(&serde_json::json!([]), "setup.exe").is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn staged_installer_lock_rejects_path_replaced_before_locking() {
+        let root = std::env::temp_dir().join(format!(
+            "lighttier-update-replace-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let staged = root.join("installer.exe");
+        let expected = b"MZ verified installer";
+        let replacement = b"MZ replaced installer";
+        std::fs::write(&staged, expected).unwrap();
+        let replacement_path = root.join("replacement.exe");
+        std::fs::write(&replacement_path, replacement).unwrap();
+        std::fs::remove_file(&staged).unwrap();
+        std::fs::rename(&replacement_path, &staged).unwrap();
+
+        let result = lock_staged_installer(&staged, expected);
+        let rejected = result.is_err();
+        drop(result);
+        let actual = std::fs::read(&staged).unwrap();
+        std::fs::remove_file(&staged).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+
+        assert!(rejected, "加锁前被替换的暂存安装器必须拒绝启动");
+        assert_eq!(actual, replacement);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn staged_installer_can_spawn_while_lock_handle_blocks_write_and_delete() {
+        let root = std::env::temp_dir().join(format!(
+            "lighttier-update-spawn-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let interpreter = std::env::var_os("COMSPEC")
+            .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\cmd.exe").into_os_string());
+        let bytes = std::fs::read(interpreter).unwrap();
+        let (staged, file) = create_staged_installer(&root, &bytes).unwrap();
+
+        let write_attempt = OpenOptions::new().write(true).truncate(true).open(&staged);
+        let write_allowed = write_attempt.is_ok();
+        drop(write_attempt);
+        let delete_allowed = std::fs::remove_file(&staged).is_ok();
+        let mut command = Command::new(&staged);
+        command.args(["/D", "/C", "exit 0"]);
+        command.creation_flags(0x0800_0000);
+        let spawn_result = command.status();
+
+        drop(file);
+        if !delete_allowed {
+            let _ = std::fs::remove_file(&staged);
+        }
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(!write_allowed, "暂存句柄持有期间不得允许写入或截断");
+        assert!(!delete_allowed, "暂存句柄持有期间不得允许删除");
+        let status = spawn_result.unwrap_or_else(|error| {
+            panic!("暂存安装器在锁句柄持有期间必须可以启动，实际失败: {error}")
+        });
+        assert!(status.success(), "暂存安装器必须以成功状态退出");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn staged_installer_uses_locked_file_path_after_parent_junction_rebind() {
+        let root = std::env::temp_dir().join(format!(
+            "lighttier-update-junction-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let target = root.join("target");
+        let alias = root.join("alias");
+        std::fs::create_dir_all(&target).unwrap();
+        let interpreter = std::env::var_os("COMSPEC")
+            .unwrap_or_else(|| PathBuf::from(r"C:\Windows\System32\cmd.exe").into_os_string());
+        let junction_status = Command::new(&interpreter)
+            .args(["/D", "/C", "mklink", "/J"])
+            .arg(&alias)
+            .arg(&target)
+            .status()
+            .unwrap();
+        assert!(junction_status.success(), "测试目录联接创建失败");
+
+        let bytes = std::fs::read(&interpreter).unwrap();
+        let (staged, file) = create_staged_installer(&alias, &bytes).unwrap();
+        let file_name = staged.file_name().unwrap().to_owned();
+        let renamed_target = root.join("renamed-target");
+        let parent_rename_allowed = std::fs::rename(&target, &renamed_target).is_ok();
+        if parent_rename_allowed {
+            std::fs::rename(&renamed_target, &target).unwrap();
+        }
+        std::fs::remove_dir(&alias).unwrap();
+        std::fs::create_dir(&alias).unwrap();
+        std::fs::write(alias.join(&file_name), b"MZ replacement installer").unwrap();
+
+        let mut command = Command::new(&staged);
+        command.args(["/D", "/C", "exit 0"]);
+        command.creation_flags(0x0800_0000);
+        let spawn_result = command.status();
+
+        drop(file);
+        let _ = std::fs::remove_dir_all(&alias);
+        let _ = std::fs::remove_dir_all(&target);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(
+            !parent_rename_allowed,
+            "暂存句柄持有期间不得重命名其实际父目录"
+        );
+        let status = spawn_result.unwrap_or_else(|error| {
+            panic!("父目录联接重绑定后仍必须启动锁句柄对应的安装器，实际失败: {error}")
+        });
+        assert!(status.success(), "锁句柄对应的安装器必须以成功状态退出");
     }
 
     #[cfg(windows)]
