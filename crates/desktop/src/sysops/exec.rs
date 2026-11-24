@@ -25,8 +25,44 @@ pub(crate) fn core_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 pub(crate) fn is_under(path: &Path, base: &Path) -> bool {
     let normalized = normalize_path(path);
-    let base = normalize_path(base);
-    normalized == base || normalized.starts_with(&format!("{base}/"))
+    if normalized.split('/').any(|segment| segment == "..") {
+        return false;
+    }
+    let Some(resolved_path) = resolve_existing_ancestor(path) else {
+        return false;
+    };
+    let Some(resolved_base) = resolve_existing_ancestor(base) else {
+        return false;
+    };
+    let resolved_path = normalize_path(&resolved_path);
+    let resolved_base = normalize_path(&resolved_base);
+    resolved_path == resolved_base || resolved_path.starts_with(&format!("{resolved_base}/"))
+}
+
+fn resolve_existing_ancestor(path: &Path) -> Option<PathBuf> {
+    if !path.is_absolute() {
+        return Some(path.to_path_buf());
+    }
+    let mut current = path.to_path_buf();
+    let mut missing = Vec::new();
+    loop {
+        match current.canonicalize() {
+            Ok(mut resolved) => {
+                for component in missing.into_iter().rev() {
+                    resolved.push(component);
+                }
+                return Some(resolved);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let name = current.file_name()?.to_os_string();
+                missing.push(name);
+                if !current.pop() {
+                    return None;
+                }
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 /// Windows 的 `resource_dir()` 可能返回 `\\?\D:\...` 长路径前缀，
@@ -48,7 +84,20 @@ pub(crate) fn is_core_path(path: &Path, core: &Path) -> bool {
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase())
         .unwrap_or_default();
-    stem == "easytier-core" && is_under(path, core)
+    if stem != "easytier-core" || !is_under(path, core) {
+        return false;
+    }
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    if normalize_path(parent) != normalize_path(core) {
+        return false;
+    }
+    match (path.canonicalize(), core.canonicalize()) {
+        (Ok(path), Ok(core)) => path.parent() == Some(core.as_path()),
+        (Err(error), _) if error.kind() == std::io::ErrorKind::NotFound => true,
+        _ => false,
+    }
 }
 
 pub(crate) fn run_program(program: &Path, args: &[String]) -> Result<CommandResult, String> {
@@ -63,12 +112,8 @@ pub(crate) fn run_program(program: &Path, args: &[String]) -> Result<CommandResu
         .map_err(|e| format!("执行 {} 失败: {e}", program.display()))?;
     Ok(CommandResult {
         code: output.status.code(),
-        stdout: super::decode_native(&output.stdout)
-            .trim_end()
-            .to_string(),
-        stderr: super::decode_native(&output.stderr)
-            .trim_end()
-            .to_string(),
+        stdout: super::decode_native(&output.stdout).trim_end().to_string(),
+        stderr: super::decode_native(&output.stderr).trim_end().to_string(),
     })
 }
 
@@ -108,11 +153,106 @@ pub fn verify_core_package(
     app: &tauri::AppHandle,
     version: &str,
     path: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let core = core_dir(app)?;
     let path = Path::new(path);
     if !is_under(path, &core) {
         return Err("内核包不在 resource/core 目录".into());
     }
-    crate::kernel_manifest::verify_package(version, path)
+    crate::kernel_manifest::verify_package(version, path)?;
+    crate::kernel_manifest::expected_package(version)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("内核 {version} 未提供校验清单"))
+}
+
+/// 解压后重新校验真实文件；句柄保留到两个文件都验完，防止校验期间被替换。
+pub fn verify_core_files(app: &tauri::AppHandle) -> Result<(), String> {
+    verify_core_files_in_dir(&core_dir(app)?)
+}
+
+fn verify_core_files_in_dir(core: &Path) -> Result<(), String> {
+    let _core = crate::kernel_manifest::open_verified_exe(
+        &core.join("easytier-core"),
+        crate::kernel_manifest::CoreFile::Core,
+        core,
+    )?;
+    let _cli = crate::kernel_manifest::open_verified_exe(
+        &core.join("easytier-cli"),
+        crate::kernel_manifest::CoreFile::Cli,
+        core,
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_direct_child() {
+        let base = Path::new("C:/res/resource/core");
+        assert!(is_under(
+            Path::new("C:/res/resource/core/easytier-core.exe"),
+            base
+        ));
+    }
+
+    #[test]
+    fn rejects_parent_dir_traversal() {
+        let base = Path::new("C:/res/resource/core");
+        assert!(!is_under(
+            Path::new("C:/res/resource/core/../../../Windows/System32/easytier-core.exe"),
+            base
+        ));
+        assert!(!is_under(
+            Path::new("C:/res/resource/core/sub/../../other/file.zip"),
+            base
+        ));
+    }
+
+    #[test]
+    fn core_executable_must_be_a_direct_child() {
+        let base = Path::new("C:/res/resource/core");
+        assert!(is_core_path(
+            Path::new("C:/res/resource/core/easytier-core.exe"),
+            base
+        ));
+        assert!(!is_core_path(
+            Path::new("C:/res/resource/core/sub/easytier-core.exe"),
+            base
+        ));
+    }
+
+    #[test]
+    fn installed_core_files_must_exist_in_core_directory() {
+        let core =
+            std::env::temp_dir().join(format!("lt-sysops-core-files-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&core);
+        std::fs::create_dir_all(&core).unwrap();
+
+        let error = verify_core_files_in_dir(&core).unwrap_err();
+        assert!(error.contains("easytier-core"), "{error}");
+
+        std::fs::write(core.join("easytier-core.exe"), b"MZ tampered").unwrap();
+        let error = verify_core_files_in_dir(&core).unwrap_err();
+        assert!(error.contains("校验失败"), "{error}");
+        let _ = std::fs::remove_dir_all(&core);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinked_directory_escape() {
+        use std::os::unix::fs::symlink;
+        let root = std::env::temp_dir().join(format!("lt-sysops-boundary-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let core = root.join("resource/core");
+        let outside = root.join("outside");
+        std::fs::create_dir_all(&core).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, core.join("link")).unwrap();
+
+        assert!(!is_under(&core.join("link/new.zip"), &core));
+        assert!(!is_core_path(&core.join("link/easytier-core"), &core));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

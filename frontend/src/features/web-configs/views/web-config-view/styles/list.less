@@ -52,6 +52,12 @@
   flex-shrink: 0;
 }
 
+.nwc-card:focus-visible,
+.nwc-row:focus-visible {
+  outline: 2px solid var(--theme-accent-primary);
+  outline-offset: 2px;
+}
+
 .nwc-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--theme-shadow-sm);
@@ -65,7 +71,9 @@
 }
 
 .nwc-card.active:hover {
-  box-shadow: inset 3px 0 0 var(--theme-accent-primary), var(--theme-shadow-sm);
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-sm);
 }
 
 .nwc-card-top {

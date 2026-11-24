@@ -10,6 +10,7 @@
 import { ref } from 'vue'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import type { FormWebData, ServiceInstallConfig } from '@/entities/config/formTypes'
+import { clearServiceInstallMethod, saveServiceInstallMethod } from './serviceInstallRecord'
 
 /** 服务安装参数：表单字段 + 当前内核版本（官方 CLI 分支据此适配参数格式） */
 type ServiceInstallOptions = ServiceInstallConfig & { coreVersion?: string | null }
@@ -225,11 +226,14 @@ const persistMockToml = (): void => {
 export const useMockData = () => {
   const isMock = !isTauriEnv()
 
-  const mockListTomlFiles = async (): Promise<string[]> => {
+  const mockListTomlFiles = async (_options?: { throwOnError?: boolean }): Promise<string[]> => {
     return [...mockTomlFiles]
   }
 
-  const mockReadFileContent = async (name: string): Promise<string> => {
+  const mockReadFileContent = async (
+    name: string,
+    _options?: { throwOnError?: boolean }
+  ): Promise<string> => {
     // 支持完整路径（config/xxx.toml）与纯名称（xxx.toml / xxx）
     const key = name.replace(/^.*[\\/]/, '').replace(/\.toml$/, '')
     return mockTomlContent[key] || `[network]\ninstance_name = "unknown"\nhostname = "unknown"\n`
@@ -356,17 +360,17 @@ export const useMockData = () => {
    */
   const getListTomlFiles = () => {
     if (isMock) return mockListTomlFiles
-    return async () => {
+    return async (options?: { throwOnError?: boolean }) => {
       const { listTomlFiles } = await import('@/shared/platform/fileUtil')
-      return listTomlFiles()
+      return listTomlFiles(undefined, options)
     }
   }
 
   const getReadFileContent = () => {
     if (isMock) return mockReadFileContent
-    return async (name: string) => {
+    return async (name: string, options?: { throwOnError?: boolean }) => {
       const { readFileContent } = await import('@/shared/platform/fileUtil')
-      return readFileContent(name) as Promise<string>
+      return readFileContent(name, options) as Promise<string>
     }
   }
 
@@ -444,28 +448,12 @@ export const useMockData = () => {
       const method = await detectServiceInstallMethod(serviceName)
       if (method === 'nssm') {
         const status = await checkServiceOnWindows(serviceName)
-        return serviceStatusDict(status as string | boolean)
+        return serviceStatusDict(status)
       } else if (method === 'official') {
         const status = await checkServiceWithOfficialCli(serviceName)
-        return serviceStatusDict(status as string | boolean)
+        return serviceStatusDict(status)
       }
-      return 'notInstalled'
-    }
-  }
-
-  // 记录服务安装方式：detectServiceInstallMethod 依据该记录选择启动/停止/卸载实现
-  const saveServiceInstallMethod = (configFileName: string, installMethod: 'nssm' | 'official') => {
-    try {
-      localStorage.setItem(`service-config:${configFileName}`, JSON.stringify({ installMethod }))
-    } catch {
-      /* localStorage 不可用时忽略（仅影响方式探测） */
-    }
-  }
-  const clearServiceInstallMethod = (configFileName: string) => {
-    try {
-      localStorage.removeItem(`service-config:${configFileName}`)
-    } catch {
-      /* ignore */
+      return method === 'unknown' ? 'unknown' : 'notInstalled'
     }
   }
 
@@ -493,13 +481,15 @@ export const useMockData = () => {
         const { installServiceOnWindows, buildCoreArgsWithLogConfig } =
           await import('@/shared/platform/shellUtil')
         const args = await buildCoreArgsWithLogConfig(configFileName + '.toml', configPath)
-        const installOptions =
-          options?.username && options?.password
-            ? { username: options.username, password: options.password }
-            : undefined
+        const installOptions = {
+          username: options?.username,
+          password: options?.password,
+          displayName: options?.displayName,
+          description: options?.description
+        }
         ok = await installServiceOnWindows(serviceName, args, installOptions)
       }
-      if (ok) saveServiceInstallMethod(configFileName, installMethod)
+      if (ok) saveServiceInstallMethod(serviceName, installMethod)
       return ok
     }
   }
@@ -515,11 +505,10 @@ export const useMockData = () => {
       } = await import('@/shared/platform/shellUtil')
       const serviceName = PREFIX_SVC + configFileName
       const method = await detectServiceInstallMethod(serviceName)
-      const ok =
-        method === 'official'
-          ? await uninstallServiceWithOfficialCli(serviceName)
-          : await uninstallServiceOnWindows(serviceName)
-      if (ok) clearServiceInstallMethod(configFileName)
+      let ok = false
+      if (method === 'official') ok = await uninstallServiceWithOfficialCli(serviceName)
+      else if (method === 'nssm') ok = await uninstallServiceOnWindows(serviceName)
+      if (ok) clearServiceInstallMethod(serviceName)
       return ok
     }
   }
@@ -553,8 +542,9 @@ export const useMockData = () => {
   }
 
   // 服务状态统一映射：Windows 服务状态码 / 布尔值 → 前端状态键
-  const serviceStatusDict = (status: string | boolean): string => {
-    if (!status) return 'notInstalled'
+  const serviceStatusDict = (status: string | boolean | null): string => {
+    if (status === false) return 'notInstalled'
+    if (status === null) return 'unknown'
     switch (status) {
       case 'SERVICE_STOPPED':
         return 'stopped'
@@ -612,7 +602,7 @@ export const useMockData = () => {
       // 否则上层会把“读取失败”当成空表并在下一次保存时整体覆盖（H-05）
       if (!(await fileExists(path))) return []
       const txt = (await readFileContent(path, { throwOnError: true })) as string
-      if (!txt.trim()) return []
+      if (!txt.trim()) throw new Error('invalid_web_config_list')
       const parsed = JSON.parse(txt)
       if (!Array.isArray(parsed)) {
         throw new Error('invalid_web_config_list')
@@ -657,12 +647,12 @@ export const useMockData = () => {
       const method = await detectServiceInstallMethod(serviceName)
       if (method === 'nssm') {
         const status = await checkServiceOnWindows(serviceName)
-        return serviceStatusDict(status as string | boolean)
+        return serviceStatusDict(status)
       } else if (method === 'official') {
         const status = await checkServiceWithOfficialCli(serviceName)
-        return serviceStatusDict(status as string | boolean)
+        return serviceStatusDict(status)
       }
-      return 'notInstalled'
+      return method === 'unknown' ? 'unknown' : 'notInstalled'
     }
   }
 
@@ -672,11 +662,16 @@ export const useMockData = () => {
       const { PREFIX_SVC_WEB } = await import('@/shared/constants/easytier')
       const { installServiceOnWindows } = await import('@/shared/platform/shellUtil')
       const serviceName = PREFIX_SVC_WEB + configFileName
-      const installOptions =
-        options?.username && options?.password
-          ? { username: options.username, password: options.password }
-          : undefined
-      return installServiceOnWindows(serviceName, args, installOptions) as Promise<boolean>
+      // Web 服务只有 NSSM 实现（官方 CLI 的 service install 面向 TOML 配置，不支持 --config-server）
+      const installOptions = {
+        username: options?.username,
+        password: options?.password,
+        displayName: options?.displayName,
+        description: options?.description
+      }
+      const ok = (await installServiceOnWindows(serviceName, args, installOptions)) as boolean
+      if (ok) saveServiceInstallMethod(serviceName, 'nssm')
+      return ok
     }
   }
 
@@ -685,7 +680,10 @@ export const useMockData = () => {
     return async (configFileName: string) => {
       const { PREFIX_SVC_WEB } = await import('@/shared/constants/easytier')
       const { uninstallServiceOnWindows } = await import('@/shared/platform/shellUtil')
-      return uninstallServiceOnWindows(PREFIX_SVC_WEB + configFileName) as Promise<boolean>
+      const serviceName = PREFIX_SVC_WEB + configFileName
+      const ok = await uninstallServiceOnWindows(serviceName)
+      if (ok) clearServiceInstallMethod(serviceName)
+      return ok as boolean
     }
   }
 

@@ -562,6 +562,8 @@ export default {
     installService: 'Install Service',
     selectWebConfig: 'Select a Web configuration to view details',
     configNotFound: 'The web configuration does not exist or has been deleted',
+    loadFailed:
+      'Could not read Web configurations. The previous list is unchanged; restore data.json.bak from the configuration folder if needed.',
     emptyTitle: 'No web configurations yet',
     emptyDesc: 'Add a config-server address to connect to the web console',
     androidDesktopOnly: 'Configuration management only; start Web configs from the desktop app',
@@ -574,7 +576,6 @@ export default {
       'Are you sure you want to delete configuration "{name}"? This action cannot be undone.',
     uninstallTitle: 'Uninstall Service',
     uninstallMsg: 'Are you sure you want to uninstall the Windows service for "{name}"?',
-    installMethod: 'Install Method',
     runUser: 'Run As User',
     runUserPlaceholder: 'Leave empty for LocalSystem',
     userPassword: 'User Password',
@@ -628,6 +629,7 @@ export default {
     userEmpty: 'Username cannot be empty',
     userInvalid: "Only letters, numbers, {'@'}, {'.'}, -, _ allowed",
     hostEmpty: 'Host cannot be empty',
+    hostInvalid: 'Host must be a domain or IP address (letters, digits, dots, hyphens)',
     portInvalid: 'Port must be an integer between 1 and 65535'
   },
   newSettings: {
@@ -785,6 +787,17 @@ export default {
     installConfirmServiceHint: 'Services must be started again after switching.',
     installSuccess: 'Kernel {version} installed successfully',
     installFail: 'Installation failed',
+    installRollbackFail:
+      'Kernel installation failed and the previous kernel could not be restored. The backup is at {path}. Check the logs for the resource/core-unrestored directory, restore it manually, and retry.',
+    coreBackupFailed: 'Failed to back up the current kernel; installation did not start',
+    coreBackupRollbackFailed:
+      'Failed to back up the current kernel and roll back the moved files. Installation was stopped. The backup is preserved at {path}; restore it manually before retrying.',
+    coreExtractFailed:
+      'Kernel extraction or writing failed; restoring the previous kernel was attempted',
+    coreVerifyFailed:
+      'Kernel file verification failed; restoring the previous kernel was attempted',
+    coreDetectFailed:
+      'Kernel version detection failed; restoring the previous kernel was attempted',
     downloadFailFull: 'Download failed',
     checkingCore: 'Checking…',
     unknown: 'Unknown',
@@ -919,6 +932,8 @@ export default {
     reloadNow: 'Reload now',
     noSelection: 'No items selected for restore',
     restoreFailed: 'Failed to restore backup',
+    restorePlanChanged:
+      'Local data has changed. A new restore plan was generated; review and confirm it before applying again.',
     planFailed: 'Failed to compare the backup with local data',
     statusSame: 'Same',
     statusNew: 'New',

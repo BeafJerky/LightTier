@@ -100,6 +100,9 @@ export const ensureExecutable = (paths: string[]): Promise<void> =>
 /** 打开本地路径或 http(s) 链接 */
 export const openPath = (path: string): Promise<void> => call('open_path', { path })
 
-/** 安装前校验内核包 SHA-256（只接受内置清单内的受支持版本） */
-export const verifyCorePackage = (version: string, path: string): Promise<void> =>
+/** 安装前校验内核包 SHA-256，返回后端内置清单中的可信摘要供解压时复核 */
+export const verifyCorePackage = (version: string, path: string): Promise<string> =>
   call('sysops_verify_core_package', { version, path })
+
+/** 解压后校验 resource/core 直属 core/cli 真实文件的 SHA-256 */
+export const verifyCoreFiles = (): Promise<void> => call('sysops_verify_core_files')

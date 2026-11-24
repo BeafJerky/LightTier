@@ -4,6 +4,7 @@ import {
   hashLockPassword,
   isLockPasswordHashed,
   migrateLockPassword,
+  sha256Bytes,
   sha256Hex,
   verifyLockPassword
 } from '@/shared/platform/lockUtil'
@@ -29,6 +30,18 @@ describe('sha256Hex（纯 JS 实现与 Node crypto 交叉验证）', () => {
     }
     for (const s of ['中文口令测试', 'p@ssw0rd!\u0000mix', '👍emoji🔒', 'x'.repeat(1000)]) {
       expect(sha256Hex(s)).toBe(nodeSha256Hex(s))
+    }
+  })
+})
+
+describe('sha256Bytes（纯 JS 实现与 Node crypto 交叉验证）', () => {
+  it('支持任意二进制，并与 Node crypto 完全一致', () => {
+    for (const bytes of [
+      new Uint8Array(),
+      new Uint8Array([0, 255, 128, 1]),
+      Uint8Array.from({ length: 130 }, (_, i) => i)
+    ]) {
+      expect(sha256Bytes(bytes)).toBe(createHash('sha256').update(bytes).digest('hex'))
     }
   })
 })

@@ -54,7 +54,11 @@
               'nw-row-on': getRunning(item),
               active: selectedConfig?.configFileName === item.configFileName
             }"
+            role="button"
+            tabindex="0"
             @click="selectConfig(item)"
+            @keydown.enter="selectConfig(item)"
+            @keydown.space.prevent="selectConfig(item)"
           >
             <span class="nw-row-icon" :class="{ on: getRunning(item) }">
               <svg
@@ -92,6 +96,7 @@
               size="lg"
               circle
               :aria-label="getRunning(item) ? t('newCommon.stop') : t('newCommon.run')"
+              @keydown.stop
               @click.stop="getRunning(item) ? stopAction(item) : startAction(item)"
             >
               <svg
@@ -138,7 +143,11 @@
             :key="item.configFileName"
             class="nw-card"
             :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+            role="button"
+            tabindex="0"
             @click="selectConfig(item)"
+            @keydown.enter="selectConfig(item)"
+            @keydown.space.prevent="selectConfig(item)"
           >
             <div class="nw-card-top">
               <div class="nw-card-status">
@@ -156,7 +165,7 @@
             </div>
             <div class="nw-card-name">{{ item.configFileName }}</div>
             <div class="nw-card-sub">{{ item.fileName }}</div>
-            <div class="nw-card-actions" @click.stop>
+            <div class="nw-card-actions" @click.stop @keydown.stop>
               <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
               <LtButton
                 :variant="getRunning(item) ? 'soft' : 'success'"

@@ -7,6 +7,7 @@ description = "LightTier 运行态与监控快照服务：单例扫描、缓存�
 
 [dependencies]
 log = "0.4.29"
+lighttier-core = { path = "../core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tauri = "2.10.3"

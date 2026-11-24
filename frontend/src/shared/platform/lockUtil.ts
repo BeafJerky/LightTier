@@ -23,11 +23,9 @@ const K = new Uint32Array([
 const rotr = (x: number, n: number) => ((x >>> n) | (x << (32 - n))) >>> 0
 
 /**
- * 计算字符串（UTF-8）的 SHA-256 十六进制摘要（纯 JS 实现）
- * 仅用于锁屏校验场景，输入为短口令，性能无虞
+ * 计算字节数组的 SHA-256 十六进制摘要（纯 JS 实现）
  */
-export const sha256Hex = (text: string): string => {
-  const bytes = new TextEncoder().encode(text)
+export const sha256Bytes = (bytes: Uint8Array): string => {
   const len = bytes.length
   // 填充：message + 0x80 + 0x00… 使总长 ≡ 56 (mod 64)，末 8 字节存比特长度
   const padded = ((len + 8) >> 6) * 64 + 64
@@ -91,6 +89,9 @@ export const sha256Hex = (text: string): string => {
 
   return Array.from(h, (x) => x.toString(16).padStart(8, '0')).join('')
 }
+
+/** 计算字符串（UTF-8）的 SHA-256 十六进制摘要 */
+export const sha256Hex = (text: string): string => sha256Bytes(new TextEncoder().encode(text))
 
 // 随机盐（16 字节 hex）；极端环境无 getRandomValues 时退回 Math.random（防窥屏场景可接受）
 const randomSaltHex = (): string => {

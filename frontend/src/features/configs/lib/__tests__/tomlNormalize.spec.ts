@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeToml } from '@/features/configs/lib/tomlNormalize'
+import {
+  normalizeToml,
+  serializeTomlPreservingUnchanged
+} from '@/features/configs/lib/tomlNormalize'
+
+describe('serializeTomlPreservingUnchanged', () => {
+  it('语义未变化时保留注释、空白和原始键顺序', () => {
+    const raw = '# 主节点\nroutes = ["10.0.0.0/8"]\n\nhostname = "node-a" # 名称\n'
+
+    expect(
+      serializeTomlPreservingUnchanged(raw, { hostname: 'node-a', routes: ['10.0.0.0/8'] })
+    ).toBe(raw)
+  })
+
+  it('剔除空值等真实变化仍生成新的 TOML', () => {
+    const result = serializeTomlPreservingUnchanged('hostname = "node-a"\npeer = []\n', {
+      hostname: 'node-a'
+    })
+
+    expect(result).not.toContain('peer')
+    expect(result).toContain('hostname = "node-a"')
+  })
+})
 
 describe('normalizeToml（默认数据合并 + 空值清理）', () => {
   it('剔除空值：空串、空数组、undefined、null 不落盘', () => {

@@ -44,6 +44,11 @@
   border-color: var(--theme-accent-primary);
 }
 
+.nm-card:focus-visible {
+  outline: 2px solid var(--theme-accent-primary);
+  outline-offset: 2px;
+}
+
 .nm-android .nm-card {
   padding-right: 42px;
 }
@@ -69,7 +74,9 @@
 }
 
 .nm-card.active:hover {
-  box-shadow: inset 3px 0 0 var(--theme-accent-primary), var(--theme-shadow-sm);
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-sm);
 }
 
 .nmc-top {

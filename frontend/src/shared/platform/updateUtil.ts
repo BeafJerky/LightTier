@@ -3,10 +3,14 @@
  * GitHub Releases 的 assets 命名由打包脚本决定，这里按平台挑出可安装的那一个。
  */
 
+import { sha256Bytes } from '@/shared/platform/lockUtil'
+
 /** 单个 Release 资产中下载所需的最小字段 */
 export interface ReleaseAsset {
   name?: string
   size?: number
+  /** GitHub Release API 提供的资产摘要，形如 `sha256:<hex>` */
+  digest?: string
   browser_download_url?: string
 }
 
@@ -17,6 +21,8 @@ export interface ManagerInstaller {
   url: string
   /** 官方标注的包体大小，缺失时为 null（下载进度转为不确定态） */
   size: number | null
+  /** 官方摘要（小写 hex）；缺失时不允许应用内安装 */
+  sha256: string
 }
 
 /** Windows 桌面安装包：Tauri NSIS 产物固定命名 LightTier_<ver>_x64-setup.exe */
@@ -34,6 +40,13 @@ const isInstallerAsset = (asset: ReleaseAsset, pattern: RegExp): asset is Usable
   /^https:\/\//.test(asset.browser_download_url) &&
   pattern.test(asset.name)
 
+/** 只接受 `sha256:<64 hex>`；其余摘要（如 md5）视为不可校验 */
+const parseSha256 = (digest: unknown): string | null => {
+  if (typeof digest !== 'string') return null
+  const match = /^sha256:([0-9a-f]{64})$/i.exec(digest.trim())
+  return match ? match[1].toLowerCase() : null
+}
+
 /**
  * 从 release assets 中挑出当前平台可用的安装包。
  * Windows 取 NSIS setup.exe，Android 取 arm64 APK；macOS/Linux 未发布资产，返回 null
@@ -50,11 +63,27 @@ export const pickManagerInstaller = (
         ? ANDROID_INSTALLER_RE
         : null
   if (!pattern || !Array.isArray(assets)) return null
-  const hit = assets.find((asset) => isInstallerAsset(asset, pattern))
-  if (!hit) return null
-  return {
-    fileName: hit.name,
-    url: hit.browser_download_url,
-    size: typeof hit.size === 'number' && hit.size > 0 ? hit.size : null
+  for (const asset of assets) {
+    if (!isInstallerAsset(asset, pattern)) continue
+    const sha256 = parseSha256(asset.digest)
+    if (!sha256) continue
+    return {
+      fileName: asset.name,
+      url: asset.browser_download_url,
+      size: typeof asset.size === 'number' && asset.size > 0 ? asset.size : null,
+      sha256
+    }
   }
+  return null
+}
+
+/** 安装包落盘或启动前必须重新校验完整字节，不能只信大小与文件头。 */
+export const verifyManagerPackage = (
+  bytes: Uint8Array | ArrayBuffer,
+  expectedSha256: string
+): boolean => {
+  const expected = expectedSha256.trim().toLowerCase()
+  if (!/^[0-9a-f]{64}$/.test(expected)) return false
+  const content = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+  return sha256Bytes(content) === expected
 }

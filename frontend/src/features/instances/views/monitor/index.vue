@@ -16,7 +16,11 @@
           :key="item.configFileName"
           class="nm-card"
           :class="{ active: selectedConfig?.configFileName === item.configFileName }"
+          role="button"
+          tabindex="0"
           @click="selectConfig(item)"
+          @keydown.enter="selectConfig(item)"
+          @keydown.space.prevent="selectConfig(item)"
         >
           <div class="nmc-top">
             <div class="nmc-status">

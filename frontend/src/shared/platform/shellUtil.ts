@@ -31,9 +31,21 @@ import * as toml from 'smol-toml'
 import { clearExitRoute } from './routeUtil'
 import { compareCoreVersion, parseCoreVersion } from '@/entities/kernel/kernelCompatUtil'
 import { t } from '@/shared/i18n/t'
+import { readServiceInstallMethod, type ServiceInstallMethod } from './serviceInstallRecord'
 
 // 启用 TargetKind::Webview 后，这个函数将把日志打印到浏览器控制台
 attachConsole()
+
+const SERVICE_CORE_ARG = '--lighttier-service-core'
+
+/** SCM 经 LightTier 隐藏入口校验并启动内核；重复调用不叠加入口参数。 */
+export function buildServiceAppParameters(args: string): string {
+  return /^--lighttier-service-core(?=[ \t]|$)/.test(args)
+    ? args
+    : args
+      ? `${SERVICE_CORE_ARG} ${args}`
+      : SERVICE_CORE_ARG
+}
 
 // 内核日志兜底目录：默认按配置隔离到 <resource>/logs/kernel/<scope>；
 // 无配置名时回退 logs 根目录；极端失败（非 Tauri 环境等）退回相对 './logs' 由内核按 CWD 解析
@@ -486,19 +498,44 @@ export const fetchRunningList = async (configNames: string[]): Promise<RunningIt
 /**
  * 查询 NSSM 服务状态。
  *
- * nssm status 成功时输出状态文本（SERVICE_RUNNING / SERVICE_STOPPED / …）；
- * 服务不存在（退出码 3 或 does not exist）与命令异常统一返回 false，
- * 调用方用 `!== false` 判断存在性、用状态文本轮询启停结果。
+ * 正常状态返回原始状态文本；仅明确的“服务不存在”返回 false；
+ * 命令异常、空输出、非状态文本等无法确认状态的情况返回 null。
  */
-export const checkServiceOnWindows = async (serviceName: string): Promise<string | false> => {
+export const checkServiceOnWindows = async (
+  serviceName: string
+): Promise<string | false | null> => {
   try {
     const output = await systemOps.runNssmCommand(['status', serviceName])
-    if (typeof output !== 'string') return false
-    const status = output.trim()
-    if (!status || status.includes('does not exist')) return false
+    const result = typeof output === 'string' ? null : (output as any)
+    const status =
+      typeof output === 'string'
+        ? output.trim()
+        : typeof result?.stdout === 'string'
+          ? result.stdout.trim()
+          : ''
+    const diagnostic = [status, result?.stderr, result?.msg]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+    if (result?.code === 3 || /does not exist|not installed|未安装|不存在/i.test(diagnostic)) {
+      return false
+    }
+    if (result && result.code !== undefined && result.code !== 0) return null
+    if (
+      ![
+        'SERVICE_STOPPED',
+        'SERVICE_START_PENDING',
+        'SERVICE_STOP_PENDING',
+        'SERVICE_RUNNING',
+        'SERVICE_CONTINUE_PENDING',
+        'SERVICE_PAUSE_PENDING',
+        'SERVICE_PAUSED'
+      ].includes(status.toUpperCase())
+    ) {
+      return null
+    }
     return status
   } catch {
-    return false
+    return null
   }
 }
 /*
@@ -513,6 +550,50 @@ nssm statuscode <servicename>   # 显示服务状态码
 nssm rotate <servicename>    # 旋转服务日志
 nssm processes <servicename> # 显示服务关联的进程
  */
+const SERVICE_SNAPSHOT_KEYS = [
+  'Application',
+  'AppParameters',
+  'AppDirectory',
+  'AppExit',
+  'Description',
+  'DisplayName',
+  'ObjectName',
+  'Start',
+  'Type'
+] as const
+
+type ServiceSnapshotKey = (typeof SERVICE_SNAPSHOT_KEYS)[number]
+type ServiceSnapshot = Record<ServiceSnapshotKey, string[]>
+
+/** 仅接受后端固定九键快照；权限不足、异常或结构不完整都必须在写入前失败。 */
+const readServiceSnapshot = async (serviceName: string): Promise<ServiceSnapshot> => {
+  const result = await systemOps.runNssmCommand(['snapshot', serviceName])
+  const output =
+    typeof result === 'string'
+      ? result
+      : result && typeof result === 'object' && result.code === 0
+        ? result.stdout
+        : null
+  if (output === null) throw new Error(`读取服务快照失败:${serviceName}`)
+  const parsed: unknown = JSON.parse(output)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`服务快照结构无效:${serviceName}`)
+  }
+  const record = parsed as Record<string, unknown>
+  if (
+    Object.keys(record).length !== SERVICE_SNAPSHOT_KEYS.length ||
+    !SERVICE_SNAPSHOT_KEYS.every(
+      (key) =>
+        Array.isArray(record[key]) &&
+        record[key].length > 0 &&
+        record[key].every((value) => typeof value === 'string')
+    )
+  ) {
+    throw new Error(`服务快照键或值不完整:${serviceName}`)
+  }
+  return record as ServiceSnapshot
+}
+
 /**
  * Windows 安装指定程序为系统服务
  * @param serviceName 服务名
@@ -520,95 +601,180 @@ nssm processes <servicename> # 显示服务关联的进程
  * @param options 可选参数
  * @param options.username 运行服务的用户名（可选，不提供则使用 LocalSystem）
  * @param options.password 运行服务的用户密码（当提供 username 时必需）
+ * @param options.displayName 服务显示名（缺省按服务名生成）
+ * @param options.description 服务描述（缺省按服务名生成）
  * @returns Promise<boolean> 是否成功
+ *
+ * 服务已存在时按“重装”处理：停止 → 更新 Application/AppParameters 等 → 重新启动，
+ * 否则旧参数会一直生效（切换内核或修改配置后服务仍跑旧命令行）。
  */
 export const installServiceOnWindows = async (
   serviceName: string,
   args: string,
-  options?: { username?: string; password?: string }
+  options?: {
+    username?: string
+    password?: string
+    displayName?: string
+    description?: string
+  }
 ): Promise<boolean> => {
-  return new Promise(async (resolve) => {
+  try {
     const appDirectory = await getResourceDir()
     // Windows 需要 .exe 扩展名；核心独立存放在 resource/core 下
     const corePath = await join(await resourceDir(), CORE_PATH, 'easytier-core.exe')
-    try {
-      // 服务是否存在
-      const exist: any = await checkServiceOnWindows(serviceName)
-      info(`服务是否存在:${JSON.stringify(exist)}`)
-      if (exist) {
-        resolve(true)
-        return
-      }
-      // 注意：参数按数组逐项传递，不需要手动添加引号
-      // 引号只在通过 shell 解析字符串时需要
-      const args1 = ['install', serviceName, `${corePath}`]
+    const displayName =
+      options?.displayName?.trim() || t('newConfig.svcDefaultName', { name: serviceName })
+    const description =
+      options?.description?.trim() || t('newConfig.svcDefaultDesc', { name: serviceName })
+    // 如果提供了用户名和密码，使用指定用户运行服务；否则使用 LocalSystem
+    const objectNameArgs =
+      options?.username && options?.password
+        ? ['set', serviceName, 'ObjectName', `.\\${options.username}`, options.password]
+        : ['set', serviceName, 'ObjectName', 'LocalSystem']
+    // 参数按数组逐项传递，不需要手动添加引号。
+    const setSteps = [
+      ['set', serviceName, 'AppParameters', buildServiceAppParameters(args)],
+      ['set', serviceName, 'AppDirectory', appDirectory],
+      ['set', serviceName, 'AppExit', 'Default', 'Restart'],
+      ['set', serviceName, 'Description', description],
+      ['set', serviceName, 'DisplayName', displayName],
+      objectNameArgs,
+      ['set', serviceName, 'Start', 'SERVICE_AUTO_START'],
+      ['set', serviceName, 'Type', 'SERVICE_WIN32_OWN_PROCESS']
+    ]
 
-      const args2 = ['set', serviceName, 'AppParameters', `${args}`]
-      const args3 = ['set', serviceName, 'AppDirectory', appDirectory]
-      const args4 = ['set', serviceName, 'AppExit', 'Default', 'Restart']
-      const args5 = [
-        'set',
-        serviceName,
-        'Description',
-        t('newConfig.svcDefaultDesc', { name: serviceName })
-      ]
-      const args6 = [
-        'set',
-        serviceName,
-        'DisplayName',
-        t('newConfig.svcDefaultName', { name: serviceName })
-      ]
-
-      // 如果提供了用户名和密码，使用指定用户运行服务；否则使用 LocalSystem
-      let args7: string[]
-      if (options?.username && options?.password) {
-        args7 = ['set', serviceName, 'ObjectName', `.\\${options.username}`, options.password]
-        info(`使用用户 ${options.username} 运行服务`)
-      } else {
-        args7 = ['set', serviceName, 'ObjectName', 'LocalSystem']
-        info('使用 LocalSystem 运行服务')
+    const applySteps = async (steps: string[][]): Promise<{ ok: boolean; attempted: string[] }> => {
+      const attempted: string[] = []
+      for (const step of steps) {
+        attempted.push(step[2])
+        try {
+          const stepRes = await systemOps.runNssmCommand(step)
+          if (isCommandSuccess(stepRes)) continue
+        } catch {
+          // 与失败退出码同样进入恢复；下面统一记录脱敏诊断。
+        }
+        error(`配置服务失败:${JSON.stringify(maskSecretArgs(NSSM_NAME, step))}`)
+        return { ok: false, attempted }
       }
+      return { ok: true, attempted }
+    }
 
-      const args8 = ['set', serviceName, 'Start', 'SERVICE_AUTO_START']
-      const args9 = ['set', serviceName, 'Type', 'SERVICE_WIN32_OWN_PROCESS']
-      const installRes: any = await systemOps.runNssmCommand(args1)
-      info(`安装服务结果:${JSON.stringify(installRes)}`)
-      if (
-        !installRes ||
-        !(
-          installRes.code! === 0 ||
-          installRes.code! === 1 ||
-          installRes.includes('success') ||
-          installRes.includes('installed')
-        )
-      ) {
-        resolve(false)
-        return
-      }
-      // 后续 nssm set 决定实际运行参数：任一步失败都算安装失败，避免留下半配置服务
-      for (const step of [args2, args3, args4, args5, args6, args7, args8, args9]) {
-        const stepRes = await systemOps.runNssmCommand(step)
-        if (!isCommandSuccess(stepRes)) {
-          error(`配置服务失败:${JSON.stringify(maskSecretArgs(NSSM_NAME, step))}`)
-          resolve(false)
-          return
+    const restoreSnapshot = async (
+      snapshot: ServiceSnapshot,
+      attempted: string[]
+    ): Promise<boolean> => {
+      const failures: string[] = []
+      for (const key of [...attempted].reverse()) {
+        try {
+          const result = await systemOps.runNssmCommand([
+            'restore',
+            serviceName,
+            key,
+            ...snapshot[key as ServiceSnapshotKey]
+          ])
+          if (!isCommandSuccess(result)) failures.push(key)
+        } catch {
+          failures.push(key)
         }
       }
-      resolve(true)
-    } catch (e: any) {
-      error(`安装服务失败:${e}`)
-      resolve(false)
+      try {
+        const current = await readServiceSnapshot(serviceName)
+        for (const key of attempted) {
+          const snapshotKey = key as ServiceSnapshotKey
+          if (JSON.stringify(current[snapshotKey]) !== JSON.stringify(snapshot[snapshotKey])) {
+            failures.push(`${key}(回读不一致)`)
+          }
+        }
+      } catch {
+        failures.push('快照回读失败')
+      }
+      if (failures.length === 0) return true
+
+      const stopped = await stopServiceOnWindows(serviceName)
+      warn(
+        `服务回滚失败，已尝试停止但需人工恢复 SCM 配置:${serviceName}；失败键:${[...new Set(failures)].join(',')}；停止:${stopped ? '成功' : '失败'}`
+      )
+      return false
     }
-  })
+
+    const removePartialInstall = async (): Promise<void> => {
+      try {
+        const result = await systemOps.runNssmCommand(['remove', serviceName, 'confirm'])
+        if (!isCommandSuccess(result)) {
+          warn(`新装服务删除失败，需人工检查:${serviceName}`)
+        }
+      } catch {
+        warn(`新装服务删除失败，需人工检查:${serviceName}`)
+      }
+    }
+
+    const exist = await checkServiceOnWindows(serviceName)
+    info(`服务是否存在:${JSON.stringify(exist)}`)
+    if (exist === null) {
+      error(`服务状态未知，中止安装:${serviceName}`)
+      return false
+    }
+    if (exist) {
+      // 先取全量快照再停机，ObjectName 等键无权限时不会中断旧服务。
+      const snapshot = await readServiceSnapshot(serviceName)
+      if (exist !== 'SERVICE_STOPPED' && !(await stopServiceOnWindows(serviceName))) {
+        error(`停止旧服务失败:${serviceName}`)
+        return false
+      }
+      // AppParameters 先写、Application 最后写，避免参数失败时旧 core 变成 GUI。
+      const configured = await applySteps([
+        ...setSteps,
+        ['set', serviceName, 'Application', corePath]
+      ])
+      if (!configured.ok) {
+        await restoreSnapshot(snapshot, configured.attempted)
+        return false
+      }
+      if (!(await startServiceOnWindows(serviceName))) {
+        await restoreSnapshot(snapshot, configured.attempted)
+        return false
+      }
+      return true
+    }
+
+    if (options?.username && options?.password) {
+      info(`使用用户 ${options.username} 运行服务`)
+    } else {
+      info('使用 LocalSystem 运行服务')
+    }
+
+    const installRes = await systemOps.runNssmCommand(['install', serviceName, corePath])
+    info(`安装服务结果:${JSON.stringify(installRes)}`)
+    if (
+      !isCommandSuccess(installRes) &&
+      !(typeof installRes === 'string' && /success|installed/i.test(installRes))
+    ) {
+      return false
+    }
+    const configured = await applySteps(setSteps)
+    if (!configured.ok) {
+      await removePartialInstall()
+      return false
+    }
+    return true
+  } catch (e: any) {
+    error(`安装服务失败:${e}`)
+    return false
+  }
 }
 /**
  * Windows 删除服务
  * @param serviceName 服务名
  * @returns Promise<boolean> 是否成功
  */
-export const uninstallServiceOnWindows = (serviceName: string) => {
+export const uninstallServiceOnWindows = (serviceName: string): Promise<boolean> => {
   return new Promise(async (resolve) => {
     try {
+      const status = await checkServiceOnWindows(serviceName)
+      if (status === null || status === false) {
+        resolve(false)
+        return
+      }
       const args = ['remove', serviceName, 'confirm']
       const res: any = await systemOps.runNssmCommand(args)
       info(`删除服务:${JSON.stringify(res)}`)
@@ -642,7 +808,7 @@ const waitServiceStatus = async (
  * @param serviceName 服务名
  * @returns Promise<boolean> 是否成功（以服务状态轮询结果为准，而非命令退出码）
  */
-export const startServiceOnWindows = (serviceName: string) => {
+export const startServiceOnWindows = (serviceName: string): Promise<boolean> => {
   return new Promise(async (resolve) => {
     try {
       // 服务已运行时 nssm start 可能返回非 0，状态轮询才是唯一成功依据
@@ -665,7 +831,7 @@ export const startServiceOnWindows = (serviceName: string) => {
  * @param serviceName 服务名
  * @returns Promise<boolean> 是否成功
  */
-export const stopServiceOnWindows = (serviceName: string) => {
+export const stopServiceOnWindows = (serviceName: string): Promise<boolean> => {
   return new Promise(async (resolve) => {
     try {
       const res = await systemOps.runNssmCommand(['stop', serviceName])
@@ -697,60 +863,52 @@ const runOfficialServiceCmd = (serviceName: string, action: string, extra: strin
   return systemOps.runCliCommand(args)
 }
 
-/** 解析 service status 输出：未安装 false / 运行中 SERVICE_RUNNING / 已停止 SERVICE_STOPPED */
-const parseOfficialServiceStatus = (res: any): string | boolean => {
-  if (typeof res === 'string') {
-    const lowerRes = res.toLowerCase()
+/** 解析 service status 输出：明确未安装 false / 已知状态文本 / 无法确认 null。 */
+const parseOfficialServiceStatus = (res: any): string | false | null => {
+  const output =
+    typeof res === 'string'
+      ? res
+      : res && typeof res === 'object'
+        ? [res.stdout, res.stderr, res.msg]
+            .filter((value): value is string => typeof value === 'string')
+            .join(' ')
+        : ''
+  const text = output.trim()
+  const lowerRes = text.toLowerCase()
 
-    // 首先检查未安装状态（优先级最高）
-    if (
-      lowerRes.includes('not installed') ||
-      lowerRes.includes('未安装') ||
-      lowerRes.includes('does not exist') ||
-      lowerRes.includes('不存在')
-    ) {
-      return false
-    }
-
-    // 检查运行状态
-    if (
-      lowerRes.includes('running') ||
-      lowerRes.includes('运行') ||
-      lowerRes.includes('started') ||
-      lowerRes.includes('active')
-    ) {
-      return 'SERVICE_RUNNING'
-    }
-
-    // 检查停止状态
-    if (
-      lowerRes.includes('stopped') ||
-      lowerRes.includes('停止') ||
-      lowerRes.includes('inactive')
-    ) {
-      return 'SERVICE_STOPPED'
-    }
+  if (!text) return null
+  if (
+    lowerRes.includes('not installed') ||
+    lowerRes.includes('未安装') ||
+    lowerRes.includes('does not exist') ||
+    lowerRes.includes('不存在')
+  ) {
+    return false
   }
 
-  // 检查返回对象的错误码
-  if (res && typeof res === 'object') {
-    // code 为 0 表示命令执行成功
-    if (res.code === 0) return 'SERVICE_STOPPED'
-    // 其他错误码表示服务不存在或命令失败
-    if (res.code !== undefined) return false
+  if (
+    lowerRes.includes('running') ||
+    lowerRes.includes('运行') ||
+    lowerRes.includes('started') ||
+    lowerRes.includes('active')
+  ) {
+    return 'SERVICE_RUNNING'
   }
 
-  // 默认未安装
-  return false
+  if (lowerRes.includes('stopped') || lowerRes.includes('停止') || lowerRes.includes('inactive')) {
+    return 'SERVICE_STOPPED'
+  }
+
+  return null
 }
 
 /** 查询指定名称（空串=CLI 默认名）的官方服务状态 */
-const checkOfficialServiceStatus = async (serviceName: string): Promise<string | boolean> => {
+const checkOfficialServiceStatus = async (serviceName: string): Promise<string | false | null> => {
   try {
     return parseOfficialServiceStatus(await runOfficialServiceCmd(serviceName, 'status'))
   } catch (e: any) {
     error(`官方CLI检查服务状态失败: ${e}`)
-    return false
+    return null
   }
 }
 
@@ -759,8 +917,13 @@ const checkOfficialServiceStatus = async (serviceName: string): Promise<string |
  * @returns 服务名（空串表示 CLI 默认名）；两者都不存在时为 null
  */
 const resolveOfficialServiceName = async (serviceName: string): Promise<string | null> => {
-  if ((await checkOfficialServiceStatus(serviceName)) !== false) return serviceName
-  if (serviceName && (await checkOfficialServiceStatus('')) !== false) return ''
+  const namedStatus = await checkOfficialServiceStatus(serviceName)
+  if (namedStatus === null) return null
+  if (typeof namedStatus === 'string') return serviceName
+  if (!serviceName) return null
+
+  const defaultStatus = await checkOfficialServiceStatus('')
+  if (typeof defaultStatus === 'string') return ''
   return null
 }
 
@@ -800,10 +963,8 @@ export const installServiceWithOfficialCli = async (
         args.push('--display-name', options.displayName)
       }
 
-      // 官方 CLI 的 --disable-autostart 为 Option<bool>，必须显式带 true/false
-      if (options.disableAutostart) {
-        args.push('--disable-autostart', 'true')
-      }
+      // 官方 CLI 安装阶段必须禁用自启动；安全转换成功后，仅未禁用自启时由前端恢复。
+      args.push('--disable-autostart', 'true')
 
       // 注意：参数按数组逐项传递，不需要手动添加引号
       args.push('--core-path', `${corePath}`)
@@ -846,6 +1007,19 @@ export const installServiceWithOfficialCli = async (
           res.includes('success') ||
           res.includes('安装成功'))
       ) {
+        if (options.disableAutostart !== true) {
+          const autostart = await systemOps.runNssmCommand([
+            'set',
+            serviceName,
+            'Start',
+            'SERVICE_AUTO_START'
+          ])
+          if (!isCommandSuccess(autostart)) {
+            error(`恢复服务开机自启失败:${serviceName}`)
+            resolve(false)
+            return
+          }
+        }
         resolve(true)
         return
       }
@@ -885,9 +1059,11 @@ export const uninstallServiceWithOfficialCli = async (serviceName: string) => {
  * 使用官方 easytier-cli 检查服务状态
  * 具名服务不存在时回退 CLI 默认名（兼容旧版 LightTier 安装的官方服务）
  */
-export const checkServiceWithOfficialCli = async (serviceName: string) => {
+export const checkServiceWithOfficialCli = async (
+  serviceName: string
+): Promise<string | false | null> => {
   const status = await checkOfficialServiceStatus(serviceName)
-  if (status !== false) return status
+  if (status === null || typeof status === 'string') return status
   if (serviceName) return await checkOfficialServiceStatus('')
   return false
 }
@@ -899,11 +1075,14 @@ export const startServiceWithOfficialCli = async (serviceName: string) => {
   try {
     const target = await resolveOfficialServiceName(serviceName)
     if (target === null) return false
+    // 旧默认服务没有具名 SCM 目标，不能安全迁移；绝不回退官方 CLI start。
+    if (!target) {
+      error('官方默认服务缺少具名 NSSM 目标，拒绝启动')
+      return false
+    }
 
-    await runOfficialServiceCmd(target, 'start')
-
-    // 按实际操作的服务名轮询复查，避免回退探测把另一服务状态误算进来
-    return await waitServiceStatus(() => checkOfficialServiceStatus(target), 'SERVICE_RUNNING')
+    // 官方服务启动也只走受信 NSSM：复核自身哈希/core，并先迁移 Application/AppParameters。
+    return await startServiceOnWindows(target)
   } catch (e: any) {
     error(`官方CLI启动服务失败: ${e}`)
     return false
@@ -928,29 +1107,17 @@ export const stopServiceWithOfficialCli = async (serviceName: string) => {
   }
 }
 
-type ServiceInstallMethod = 'nssm' | 'official'
-
-const SERVICE_CONFIG_PREFIX = 'service-config:'
-
-/** 读取该配置记录的服务安装方式；无记录、结构非法或未知取值都视为「无记录」 */
-const readRecordedInstallMethod = (configFileName: string): ServiceInstallMethod | null => {
-  const raw = localStorage.getItem(SERVICE_CONFIG_PREFIX + configFileName)
-  if (!raw) return null
-  try {
-    const method = (JSON.parse(raw) as { installMethod?: unknown }).installMethod
-    return method === 'nssm' || method === 'official' ? method : null
-  } catch {
-    return null
-  }
-}
-
-/** 指定安装方式下服务是否仍然存在 */
+/** 指定安装方式下服务是否仍然存在；null 表示状态未知。 */
 const isServiceInstalled = async (
   serviceName: string,
   method: ServiceInstallMethod
-): Promise<boolean> => {
-  if (method === 'nssm') return (await checkServiceOnWindows(serviceName)) !== false
-  return Boolean(await checkServiceWithOfficialCli(serviceName))
+): Promise<boolean | null> => {
+  if (method === 'nssm') {
+    const status = await checkServiceOnWindows(serviceName)
+    return status === null ? null : status !== false
+  }
+  const status = await checkServiceWithOfficialCli(serviceName)
+  return status === null ? null : status !== false
 }
 
 /**
@@ -961,17 +1128,21 @@ const isServiceInstalled = async (
  */
 export const detectServiceInstallMethod = async (
   serviceName: string
-): Promise<ServiceInstallMethod | 'none'> => {
-  const configFileName = serviceName.replace(/^easytier-/, '')
-  const recorded = readRecordedInstallMethod(configFileName)
+): Promise<ServiceInstallMethod | 'none' | 'unknown'> => {
+  const recorded = readServiceInstallMethod(serviceName)
   if (recorded) {
-    return (await isServiceInstalled(serviceName, recorded)) ? recorded : 'none'
+    const installed = await isServiceInstalled(serviceName, recorded)
+    if (installed === true) return recorded
+    return installed === null ? 'unknown' : 'none'
   }
 
+  let unknown = false
   for (const method of ['nssm', 'official'] as const) {
-    if (await isServiceInstalled(serviceName, method)) return method
+    const installed = await isServiceInstalled(serviceName, method)
+    if (installed === true) return method
+    if (installed === null) unknown = true
   }
-  return 'none'
+  return unknown ? 'unknown' : 'none'
 }
 
 /** 把 IPv4 的最后一段替换为 0（192.168.1.5 → 192.168.1.0），用于按网段探测路由 */

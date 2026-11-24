@@ -69,75 +69,42 @@
   >
     <div class="nwc-svc-form">
       <div class="nwc-svc-field">
-        <label class="wcf-label">{{ t('newWebConfig.installMethod') }}</label>
-        <div
-          class="nwc-svc-radio-group"
-          role="radiogroup"
-          :aria-label="t('newWebConfig.installMethod')"
-        >
-          <label class="wcf-radio" :class="{ active: svcForm.installMethod === 'nssm' }">
-            <input
-              class="lt-sr-only"
-              type="radio"
-              name="nwc-install-method"
-              value="nssm"
-              v-model="svcForm.installMethod"
-            />
-            <span class="wcf-radio-dot"></span><span>NSSM</span>
-          </label>
-          <label class="wcf-radio" :class="{ active: svcForm.installMethod === 'official' }">
-            <input
-              class="lt-sr-only"
-              type="radio"
-              name="nwc-install-method"
-              value="official"
-              v-model="svcForm.installMethod"
-            />
-            <span class="wcf-radio-dot"></span><span>{{ t('newWebConfig.officialCli') }}</span>
-          </label>
-        </div>
+        <label class="wcf-label">{{ t('newWebConfig.displayName') }}</label>
+        <LtInput
+          v-model="svcForm.displayName"
+          variant="outline"
+          :placeholder="t('newWebConfig.displayNamePlaceholder')"
+          :aria-label="t('newWebConfig.displayName')"
+        />
       </div>
-      <template v-if="svcForm.installMethod === 'nssm'">
-        <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.runUser') }}</label>
-          <LtInput
-            v-model="svcForm.username"
-            variant="outline"
-            :placeholder="t('newWebConfig.runUserPlaceholder')"
-            :aria-label="t('newWebConfig.runUser')"
-          />
-        </div>
-        <div class="nwc-svc-field" v-if="svcForm.username">
-          <label class="wcf-label">{{ t('newWebConfig.userPassword') }}</label>
-          <LtInput
-            v-model="svcForm.password"
-            type="password"
-            variant="outline"
-            :placeholder="t('newWebConfig.passwordPlaceholder')"
-            :aria-label="t('newWebConfig.userPassword')"
-          />
-        </div>
-      </template>
-      <template v-if="svcForm.installMethod === 'official'">
-        <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.displayName') }}</label>
-          <LtInput
-            v-model="svcForm.displayName"
-            variant="outline"
-            :placeholder="t('newWebConfig.displayNamePlaceholder')"
-            :aria-label="t('newWebConfig.displayName')"
-          />
-        </div>
-        <div class="nwc-svc-field">
-          <label class="wcf-label">{{ t('newWebConfig.svcDesc') }}</label>
-          <LtInput
-            v-model="svcForm.description"
-            variant="outline"
-            :placeholder="t('newWebConfig.svcDescPlaceholder')"
-            :aria-label="t('newWebConfig.svcDesc')"
-          />
-        </div>
-      </template>
+      <div class="nwc-svc-field">
+        <label class="wcf-label">{{ t('newWebConfig.svcDesc') }}</label>
+        <LtInput
+          v-model="svcForm.description"
+          variant="outline"
+          :placeholder="t('newWebConfig.svcDescPlaceholder')"
+          :aria-label="t('newWebConfig.svcDesc')"
+        />
+      </div>
+      <div class="nwc-svc-field">
+        <label class="wcf-label">{{ t('newWebConfig.runUser') }}</label>
+        <LtInput
+          v-model="svcForm.username"
+          variant="outline"
+          :placeholder="t('newWebConfig.runUserPlaceholder')"
+          :aria-label="t('newWebConfig.runUser')"
+        />
+      </div>
+      <div class="nwc-svc-field" v-if="svcForm.username">
+        <label class="wcf-label">{{ t('newWebConfig.userPassword') }}</label>
+        <LtInput
+          v-model="svcForm.password"
+          type="password"
+          variant="outline"
+          :placeholder="t('newWebConfig.passwordPlaceholder')"
+          :aria-label="t('newWebConfig.userPassword')"
+        />
+      </div>
     </div>
     <template #footer>
       <div class="wcf-footer">
@@ -196,7 +163,9 @@ import WebConfigForm from './WebConfigForm.vue'
 import WebConfigList from './WebConfigList.vue'
 import WebConfigDetail from './WebConfigDetail.vue'
 import { isWebChecking, isWebRunning, isWebServiceStatusPending } from '../../lib/webConfigStatus'
+import { formatWebConfigServerUrl, isValidWebHost } from '../../lib/webConfigHost'
 import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
+import { mutateWebConfigList } from '@/shared/platform/webConfigStorage'
 import type { FormWebData } from '@/entities/config/formTypes'
 
 defineOptions({ name: 'NewWebConfigView' })
@@ -215,8 +184,6 @@ const isAndroidDetailRoute = computed(
 )
 // Web 配置与服务操作统一从 useMockData 获取（Tauri 真实实现 / 浏览器 Mock 降级）
 const {
-  readWebConfigList,
-  writeWebConfigList,
   getRunningWebProcesses,
   runEasyTierCoreWeb,
   killProcess,
@@ -266,7 +233,6 @@ const svcDialogVisible = ref(false)
 const svcInstalling = ref(false)
 const serviceStatusMap = ref<Map<string, string>>(new Map())
 const svcForm = ref({
-  installMethod: 'nssm' as 'nssm' | 'official',
   username: '',
   password: '',
   displayName: '',
@@ -345,6 +311,7 @@ const refreshWebRuntimeState = async (forceServiceStatus = false) => {
   try {
     runList = await getRunningWebProcesses()
   } catch (e) {
+    if (seq !== runtimeRefreshSeq) return
     console.warn('[RunningList] Web 进程扫描失败，保留上一份状态:', e)
     for (const p of previous) {
       p.item.status = p.status
@@ -352,13 +319,14 @@ const refreshWebRuntimeState = async (forceServiceStatus = false) => {
     }
     return
   }
+  if (seq !== runtimeRefreshSeq) return
   for (const item of list) {
     let matched = false
     if (runList?.length) {
       for (const r of runList) {
         const cmd = r.commandLine || ''
         const pid = r.pid
-        const expectedUrl = `${item.protocol}://${item.host}:${item.port}/${item.userName}`
+        const expectedUrl = formatWebConfigServerUrl(item)
         // 精确比较 --config-server 的参数值（另保留 pid 记录匹配）
         if (extractConfigServerUrl(cmd) === expectedUrl || (item.pid && item.pid === pid)) {
           item.status = 'running'
@@ -401,13 +369,17 @@ const refreshWebList = async (options: { forceServiceStatus?: boolean } = {}) =>
   loading.value = true
   try {
     await easyTierStore.loadWebConfigFiles()
+    if (easyTierStore.webConfigListError) {
+      toast(t('newWebConfig.loadFailed'), 'error', 6000)
+      return
+    }
     await refreshWebRuntimeState(options.forceServiceStatus)
-  } catch {
-    /* non-Tauri */
   } finally {
     loading.value = false
   }
 }
+
+const notifyWebListLoadFailed = () => toast(t('newWebConfig.loadFailed'), 'error', 6000)
 
 // 选中配置卡片：Android 进入详情路由（由 syncDetailFromRoute 统一加载），宽屏同时展示右侧详情
 const selectConfig = (item: FormWebData) => {
@@ -436,6 +408,10 @@ const closeWebDetail = () => {
 const syncDetailFromRoute = async () => {
   if (!isAndroidPlatform) return
   if (!easyTierStore.webConfigListLoaded) await easyTierStore.loadWebConfigFiles()
+  if (easyTierStore.webConfigListError) {
+    notifyWebListLoadFailed()
+    return
+  }
   await refreshWebRuntimeState()
   if (!isAndroidDetailRoute.value) {
     selectedConfig.value = null
@@ -479,6 +455,7 @@ watch(
 )
 
 // ========== CRUD ==========
+
 // 打开新增弹窗（表单组件受控：mode 决定标题与初始值）
 const openAdd = () => {
   formMode.value = 'add'
@@ -496,24 +473,23 @@ const openEdit = () => {
 
 // 表单保存回调：读最新列表 → 新增/替换 → 整体写回（避免并发覆盖）；写盘成功后才关闭弹窗
 const handleFormSaved = async (data: FormWebData, done: (ok: boolean) => void) => {
+  const mode = formMode.value
   try {
-    const list = await readWebConfigList()
-    const idx = list.findIndex((c) => c.configFileName === data.configFileName)
-    if (formMode.value === 'add') {
-      list.push(data)
-    } else {
-      if (idx !== -1) list[idx] = data
-      else list.push(data)
-    }
-    await writeWebConfigList(list)
-    toast(
-      formMode.value === 'add' ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'),
-      'success'
-    )
+    await mutateWebConfigList((list) => {
+      const idx = list.findIndex((c) => c.configFileName === data.configFileName)
+      if (mode === 'add') {
+        list.push(data)
+      } else if (idx !== -1) {
+        list[idx] = data
+      } else {
+        list.push(data)
+      }
+    })
+    toast(mode === 'add' ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
     await refreshWebList()
     done(true)
   } catch {
-    toast(formMode.value === 'add' ? t('newCommon.addFail') : t('newCommon.saveFail'), 'error')
+    toast(mode === 'add' ? t('newCommon.addFail') : t('newCommon.saveFail'), 'error')
     done(false)
   }
 }
@@ -543,11 +519,12 @@ const deleteConfig = async () => {
     t('newWebConfig.deleteMsg', { name: selectedConfig.value.configFileName })
   )
   if (!ok) return
+  const name = selectedConfig.value.configFileName
   try {
-    const list = await readWebConfigList()
-    const idx = list.findIndex((c) => c.configFileName === selectedConfig.value!.configFileName)
-    if (idx !== -1) list.splice(idx, 1)
-    await writeWebConfigList(list)
+    await mutateWebConfigList((list) => {
+      const idx = list.findIndex((c) => c.configFileName === name)
+      if (idx !== -1) list.splice(idx, 1)
+    })
     toast(t('newCommon.deleteSuccess'), 'success')
     selectedConfig.value = null
     if (isAndroidDetailRoute.value) router.replace({ name: 'NewWebConfigView' })
@@ -561,25 +538,24 @@ const deleteConfig = async () => {
 // 启动 Web 服务进程：以 `--config-server <url>` 拉起内核，并把新 pid 写回配置
 const startWeb = async (item: FormWebData) => {
   if (isStarting.value) return
+  const configFileName = item.configFileName
   isStarting.value = true
   let startedPid: number | null = null
   try {
-    // 先确认配置存储可读：读取失败时不启动进程，避免进程已起而 pid 无法落盘
-    const list = await readWebConfigList()
-    const url = `${item.protocol}://${item.host}:${item.port}/${item.userName}`
-    const pid = await runEasyTierCoreWeb(url)
-    if (!Number.isInteger(pid) || pid <= 0) {
-      throw new Error(t('newCommon.coreStartInvalidPid'))
-    }
-    startedPid = pid
-    // 更新 pid
-    const found = list.find((c) => c.configFileName === item.configFileName)
-    if (found) {
-      found.pid = pid
-      found.status = 'running'
-    }
-    await writeWebConfigList(list)
-    // pid 已持久化，后续刷新失败不应回滚已成功启动的进程
+    // 读取、拉起进程与 pid 落盘放在同一串行区：避免其他保存用旧快照覆盖 pid
+    await mutateWebConfigList(async (list) => {
+      const latest = list.find((config) => config.configFileName === configFileName)
+      if (!latest) throw new Error(t('newWebConfig.configNotFound'))
+      if (!isValidWebHost(latest.host)) throw new Error(t('newWebForm.hostInvalid'))
+      const url = formatWebConfigServerUrl(latest)
+      const pid = await runEasyTierCoreWeb(url)
+      if (!Number.isInteger(pid) || pid <= 0) {
+        throw new Error(t('newCommon.coreStartInvalidPid'))
+      }
+      startedPid = pid
+      latest.pid = pid
+      latest.status = 'running'
+    })
     startedPid = null
     toast(t('newCommon.startSuccess'), 'success')
     await refreshWebList()
@@ -596,8 +572,24 @@ const startWeb = async (item: FormWebData) => {
   }
 }
 
-// 停止 Web 服务进程（无 pid 时提示无法停止——服务托管场景由服务管理处理）
+// 停止 Web 服务：优先按 Windows 服务停（服务进程由 SCM 管理，kill 会被自动拉起）；
+// 普通进程则按 pid 结束
 const stopWeb = async (item: FormWebData) => {
+  const svcStatus = serviceStatusMap.value.get(item.configFileName)
+  if (svcStatus === 'running') {
+    try {
+      const ok = await stopWebService(item.configFileName)
+      toast(
+        ok ? t('newCommon.stoppedSuccess') : t('newCommon.stoppedFail'),
+        ok ? 'success' : 'error'
+      )
+    } catch {
+      toast(t('newCommon.stoppedFail'), 'error')
+    } finally {
+      await refreshWebList({ forceServiceStatus: true })
+    }
+    return
+  }
   if (!item.pid) {
     toast(t('newWebConfig.stopFailNoPid'), 'error')
     return
@@ -644,7 +636,6 @@ const openConsoleUrl = async () => {
 const openServiceDialog = () => {
   if (!selectedConfig.value) return
   svcForm.value = {
-    installMethod: 'nssm',
     username: '',
     password: '',
     displayName: t('newWebConfig.svcDefaultWebName', { name: selectedConfig.value.configFileName }),
@@ -653,18 +644,24 @@ const openServiceDialog = () => {
   svcDialogVisible.value = true
 }
 
-// 安装服务：拼装 `--config-server` 启动参数（含可选的运行账户），安装后刷新状态
+// 安装服务：拼装 `--config-server` 启动参数（含自定义显示名/描述与可选运行账户），安装后刷新状态
 const handleServiceInstalled = async () => {
   if (!selectedConfig.value) return
+  const cfg = selectedConfig.value
+  // host 会被拼进内核启动参数；旧配置可能绕过表单校验，安装前再拦截一次
+  if (!isValidWebHost(cfg.host)) {
+    toast(t('newWebForm.hostInvalid'), 'error')
+    return
+  }
   svcInstalling.value = true
   try {
-    const cfg = selectedConfig.value
-    const args = `--config-server ${cfg.protocol}://${cfg.host}:${cfg.port}/${cfg.userName}`
-    const opts =
-      svcForm.value.username && svcForm.value.password
-        ? { username: svcForm.value.username, password: svcForm.value.password }
-        : undefined
-    const ok = await installWebService(cfg.configFileName, args, opts)
+    const args = `--config-server ${formatWebConfigServerUrl(cfg)}`
+    const ok = await installWebService(cfg.configFileName, args, {
+      username: svcForm.value.username || undefined,
+      password: svcForm.value.password || undefined,
+      displayName: svcForm.value.displayName.trim() || undefined,
+      description: svcForm.value.description.trim() || undefined
+    })
     toast(
       ok ? t('newWebConfig.svcInstallSuccess') : t('newWebConfig.svcInstallFail'),
       ok ? 'success' : 'error'

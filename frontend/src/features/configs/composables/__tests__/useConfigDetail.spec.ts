@@ -6,16 +6,16 @@ import { useConfigDetail } from '@/features/configs/composables/useConfigDetail'
 
 const createDetail = (opts: {
   isTauri: boolean
-  read?: (path: string) => Promise<string | ArrayBuffer>
+  read?: (path: string, options?: { throwOnError?: boolean }) => Promise<string | ArrayBuffer>
 }) => {
-  const writeFileContent = vi.fn(async () => {})
+  const writeFileWithBackup = vi.fn(async () => {})
   const detail = useConfigDetail({
     readFileContent: opts.read ?? (async () => ''),
-    writeFileContent,
+    writeFileWithBackup,
     isTauri: opts.isTauri,
     t: (key: string) => key
   })
-  return { detail, writeFileContent }
+  return { detail, writeFileWithBackup }
 }
 
 describe('useConfigDetail', () => {
@@ -42,6 +42,15 @@ describe('useConfigDetail', () => {
     expect(empty.detail.detailError.value).toEqual({ kind: 'empty', message: '' })
   })
 
+  it('读取配置时强制抛出 I/O 错误，避免调用方退回默认吞错实现', async () => {
+    const read = vi.fn(async () => 'hostname = "node-a"')
+    const { detail } = createDetail({ isTauri: true, read })
+
+    await detail.loadConfigDetail({ configFileName: 'A', fileName: 'a.toml' })
+
+    expect(read).toHaveBeenCalledWith('config/a.toml', { throwOnError: true })
+  })
+
   it('TOML 解析失败记录 parse 错误与原始信息', async () => {
     const { detail } = createDetail({ isTauri: true, read: async () => 'hostname = [' })
     await detail.loadConfigDetail({ configFileName: 'A', fileName: 'a.toml' })
@@ -61,6 +70,22 @@ describe('useConfigDetail', () => {
     expect(detail.selectedDetail.value?.hostname).toBe('node-a')
     expect(detail.routeFilter.value).toBe('')
     expect(detail.filteredRoutes.value).toEqual(['10.0.0.0/8'])
+  })
+
+  it('旧标记迁移通过带备份的安全写入，备份失败不覆盖原文件', async () => {
+    const { detail, writeFileWithBackup } = createDetail({
+      isTauri: true,
+      read: async () => '# 保留原文件\nconfig_exit_nodes_route = true\nhostname = "node-a"\n'
+    })
+    writeFileWithBackup.mockRejectedValueOnce(new Error('backup failed'))
+
+    await detail.loadConfigDetail({ configFileName: 'A', fileName: 'a.toml' })
+
+    expect(detail.detailState.value).toBe('ready')
+    expect(writeFileWithBackup).toHaveBeenCalledWith(
+      'config/a.toml',
+      expect.stringContaining('[lighttier]')
+    )
   })
 
   it('快速切换配置时丢弃先发出的过期请求', async () => {

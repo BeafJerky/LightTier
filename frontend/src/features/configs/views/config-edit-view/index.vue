@@ -29,6 +29,7 @@ import { useMockData } from '@/shared/platform/mockData'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { CONFIG_PATH } from '@/shared/constants/easytier'
 import { getErrorMessage } from '@/shared/lib/error'
+import { ConfigBackupError, saveConfigToml } from './tomlSave'
 
 defineOptions({ name: 'NewConfigEditView' })
 
@@ -68,7 +69,9 @@ onMounted(async () => {
       return
     }
     try {
-      tomlContent.value = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
+      tomlContent.value = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
+        throwOnError: true
+      })) as string
       configName.value = name
     } catch {
       toast(t('newConfig.readFail'), 'error')
@@ -96,18 +99,8 @@ onBeforeRouteLeave(async () => {
 // 覆盖前先备份；写盘成功才让 EditDialog 关闭，失败时保留内容
 const handleSaved = async (name: string, content: string, done: (ok: boolean) => void) => {
   const isAdd = dialogMode === 'add'
-  let backupFailed = false
   try {
-    if (!isAdd) {
-      try {
-        const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`)) as string
-        await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
-      } catch {
-        backupFailed = true
-        throw new Error('backup failed')
-      }
-    }
-    await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
+    await saveConfigToml(name, content, dialogMode, { readFileContent, writeFileContent })
     // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
     await easyTierStore.reloadConfigFiles()
     if (easyTierStore.configList.some((c) => c.configFileName === name)) {
@@ -119,6 +112,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
     }
     done(true)
   } catch (e) {
+    const backupFailed = !isAdd && e instanceof ConfigBackupError
     console.error('[config] save failed:', `${CONFIG_PATH}/${name}.toml`, e)
     const detail = getErrorMessage(e)
     if (!isAdd && backupFailed) {

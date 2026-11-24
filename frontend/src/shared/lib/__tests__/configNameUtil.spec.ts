@@ -2,7 +2,7 @@
  * configNameUtil 单测：配置名允许中文，拦截路径分隔符、非法文件名字符与系统保留名
  */
 import { describe, it, expect } from 'vitest'
-import { isValidConfigName } from '@/shared/lib/configNameUtil'
+import { isConfigNameTaken, isValidConfigName } from '@/shared/lib/configNameUtil'
 
 describe('configNameUtil', () => {
   it('允许中文、字母、数字及空格 . _ -', () => {
@@ -36,5 +36,28 @@ describe('configNameUtil', () => {
     expect(isValidConfigName('LPT9.backup')).toBe(false)
     expect(isValidConfigName('console')).toBe(true)
     expect(isValidConfigName('COM10')).toBe(true)
+  })
+})
+
+describe('isConfigNameTaken', () => {
+  const existing = ['Home', '办公室', 'node_2']
+
+  it('默认精确比较（大小写敏感文件系统）', () => {
+    expect(isConfigNameTaken('Home', existing)).toBe(true)
+    expect(isConfigNameTaken('  Home  ', existing)).toBe(true)
+    expect(isConfigNameTaken('home', existing)).toBe(false)
+  })
+
+  it('大小写不敏感时拦截仅大小写不同的重名（Windows）', () => {
+    expect(isConfigNameTaken('home', existing, true)).toBe(true)
+    expect(isConfigNameTaken('HOME', existing, true)).toBe(true)
+    expect(isConfigNameTaken('Node_2', existing, true)).toBe(true)
+    expect(isConfigNameTaken('other', existing, true)).toBe(false)
+  })
+
+  it('现有名称为空或未提供时不报重名', () => {
+    expect(isConfigNameTaken('home', [])).toBe(false)
+    expect(isConfigNameTaken('home', undefined)).toBe(false)
+    expect(isConfigNameTaken('home', undefined, true)).toBe(false)
   })
 })

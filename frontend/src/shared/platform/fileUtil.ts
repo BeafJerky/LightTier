@@ -15,7 +15,7 @@ import {
   RESOURCE_PATH,
   USER_AGENT
 } from '@/shared/constants/easytier'
-import { dirname, extname, join, resourceDir } from '@tauri-apps/api/path'
+import { dirname, join, resourceDir } from '@tauri-apps/api/path'
 import {
   BaseDirectory,
   exists,
@@ -34,6 +34,7 @@ import { unzipSync } from 'fflate'
 import { isAndroid } from './platformUtil'
 import * as systemOps from './systemOps'
 import { getPlatform } from './sysUtil'
+import { verifyManagerPackage } from './updateUtil'
 import {
   getConfigLogBaseName,
   getKernelLogScope,
@@ -106,20 +107,11 @@ const grantExecutableBits = async (paths: string[]): Promise<boolean> => {
 }
 
 /**
- * 确保目录存在（不存在则递归创建）
- * 传入文件路径时自动取父目录；基址随平台（Android: AppData / 桌面: Resource）
+ * 确保目录存在（不存在则递归创建）。
+ * 只接受目录路径；文件写入前用 ensureParentDir，避免按扩展名猜测路径类型。
  */
 export const checkDir = async (dirPath: string = RESOURCE_PATH) => {
   try {
-    try {
-      const _e = await extname(dirPath)
-      // 有扩展名视为文件路径，取其父目录；无扩展名（如 resource/core）视为目录本身
-      if (_e) {
-        dirPath = await dirname(dirPath)
-      }
-    } catch (_error) {
-      /* empty */
-    }
     const dirExists = await exists(dirPath, { baseDir: getBaseDir() })
     if (!dirExists) {
       await mkdir(dirPath, { baseDir: getBaseDir(), recursive: true })
@@ -128,6 +120,10 @@ export const checkDir = async (dirPath: string = RESOURCE_PATH) => {
     error(`创建resource目录时出错:${JSON.stringify(e)}`)
     throw e
   }
+}
+
+const ensureParentDir = async (filePath: string): Promise<void> => {
+  await checkDir(await dirname(filePath))
 }
 
 // 获取resource目录，如果resource目录不存在，则调用checkResourceDir创建，最终返回带'resource'后缀的目录
@@ -164,7 +160,6 @@ const WEB_KERNEL_LOG_SCOPE = '__web__'
 export const getKernelLogsDir = async (configFileName: string): Promise<string> => {
   const scope = getKernelLogScope(configFileName)
   const relative = `${KERNEL_LOG_ROOT}/${scope}`
-  // 这里直接 mkdir，不用 checkDir：scope 可能含点号，checkDir 会按扩展名误判为文件
   await mkdir(relative, { baseDir: getBaseDir(), recursive: true })
   return await join(await getLogsDir(), 'kernel', scope)
 }
@@ -209,9 +204,18 @@ export interface FileWriteOptions {
   createNew?: boolean
 }
 
+let temporaryFileSequence = 0
+const createTemporaryPath = (filePath: string): string => {
+  const random = crypto.getRandomValues(new Uint32Array(1))[0].toString(36)
+  temporaryFileSequence = (temporaryFileSequence + 1) >>> 0
+  return `${filePath}.lt-tmp-${Date.now().toString(36)}-${temporaryFileSequence.toString(36)}-${random}`
+}
+
 /**
  * 写入文本或二进制内容，写入前确保父目录存在。
- * 失败时记录路径与原错误后重抛，调用方据此决定回滚或提示。
+ * 默认先写唯一临时文件再 rename 到目标，避免中断留下半文件或并发写互相覆盖；
+ * append/createNew 需保留原语义，走直接写入。
+ * 失败时清理临时文件、记录路径与原错误后重抛，调用方据此决定回滚或提示。
  */
 export async function writeFileContent(
   filePath: string,
@@ -219,14 +223,46 @@ export async function writeFileContent(
   options: FileWriteOptions = {}
 ): Promise<void> {
   const { baseDir = getBaseDir(), append = false, createNew = false } = options
-  try {
-    await checkDir(filePath)
-    if (typeof content === 'string') {
-      await writeTextFile(filePath, content, { baseDir, append, createNew })
-    } else {
-      await writeFile(filePath, content, { baseDir })
+  if (append || createNew) {
+    try {
+      await ensureParentDir(filePath)
+      if (typeof content === 'string') {
+        await writeTextFile(filePath, content, { baseDir, append, createNew })
+      } else {
+        await writeFile(filePath, content, { baseDir })
+      }
+    } catch (cause) {
+      error(`写入文件失败 ${filePath}:${JSON.stringify(cause)}`)
+      throw cause
     }
+    return
+  }
+  let tmpPath = ''
+  try {
+    await ensureParentDir(filePath)
+    for (let attempt = 0; attempt < 16; attempt++) {
+      tmpPath = createTemporaryPath(filePath)
+      try {
+        if (typeof content === 'string') {
+          await writeTextFile(tmpPath, content, { baseDir, createNew: true })
+        } else {
+          await writeFile(tmpPath, content, { baseDir, createNew: true })
+        }
+        break
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause)
+        if (!/already ?exists|file exists|os error 183|系统存在指定的文件/i.test(message)) {
+          throw cause
+        }
+        if (attempt === 15) throw cause
+      }
+    }
+    await rename(tmpPath, filePath, {
+      oldPathBaseDir: baseDir,
+      newPathBaseDir: baseDir
+    })
   } catch (cause) {
+    if (tmpPath) await remove(tmpPath, { baseDir }).catch(() => {})
     error(`写入文件失败 ${filePath}:${JSON.stringify(cause)}`)
     throw cause
   }
@@ -255,7 +291,7 @@ export async function readFileContent(
 ): Promise<string | Uint8Array> {
   const { baseDir = getBaseDir(), asBinary = false, throwOnError = false } = options
   try {
-    await checkDir(filePath)
+    await ensureParentDir(filePath)
     return asBinary
       ? await readFile(filePath, { baseDir })
       : await readTextFile(filePath, { baseDir })
@@ -289,7 +325,6 @@ export const writeFileWithBackup = async (filePath: string, content: string): Pr
 }
 
 // 列出目录下的所有文件（只读；目录不存在时返回空数组，不隐式创建）
-// 注：不能复用 checkDir——配置名派生的目录可能含点号，会被误判为文件路径
 // silent：轮询类读取在目录尚未生成时不应反复写错误日志
 export const listFiles = async (targetDir: string = RESOURCE_PATH, silent = false) => {
   try {
@@ -301,14 +336,23 @@ export const listFiles = async (targetDir: string = RESOURCE_PATH, silent = fals
   }
 }
 
-// 列出配置目录下的 .toml 文件名（目录不可读时返回空数组，由调用方决定是否提示）
-export const listTomlFiles = async (targetDir: string = CONFIG_PATH): Promise<string[]> => {
+export interface ListTomlFilesOptions {
+  /** 数据关键路径开启：目录不存在可创建，但创建/列举失败必须抛错 */
+  throwOnError?: boolean
+}
+
+// 列出配置目录下的 .toml 文件名；默认保持既有容错，关键备份路径可要求严格失败
+export const listTomlFiles = async (
+  targetDir: string = CONFIG_PATH,
+  options: ListTomlFilesOptions = {}
+): Promise<string[]> => {
   try {
     await checkDir(targetDir)
     const entries = await readDir(targetDir, { baseDir: getBaseDir() })
     return entries.flatMap((entry) => (entry.name.endsWith('.toml') ? [entry.name] : []))
   } catch (cause) {
     error(`列举配置目录失败 ${targetDir}:${JSON.stringify(cause)}`)
+    if (options.throwOnError) throw cause
     return []
   }
 }
@@ -316,7 +360,7 @@ export const listTomlFiles = async (targetDir: string = CONFIG_PATH): Promise<st
 // 写入 resource 目录下的 config.json 文件
 export const writeConfigJsonObj = async (obj: any) => {
   const configJsonPath = await join(RESOURCE_PATH, 'config.json')
-  await checkDir(configJsonPath)
+  await ensureParentDir(configJsonPath)
   await writeFileContent(configJsonPath, JSON.stringify(obj), {
     baseDir: getBaseDir()
   })
@@ -338,6 +382,157 @@ export const isCorePackageFile = (name: string): boolean => /\.zip$/i.test(name)
  * 未完成的下载临时文件，避免切换版本后残留旧组件。
  * 返回 false 表示存在无法删除的条目（通常仍被进程占用），调用方应中止安装。
  */
+/** 上一版固定备份目录；新安装使用独立会话目录，避免覆盖失败现场 */
+export const CORE_BACKUP_PATH = 'resource/core-previous'
+
+const createCoreRecoveryDir = async (prefix: string): Promise<string> => {
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const random = crypto.getRandomValues(new Uint32Array(1))[0].toString(36)
+    const path = `${prefix}-${Date.now().toString(36)}-${random}`
+    try {
+      await mkdir(path, { baseDir: getBaseDir() })
+      return path
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      if (!/already ?exists|file exists|os error 183/i.test(message) || attempt === 15) throw cause
+    }
+  }
+  throw new Error('无法创建内核恢复目录')
+}
+
+const isCoreBackupPath = (path: string): boolean =>
+  path === CORE_BACKUP_PATH || /^resource\/core-previous-[a-z0-9-]+$/.test(path)
+
+class CoreBackupRollbackError extends Error {
+  readonly code = 'core_backup_rollback_failed'
+  readonly backupPath: string
+  readonly rollbackCause: unknown
+
+  constructor(backupPath: string, cause: unknown, rollbackCause: unknown) {
+    super('core_backup_rollback_failed', { cause })
+    this.name = 'CoreBackupRollbackError'
+    this.backupPath = backupPath
+    this.rollbackCause = rollbackCause
+  }
+}
+
+/**
+ * 解压前把现有内核文件移入独立备份目录（保留各版本 zip）。
+ * 返回本次备份路径；没有旧内核时返回 null。失败必须抛错，回滚失败则保留备份供人工恢复。
+ */
+export const backupCoreExecutables = async (): Promise<string | null> => {
+  let backupPath = ''
+  const moved: string[] = []
+  try {
+    const entries = await readDir(CORE_PATH, { baseDir: getBaseDir() })
+    const movable = entries.filter((entry) => !(entry.isFile && isCorePackageFile(entry.name)))
+    if (!movable.length) return null
+    backupPath = await createCoreRecoveryDir(CORE_BACKUP_PATH)
+    for (const entry of movable) {
+      const source = await join(CORE_PATH, entry.name)
+      await rename(source, await join(backupPath, entry.name), {
+        oldPathBaseDir: getBaseDir(),
+        newPathBaseDir: getBaseDir()
+      })
+      moved.push(entry.name)
+    }
+    return backupPath
+  } catch (cause) {
+    error(`备份旧内核失败:${cause instanceof Error ? cause.stack : JSON.stringify(cause)}`)
+    if (!backupPath) throw cause
+    try {
+      for (const name of moved.reverse()) {
+        await rename(await join(backupPath, name), await join(CORE_PATH, name), {
+          oldPathBaseDir: getBaseDir(),
+          newPathBaseDir: getBaseDir()
+        })
+      }
+      await remove(backupPath, { baseDir: getBaseDir(), recursive: true })
+    } catch (rollbackCause) {
+      error(
+        `备份旧内核失败且回滚失败，保留 ${backupPath}:${JSON.stringify({
+          cause,
+          rollbackCause
+        })}`
+      )
+      throw new CoreBackupRollbackError(backupPath, cause, rollbackCause)
+    }
+    throw cause
+  }
+}
+
+/**
+ * 用指定备份恢复内核。新内核先移至独立恢复点，再移回旧备份；任一步失败都保留现场，可重试。
+ */
+export const restoreCoreExecutables = async (
+  backupPath: string = CORE_BACKUP_PATH
+): Promise<boolean> => {
+  if (!isCoreBackupPath(backupPath)) {
+    error(`拒绝恢复非法内核备份路径:${backupPath}`)
+    return false
+  }
+  let discardedPath = ''
+  const restored: string[] = []
+  try {
+    const backups = await readDir(backupPath, { baseDir: getBaseDir() })
+    const current = await readDir(CORE_PATH, { baseDir: getBaseDir() }).catch(async () => {
+      await checkDir(CORE_PATH)
+      return [] as Awaited<ReturnType<typeof readDir>>
+    })
+    const replaceable = current.filter((entry) => !(entry.isFile && isCorePackageFile(entry.name)))
+    if (replaceable.length) {
+      discardedPath = await createCoreRecoveryDir('resource/core-unrestored')
+      for (const entry of replaceable) {
+        await rename(await join(CORE_PATH, entry.name), await join(discardedPath, entry.name), {
+          oldPathBaseDir: getBaseDir(),
+          newPathBaseDir: getBaseDir()
+        })
+      }
+    }
+    for (const entry of backups) {
+      await rename(await join(backupPath, entry.name), await join(CORE_PATH, entry.name), {
+        oldPathBaseDir: getBaseDir(),
+        newPathBaseDir: getBaseDir()
+      })
+      restored.push(entry.name)
+    }
+    await discardCoreBackup(backupPath)
+    return true
+  } catch (cause) {
+    let rollbackCause: unknown = null
+    try {
+      for (const name of restored.reverse()) {
+        await rename(await join(CORE_PATH, name), await join(backupPath, name), {
+          oldPathBaseDir: getBaseDir(),
+          newPathBaseDir: getBaseDir()
+        })
+      }
+    } catch (e) {
+      rollbackCause = e
+    }
+    error(
+      `恢复旧内核失败，保留备份 ${backupPath}${discardedPath ? ` 与新内核 ${discardedPath}` : ''}:${JSON.stringify(
+        {
+          cause: cause instanceof Error ? cause.message : cause,
+          rollbackCause: rollbackCause instanceof Error ? rollbackCause.message : rollbackCause
+        }
+      )}`
+    )
+    return false
+  }
+}
+
+/** 安装成功后丢弃回滚备份（尽力而为，失败仅留日志） */
+export const discardCoreBackup = async (backupPath: string = CORE_BACKUP_PATH): Promise<void> => {
+  if (!isCoreBackupPath(backupPath)) {
+    error(`拒绝清理非法内核备份路径:${backupPath}`)
+    return
+  }
+  await remove(backupPath, { baseDir: getBaseDir(), recursive: true }).catch((e) =>
+    error(`清理内核备份失败 ${backupPath}:${JSON.stringify(e)}`)
+  )
+}
+
 export const cleanCoreDirExceptPackages = async (): Promise<boolean> => {
   let ok = true
   try {
@@ -577,6 +772,8 @@ export interface DownloadOptions {
   dir?: string
   /** 官方标注的包体字节数：实际长度不符即判为半包（镜像截断/中断），不落盘 */
   expectedSize?: number | null
+  /** 官方 SHA-256（hex）：提供时必须校验完整包体，格式非法或篡改均不落盘 */
+  expectedSha256?: string
   /** 等待响应头超时（ms），0 关闭；默认 20s */
   responseTimeoutMs?: number
   /** 连续无数据中止阈值（ms），0 关闭；默认 15s */
@@ -610,6 +807,11 @@ export async function downloadFile(
   const stallTimeoutMs = options?.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS
   const slowGraceMs = options?.slowGraceMs ?? DEFAULT_SLOW_GRACE_MS
   const minSpeedBps = options?.minSpeedBps ?? 0
+  const expectedSha256 = options?.expectedSha256
+  if (expectedSha256 !== undefined && !/^[0-9a-f]{64}$/i.test(expectedSha256.trim())) {
+    error('下载摘要格式非法，拒绝请求')
+    return false
+  }
   // 响应头超时用 abort 真正掐断连接；进入读流后由停滞/低速检测接管
   const controller = new AbortController()
   let responseTimer: ReturnType<typeof setTimeout> | null = null
@@ -704,6 +906,10 @@ export async function downloadFile(
       error(`下载包体不完整(${uint8Array.byteLength}/${expectedSize}):${fileUrl}`)
       return false
     }
+    if (expectedSha256 !== undefined && !verifyManagerPackage(uint8Array, expectedSha256)) {
+      error(`下载包体 SHA-256 校验失败:${fileUrl}`)
+      return false
+    }
 
     // 文件头校验：镜像站可能返回 HTML 错误页，必须按包类型验魔数，避免污染本地安装包
     // zip（内核包/APK）为 "PK"，PE 可执行（Windows 安装包）为 "MZ"
@@ -716,7 +922,7 @@ export async function downloadFile(
 
     info(`开始写入文件:${savePath}`)
     // 先写临时文件、校验通过后原子替换目标，不破坏已存在的可用安装包
-    const tmpPath = savePath + '.download'
+    const tmpPath = createTemporaryPath(savePath)
     try {
       await writeFileContent(tmpPath, uint8Array, {
         baseDir: getBaseDir()
@@ -761,20 +967,34 @@ export async function openPath(path: string): Promise<boolean> {
  * @param destPath 解压目标目录（相对于 Resource 目录）
  * @param keepDir   是否保留原路径
  * @param beforeWrite 写入前回调（如清理旧内核文件）；返回 false 则中止解压
+ * @param expectedSha256 可选：内置清单可信包摘要；必须匹配本次实际读取的完整字节
  * @returns Promise<boolean> 解压是否成功
  */
 export async function extractFile(
   zipPath: string,
   destPath: string,
   keepDir: boolean = false,
-  beforeWrite?: () => Promise<boolean>
+  beforeWrite?: () => Promise<boolean>,
+  expectedSha256?: string
 ): Promise<boolean> {
   try {
+    const expectedHash = expectedSha256?.trim().toLowerCase()
+    if (expectedSha256 !== undefined && !/^[0-9a-f]{64}$/.test(expectedHash ?? '')) {
+      error('压缩包摘要格式非法，拒绝解压')
+      return false
+    }
     // 读取zip文件内容  resource\easytier-windows-x86_64-v2.0.3.zip
     const zipContent = (await readFileContent(zipPath, {
       baseDir: getBaseDir(),
-      asBinary: true
+      asBinary: true,
+      throwOnError: true
     })) as Uint8Array
+
+    // 校验与解压使用同一份字节，堵住验包后、停服务/备份期间更换 zip 的窗口。
+    if (expectedHash && !verifyManagerPackage(zipContent, expectedHash)) {
+      error(`压缩包 SHA-256 校验失败:${zipPath}`)
+      return false
+    }
 
     // 使用 fflate 解压
     const files = unzipSync(zipContent)

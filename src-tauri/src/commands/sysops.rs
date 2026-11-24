@@ -62,10 +62,7 @@ pub fn sysops_kill_process(pid: u32) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn sysops_nssm_run(
-    app: tauri::AppHandle,
-    args: Vec<String>,
-) -> Result<CommandResult, String> {
+pub fn sysops_nssm_run(app: tauri::AppHandle, args: Vec<String>) -> Result<CommandResult, String> {
     lighttier_desktop::sysops::nssm::run(&app, args)
 }
 
@@ -75,10 +72,7 @@ pub fn sysops_cli_run(app: tauri::AppHandle, args: Vec<String>) -> Result<Comman
 }
 
 #[tauri::command]
-pub fn sysops_ensure_executable(
-    app: tauri::AppHandle,
-    paths: Vec<String>,
-) -> Result<(), String> {
+pub fn sysops_ensure_executable(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
     lighttier_desktop::sysops::exec::ensure_executable(&app, paths)
 }
 
@@ -87,6 +81,11 @@ pub fn sysops_verify_core_package(
     app: tauri::AppHandle,
     version: String,
     path: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     lighttier_desktop::sysops::exec::verify_core_package(&app, &version, &path)
+}
+
+#[tauri::command]
+pub fn sysops_verify_core_files(app: tauri::AppHandle) -> Result<(), String> {
+    lighttier_desktop::sysops::exec::verify_core_files(&app)
 }

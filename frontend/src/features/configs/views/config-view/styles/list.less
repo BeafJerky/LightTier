@@ -66,6 +66,12 @@
   flex-shrink: 0;
 }
 
+.nw-card:focus-visible,
+.nw-row:focus-visible {
+  outline: 2px solid var(--theme-accent-primary);
+  outline-offset: 2px;
+}
+
 .nw-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--theme-shadow-sm);
@@ -79,7 +85,9 @@
 }
 
 .nw-card.active:hover {
-  box-shadow: inset 3px 0 0 var(--theme-accent-primary), var(--theme-shadow-sm);
+  box-shadow:
+    inset 3px 0 0 var(--theme-accent-primary),
+    var(--theme-shadow-sm);
 }
 
 /* 列表重排：Vue TransitionGroup 的 FLIP 只动 transform，避免布局重算 */

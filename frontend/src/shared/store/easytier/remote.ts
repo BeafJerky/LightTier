@@ -3,14 +3,7 @@
  * 网络失败只回退缓存/默认值，不阻断页面；本地缓存不参与持久化状态迁移。
  */
 import { ref } from 'vue'
-import {
-  GITHUB_EASYTIER,
-  MANAGER_INFO_API,
-  MANAGER_INFO_MIRROR_URL,
-  MONITOR_LIST,
-  USER_AGENT,
-  getMirrorUrl
-} from '@/shared/constants/easytier'
+import { MANAGER_INFO_API, MONITOR_LIST, USER_AGENT } from '@/shared/constants/easytier'
 import { PEER_CACHE_KEY } from '@/shared/lib/cacheUtil'
 import {
   clearStunCache,
@@ -65,37 +58,23 @@ export function createRemoteDomain() {
     monitorSummaryMap.value = next
   }
 
-  // 获取管理器（LightTier）发布信息（5.11 检查更新）
-  // 桌面端优先走所选加速源，并与官方 API、实测支持 api.github.com 的镜像并发请求，
-  // 首个返回有效 releases 数组的源胜出；浏览器预览走原生 fetch（镜像普遍无 CORS）。
+  // 发布元数据和资产摘要只从官方 API 获取；镜像仅用于下载安装包字节。
   // 10 秒总超时：网络不可用时及时失败，避免“检查中”无限等待。
-  const refreshManagerReleaseInfo = async (preferredMirror?: string): Promise<ManagerRelease[]> => {
-    const desktopRuntime = isTauri()
-    const bases = desktopRuntime
-      ? [preferredMirror, GITHUB_EASYTIER, ...MANAGER_INFO_MIRROR_URL]
-      : [GITHUB_EASYTIER]
-    // 官方源原样返回 API 地址，镜像源拼成“前缀 + 完整 GitHub URL”；去重避免重复请求
-    const urls = Array.from(
-      new Set(
-        bases
-          .filter((base): base is string => Boolean(base))
-          .map((base) => getMirrorUrl(base, MANAGER_INFO_API))
-      )
-    )
+  const refreshManagerReleaseInfo = async (): Promise<ManagerRelease[]> => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 10000)
-    const request = async (url: string): Promise<ManagerRelease[]> => {
-      const init = {
-        method: 'GET',
-        headers: {
-          'User-Agent': USER_AGENT,
-          Accept: 'application/vnd.github+json'
-        },
-        signal: controller.signal
-      }
-      // 浏览器预览无 Tauri IPC，走原生 fetch（GitHub API 允许跨域）；
-      // 桌面/Android 走 plugin-http，绕过 WebView CORS 限制
-      const response = desktopRuntime ? await fetch(url, init) : await window.fetch(url, init)
+    const init = {
+      method: 'GET',
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/vnd.github+json'
+      },
+      signal: controller.signal
+    }
+    try {
+      const response = isTauri()
+        ? await fetch(MANAGER_INFO_API, init)
+        : await window.fetch(MANAGER_INFO_API, init)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -104,21 +83,7 @@ export function createRemoteDomain() {
         throw new Error('empty release list')
       }
       return data as ManagerRelease[]
-    }
-    try {
-      return await new Promise<ManagerRelease[]>((resolve, reject) => {
-        let pending = urls.length
-        urls.forEach((url) => {
-          request(url)
-            .then(resolve)
-            .catch(() => {
-              pending -= 1
-              if (pending === 0) reject(new Error('all release sources failed'))
-            })
-        })
-      })
     } finally {
-      // 拿到首个结果后终止其余请求，避免后台挂起
       clearTimeout(timer)
       controller.abort()
     }

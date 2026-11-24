@@ -408,12 +408,22 @@ describe('分类载荷校验', () => {
       version: 1,
       store: { refreshInterval: 5, defaultServiceInstallMethod: 'official' },
       local: { 'settings.autoRunNetwork': 'true' },
-      serviceConfigs: { 家庭: '{"installMethod":"nssm"}' }
+      serviceConfigs: {
+        家庭: '{"installMethod":"nssm"}',
+        'easytier-家庭': '{"installMethod":"official"}',
+        'easytierweb-家庭': '{"installMethod":"nssm"}'
+      }
     })
     const payload = sanitizePreferencesPayload(value)
     expect(payload?.store.refreshInterval).toBe(5)
     expect(payload?.local['settings.autoRunNetwork']).toBe('true')
     expect(payload?.serviceConfigs['service-config:家庭']).toBe('{"installMethod":"nssm"}')
+    expect(payload?.serviceConfigs['service-config:easytier-家庭']).toBe(
+      '{"installMethod":"official"}'
+    )
+    expect(payload?.serviceConfigs['service-config:easytierweb-家庭']).toBe(
+      '{"installMethod":"nssm"}'
+    )
 
     expect(
       sanitizePreferencesPayload(JSON.stringify({ store: { refreshInterval: 999 } }))
@@ -595,7 +605,7 @@ describe('runRestoreTransaction（恢复原子化）', () => {
     expect(result).toEqual({ applied: 2, failed: [], rolledBack: false })
   })
 
-  it('中途失败时按逆序回滚已应用项，最终不算已应用', async () => {
+  it('中途失败时按逆序回滚当前项与已应用项，最终不算已应用', async () => {
     const log: string[] = []
     const items: TxItem[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
     const result = await runTx(items, {
@@ -608,8 +618,25 @@ describe('runRestoreTransaction（恢复原子化）', () => {
         log.push(`rollback:${item.id}:${snapshot}`)
       }
     })
-    expect(log).toEqual(['apply:a', 'apply:b', 'rollback:a:a'])
+    expect(log).toEqual(['apply:a', 'apply:b', 'rollback:b:b', 'rollback:a:a'])
     expect(result).toEqual({ applied: 0, failed: ['b'], rolledBack: true })
+  })
+
+  it('当前项回滚失败时仍继续回滚已应用项，并标记未完全回滚', async () => {
+    const log: string[] = []
+    const items: TxItem[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    const result = await runTx(items, {
+      snapshot: async (item) => item.id,
+      apply: async (item) => {
+        if (item.id === 'c') throw new Error('boom')
+      },
+      rollback: async (item) => {
+        log.push(`rollback:${item.id}`)
+        if (item.id === 'c') throw new Error('current rollback failed')
+      }
+    })
+    expect(log).toEqual(['rollback:c', 'rollback:b', 'rollback:a'])
+    expect(result).toEqual({ applied: 0, failed: ['c'], rolledBack: false })
   })
 
   it('回滚自身失败时如实标记 rolledBack=false', async () => {

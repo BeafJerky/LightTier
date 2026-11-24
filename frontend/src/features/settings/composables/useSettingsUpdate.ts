@@ -13,11 +13,15 @@ import { useIslandStore } from '@/shared/store/island'
 import { pickLatestManagerRelease } from '@/shared/lib/releaseUtil'
 import type { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { MIRROR_SOURCE_KEY } from '@/shared/composables/useMirrorProbe'
-import { downloadFile, listFiles } from '@/shared/platform/fileUtil'
+import { downloadFile, listFiles, readFileContent } from '@/shared/platform/fileUtil'
 import { formatBytes } from '@/shared/lib/monitorFormat'
 import { getAppVersion, getOsType, compareVersions } from '@/shared/platform/sysUtil'
 import { UPDATE_PATH, MANAGER_REPO_URL, getMirrorUrl } from '@/shared/constants/easytier'
-import { pickManagerInstaller, type ReleaseAsset } from '@/shared/platform/updateUtil'
+import {
+  pickManagerInstaller,
+  verifyManagerPackage,
+  type ReleaseAsset
+} from '@/shared/platform/updateUtil'
 import { invoke, isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
 import pkg from '../../../../../package.json'
@@ -54,7 +58,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const island = useIslandStore()
   const toast = useCreamToast()
   const { t } = useI18n()
-  const { selected: mirrorSelected, probing: mirrorProbing, downloadFromMirrors } = mirror
+  const { probing: mirrorProbing, downloadFromMirrors } = mirror
 
   // 应用版本：getAppVersion() 为权威值，浏览器预览回退构建期版本号
   const appVersion = ref('...')
@@ -107,8 +111,10 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
     updateCheckError.value = false
     // 每次重新检查都丢弃上一次的资产与下载状态，避免拿旧版本的包安装
     resetManagerUpdateState()
+    const generation = managerUpdateGeneration
     try {
-      const data = await store.refreshManagerReleaseInfo(mirrorSelected.value)
+      const data = await store.refreshManagerReleaseInfo()
+      if (generation !== managerUpdateGeneration) return
       // 空列表是接口异常，不能误报“已是最新”
       if (!Array.isArray(data) || data.length === 0) throw new Error('empty release list')
       // 默认只认正式版：nightly 等预发布只在该开关关闭时参与比较
@@ -137,18 +143,19 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
         })
         toast.info(t('newSettings.updateAvailable', { version: latestManagerVersion.value }))
         // 应用目录里已有同版本安装包时直接进入“立即安装”，不必重复下载
-        void restoreManagerUpdatePackage()
+        void restoreManagerUpdatePackage(generation)
       } else {
         island.dismissSource('update:manager')
         toast.success(t('newSettings.upToDate'))
       }
     } catch (e) {
+      if (generation !== managerUpdateGeneration) return
       console.error('检查更新失败:', e)
       latestManagerVersion.value = ''
       updateCheckError.value = true
       toast.error(t('newSettings.checkUpdateFail'))
     } finally {
-      checkingUpdate.value = false
+      if (generation === managerUpdateGeneration) checkingUpdate.value = false
     }
   }
 
@@ -196,6 +203,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   const updateTotal = ref<number | null>(null)
   // 未指定加速源时的自动测速每个设置会话只尝试一次
   let autoUpdateProbeAttempted = false
+  let managerUpdateGeneration = 0
 
   const managerInstaller = computed(() =>
     pickManagerInstaller(latestManagerAssets.value, updatePlatform)
@@ -233,6 +241,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   })
 
   const resetManagerUpdateState = () => {
+    managerUpdateGeneration += 1
     latestManagerAssets.value = null
     updating.value = false
     launchingInstaller.value = false
@@ -243,17 +252,32 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
   }
 
   // 复用应用目录里已有的同版本安装包（上次下载后未安装即可直接安装，无需重复下载）
-  const restoreManagerUpdatePackage = async () => {
+  const restoreManagerUpdatePackage = async (generation: number) => {
     const asset = managerInstaller.value
     if (!asset || !isTauriRuntime()) return
-    const names = await listFiles(UPDATE_PATH, true)
-    if (!names.includes(asset.fileName)) return
+    try {
+      const names = await listFiles(UPDATE_PATH, true)
+      if (generation !== managerUpdateGeneration || !names.includes(asset.fileName)) return
+      const bytes = await readFileContent(`${UPDATE_PATH}/${asset.fileName}`, {
+        asBinary: true,
+        throwOnError: true
+      })
+      if (generation !== managerUpdateGeneration) return
+      if (!(bytes instanceof Uint8Array) || !verifyManagerPackage(bytes, asset.sha256)) {
+        console.warn('缓存更新包摘要校验失败，需要重新下载:', asset.fileName)
+        return
+      }
+    } catch (e) {
+      console.warn('读取缓存更新包失败，需要重新下载:', asset.fileName, e)
+      return
+    }
     updateDownloaded.value = true
     updateTotal.value = asset.size
     updateReceived.value = asset.size ?? 0
   }
 
   const handleDownloadManagerUpdate = async () => {
+    if (updating.value) return
     const asset = managerInstaller.value
     if (!asset) {
       toast.warning(t('newSettings.updateAssetMissing'))
@@ -264,6 +288,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       openExternalLink(asset.url)
       return
     }
+    const generation = managerUpdateGeneration
     updating.value = true
     try {
       if (!localStorage.getItem(MIRROR_SOURCE_KEY) && !autoUpdateProbeAttempted) {
@@ -281,6 +306,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
           downloadFile(
             url,
             (progress) => {
+              if (generation !== managerUpdateGeneration) return
               updateReceived.value = progress.received
               updateTotal.value = progress.total ?? asset.size
             },
@@ -288,6 +314,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
             {
               dir: UPDATE_PATH,
               expectedSize: asset.size,
+              expectedSha256: asset.sha256,
               responseTimeoutMs: 15000,
               stallTimeoutMs: 15000,
               // 最后一个候选不再按速度放弃：慢也比下载失败好
@@ -296,6 +323,7 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
           ),
         { onSwitch: () => toast.info(t('newSettings.mirrorSwitching')) }
       )
+      if (generation !== managerUpdateGeneration) return
       if (ok) {
         updateDownloaded.value = true
         toast.success(
@@ -307,11 +335,14 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
         toast.error(t('newSettings.updateDownloadFail'))
       }
     } catch (e) {
+      if (generation !== managerUpdateGeneration) return
       console.error('下载更新失败:', e)
       toast.error(t('newSettings.updateDownloadFail') + ': ' + String(e))
     } finally {
-      updating.value = false
-      updateActive.value = false
+      if (generation === managerUpdateGeneration) {
+        updating.value = false
+        updateActive.value = false
+      }
     }
   }
 
@@ -335,10 +366,14 @@ export function useSettingsUpdate(options: SettingsUpdateOptions) {
       toast.warning(t('newSettings.installPermissionNeeded'))
       return
     }
-    if (status === 'missing') {
-      // 本地包被清理/删除：回到“下载更新”态，避免按钮一直可点却装不上
+    if (status === 'missing' || status === 'invalid') {
+      // 本地包被清理、篡改或摘要非法：回到“下载更新”态
       updateDownloaded.value = false
-      toast.error(t('newSettings.installPackageMissing'))
+      toast.error(
+        status === 'missing'
+          ? t('newSettings.installPackageMissing')
+          : t('newSettings.installLaunchFail')
+      )
       return
     }
     toast.error(t('newSettings.installLaunchFail'))

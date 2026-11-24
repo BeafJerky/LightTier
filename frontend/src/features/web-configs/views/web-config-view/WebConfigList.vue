@@ -35,7 +35,11 @@
             :key="item.configFileName"
             class="nwc-row"
             :class="{ active: selectedName === item.configFileName }"
+            role="button"
+            tabindex="0"
             @click="emit('select', item)"
+            @keydown.enter="emit('select', item)"
+            @keydown.space.prevent="emit('select', item)"
           >
             <span class="nwc-row-icon">
               <svg
@@ -78,7 +82,11 @@
           :key="item.configFileName"
           class="nwc-card"
           :class="{ active: selectedName === item.configFileName }"
+          role="button"
+          tabindex="0"
           @click="emit('select', item)"
+          @keydown.enter="emit('select', item)"
+          @keydown.space.prevent="emit('select', item)"
         >
           <div class="nwc-card-top">
             <div class="nwc-card-status">
@@ -91,7 +99,7 @@
           </div>
           <div class="nwc-card-name">{{ item.configFileName }}</div>
           <div class="nwc-card-sub">{{ item.host }}:{{ item.port }}</div>
-          <div class="nwc-card-actions" @click.stop>
+          <div class="nwc-card-actions" @click.stop @keydown.stop>
             <!-- 单一生命周期主操作：按状态在运行/停止之间切换 -->
             <LtButton
               size="compact"

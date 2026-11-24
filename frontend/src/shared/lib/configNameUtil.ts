@@ -17,3 +17,20 @@ export const isValidConfigName = (name: string): boolean => {
   if (!VALID_CONFIG_NAME.test(value)) return false
   return !RESERVED_CONFIG_NAME.test(value)
 }
+
+/**
+ * 是否与现有配置重名。
+ *
+ * Windows 文件系统大小写不敏感，`Home.toml` 与 `home.toml` 会互相覆盖，
+ * 因此 Windows 上必须按小写比较；其他平台保持精确比较。
+ */
+export const isConfigNameTaken = (
+  candidate: string,
+  existing: readonly string[] | undefined,
+  caseInsensitive = false
+): boolean => {
+  const value = candidate.trim()
+  return (existing ?? []).some((name) =>
+    caseInsensitive ? name.toLowerCase() === value.toLowerCase() : name === value
+  )
+}

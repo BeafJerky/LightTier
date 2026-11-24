@@ -21,7 +21,9 @@ import {
   routeAdd,
   routeDelete,
   routeExists,
-  setAdapterMetric
+  setAdapterMetric,
+  verifyCoreFiles,
+  verifyCorePackage
 } from '@/shared/platform/systemOps'
 
 describe('systemOps', () => {
@@ -65,6 +67,22 @@ describe('systemOps', () => {
     expect(mocks.invoke).toHaveBeenNthCalledWith(2, 'sysops_list_processes', {
       filter: 'easytier-core'
     })
+  })
+
+  it('verifyCorePackage 返回后端内置清单摘要，verifyCoreFiles 调用独立命令', async () => {
+    const expectedSha256 = 'b'.repeat(64)
+    mocks.invoke.mockResolvedValueOnce(expectedSha256).mockResolvedValueOnce(undefined)
+
+    await expect(verifyCorePackage('v2.7.1', '/app/resource/core/kernel.zip')).resolves.toBe(
+      expectedSha256
+    )
+    await expect(verifyCoreFiles()).resolves.toBeUndefined()
+
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, 'sysops_verify_core_package', {
+      version: 'v2.7.1',
+      path: '/app/resource/core/kernel.zip'
+    })
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, 'sysops_verify_core_files', undefined)
   })
 
   it('非 Tauri 环境抛错，避免静默降级', async () => {

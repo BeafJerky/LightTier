@@ -23,6 +23,7 @@ export function createConfigDomain() {
   const configListLoading = ref(false)
   const webConfigListLoaded = ref(false)
   const webConfigListLoading = ref(false)
+  const webConfigListError = ref<Error | null>(null)
 
   // 设置配置根路径：显式传参优先，否则取 Tauri resource 目录（安装目录内的资源）
   const setConfigPath = async (path?: string) => {
@@ -105,13 +106,15 @@ export function createConfigDomain() {
   const loadWebConfigFiles = async (): Promise<void> => {
     if (webConfigLoadTask) return webConfigLoadTask
     webConfigListLoading.value = true
+    webConfigListError.value = null
     webConfigLoadTask = (async () => {
       try {
         const { readWebConfigList } = useMockData()
         configWebList.value = await readWebConfigList()
         webConfigListLoaded.value = true
-      } catch {
-        /* 彻底失败 */
+      } catch (cause) {
+        webConfigListError.value = cause instanceof Error ? cause : new Error(String(cause))
+        console.warn('[WebConfig] 列表加载失败，保留上一份数据:', cause)
       } finally {
         webConfigListLoading.value = false
         webConfigLoadTask = null
@@ -134,6 +137,7 @@ export function createConfigDomain() {
     configListLoading,
     webConfigListLoaded,
     webConfigListLoading,
+    webConfigListError,
     setConfigPath,
     setStartQueue,
     getRunningItem,

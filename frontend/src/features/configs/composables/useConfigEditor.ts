@@ -10,10 +10,15 @@ import { computed, ref, useId, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as toml from 'smol-toml'
-import { normalizeToml } from '@/features/configs/lib/tomlNormalize'
+import {
+  isTomlSemanticEqual,
+  normalizeToml,
+  serializeTomlPreservingUnchanged
+} from '@/features/configs/lib/tomlNormalize'
 import { validateToml } from '@/shared/lib/tomlValidationUtil'
 import { migrateLightTierConfig } from '@/entities/config/lighttierConfigUtil'
-import { isValidConfigName } from '@/shared/lib/configNameUtil'
+import { isValidConfigName, isConfigNameTaken } from '@/shared/lib/configNameUtil'
+import { isWindows } from '@/shared/platform/platformUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import {
   buildConfigFormModel,
@@ -567,7 +572,10 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       nameError.value = t('newEdit.nameInvalid')
       return false
     }
-    if (props.dialogMode === 'add' && props.existingConfigNames?.includes(newConfigName.value)) {
+    if (
+      props.dialogMode === 'add' &&
+      isConfigNameTaken(newConfigName.value, props.existingConfigNames, isWindows())
+    ) {
       nameError.value = t('newEdit.nameExists')
       return false
     }
@@ -625,6 +633,7 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       try {
         // 5.7：保存前统一清洗（默认值合并 + 空值剔除），双模式均不落空参数
         const parsed = toml.parse(rawContent) as Record<string, any>
+        const initial = toml.parse(initialToml.value) as Record<string, any>
         // 旧版 LightTier 私有标记迁移到 [lighttier]，保存后不再污染 [flags]
         migrateLightTierConfig(parsed)
         const normalized = normalizeToml(parsed, { mergeDefaults: false })
@@ -637,7 +646,15 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
           }
           Object.assign(normalized, formLockedTop.value)
         }
-        content = toml.stringify(normalized)
+        content = serializeTomlPreservingUnchanged(rawContent, normalized)
+        if (
+          dialogMode.value === 'edit' &&
+          isTomlSemanticEqual(initial, normalized) &&
+          isTomlSemanticEqual(parsed, normalized)
+        ) {
+          visible.value = false
+          return
+        }
       } catch (e) {
         // 归一化失败：不写坏原文件，保留用户输入；错误详情随提示展示
         console.error('[config] normalize toml failed:', e)
@@ -651,7 +668,7 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       })
       if (!ok) return
       // 写盘成功才重置基线并关闭；失败时保留弹窗与内容
-      initialToml.value = tomlContent.value
+      initialToml.value = content
       initialName.value = newConfigName.value
       formParsedOk.value = true
       formBaseline.value = formSignature()

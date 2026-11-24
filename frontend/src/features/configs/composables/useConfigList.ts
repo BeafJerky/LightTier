@@ -21,11 +21,12 @@ import {
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useMockData } from '@/shared/platform/mockData'
+import { runTomlTransaction } from '@/shared/platform/webConfigStorage'
 import { useWideLandscape } from '@/shared/composables/useWideLandscape'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { resourceDir, join } from '@tauri-apps/api/path'
-import { openPath } from '@/shared/platform/fileUtil'
+import { openPath, writeFileWithBackup } from '@/shared/platform/fileUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import {
   setExitRoute,
@@ -209,7 +210,8 @@ export function useConfigList(options: UseConfigListOptions) {
     resetDetail
   } = useConfigDetail({
     readFileContent,
-    writeFileContent,
+    writeFileWithBackup: (path: string, content: string) =>
+      runTomlTransaction(() => writeFileWithBackup(path, content)),
     isTauri,
     t
   })
@@ -343,9 +345,9 @@ export function useConfigList(options: UseConfigListOptions) {
       return
     }
     try {
-      const raw = (await readFileContent(
-        `${CONFIG_PATH}/${selectedConfig.value.fileName}`
-      )) as string
+      const raw = (await readFileContent(`${CONFIG_PATH}/${selectedConfig.value.fileName}`, {
+        throwOnError: true
+      })) as string
       // 必须先切回 edit：openAdd 会把模式置为 add，若不复位会导致后续编辑按“新建”处理
       // （隐藏字段/重名校验/标题错误），也破坏“新建隐藏、存量警告”的版本适配策略
       editDialogMode.value = 'edit'
@@ -362,17 +364,21 @@ export function useConfigList(options: UseConfigListOptions) {
     const isAdd = editDialogMode.value === 'add'
     let backupFailed = false
     try {
-      if (!isAdd) {
-        // 覆盖前备份上一版；备份失败视为保存失败，避免用户误以为有回滚点
-        try {
-          const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`)) as string
-          await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
-        } catch {
-          backupFailed = true
-          throw new Error('backup failed')
+      await runTomlTransaction(async () => {
+        if (!isAdd) {
+          // 覆盖前备份上一版；备份失败视为保存失败，避免用户误以为有回滚点
+          try {
+            const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`, {
+              throwOnError: true
+            })) as string
+            await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
+          } catch {
+            backupFailed = true
+            throw new Error('backup failed')
+          }
         }
-      }
-      await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
+        await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
+      })
       // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
       await easyTierStore.reloadConfigFiles()
       if (easyTierStore.configList.some((c) => c.configFileName === name)) {
@@ -449,7 +455,7 @@ export function useConfigList(options: UseConfigListOptions) {
           return
         }
       }
-      await deleteFileOrDir(`${CONFIG_PATH}/${target.fileName}`)
+      await runTomlTransaction(() => deleteFileOrDir(`${CONFIG_PATH}/${target.fileName}`))
       clearTrend(target.configFileName)
       toast(t('newCommon.deleteSuccess'), 'success')
       selectedConfig.value = null
@@ -485,10 +491,14 @@ export function useConfigList(options: UseConfigListOptions) {
   const persistExitRouteFlag = async (item: RunningItem, enabled: boolean): Promise<boolean> => {
     if (!item.fileName) return false
     try {
-      const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
-      const cfg = toml.parse(raw)
-      setExitRouteEnabled(cfg, enabled)
-      await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+      await runTomlTransaction(async () => {
+        const raw = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
+          throwOnError: true
+        })) as string
+        const cfg = toml.parse(raw)
+        setExitRouteEnabled(cfg, enabled)
+        await writeFileWithBackup(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+      })
       // 同步内存视图，避免开关状态与文件不一致；选中项已切换时不改其他配置的详情
       const detail = selectedDetail.value
       if (detail && selectedConfig.value?.configFileName === item.configFileName) {

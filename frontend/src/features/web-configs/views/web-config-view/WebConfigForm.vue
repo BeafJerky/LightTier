@@ -139,7 +139,9 @@ import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import { LtButton, LtInput, LtSelect } from '@/shared/ui'
 import type { FormWebData } from '@/entities/config/formTypes'
 import DefaultData from '@/entities/config/defaultData'
-import { isValidConfigName } from '@/shared/lib/configNameUtil'
+import { isValidConfigName, isConfigNameTaken } from '@/shared/lib/configNameUtil'
+import { isWindows } from '@/shared/platform/platformUtil'
+import { isValidWebHost } from '../../lib/webConfigHost'
 import { cloneDeep } from 'lodash-es'
 
 const { t } = useI18n()
@@ -274,7 +276,7 @@ const validate = (): boolean => {
     } else if (!isValidConfigName(form.value.configFileName)) {
       nameError.value = t('newWebForm.nameInvalid')
       ok = false
-    } else if (props.existingNames?.includes(form.value.configFileName)) {
+    } else if (isConfigNameTaken(form.value.configFileName, props.existingNames, isWindows())) {
       nameError.value = t('newWebForm.nameExists')
       ok = false
     }
@@ -290,6 +292,9 @@ const validate = (): boolean => {
 
   if (!form.value.host?.trim()) {
     hostError.value = t('newWebForm.hostEmpty')
+    ok = false
+  } else if (!isValidWebHost(form.value.host)) {
+    hostError.value = t('newWebForm.hostInvalid')
     ok = false
   }
 

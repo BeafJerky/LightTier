@@ -14,7 +14,7 @@ import pkg from '../../../../../package.json'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
-import { CONFIG_PATH, CONFIG_FILE_NAME, GITHUB_EASYTIER } from '@/shared/constants/easytier'
+import { CONFIG_PATH, GITHUB_EASYTIER } from '@/shared/constants/easytier'
 import {
   MIRROR_CUSTOM_KEY,
   MIRROR_HIDDEN_KEY,
@@ -22,6 +22,11 @@ import {
 } from '@/shared/composables/useMirrorProbe'
 import { loadThemeCss } from '@/shared/composables/useExternalThemes'
 import { useMockData } from '@/shared/platform/mockData'
+import {
+  runTomlTransaction,
+  runWebConfigTransaction,
+  type WebConfigTransactionOps
+} from '@/shared/platform/webConfigStorage'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useIslandStore } from '@/shared/store/island'
 import type { FormWebData } from '@/entities/config/formTypes'
@@ -49,14 +54,16 @@ import {
   type RestoreChoice,
   type RestorePlan
 } from '@/features/settings/lib/backupUtil'
-import { isValidConfigName } from '@/shared/lib/configNameUtil'
-import { migrateLockPassword } from '@/shared/platform/lockUtil'
+import {
+  isServiceConfigStorageName,
+  SERVICE_CONFIG_PREFIX
+} from '@/shared/platform/serviceInstallRecord'
+import { migrateLockPassword, sha256Hex } from '@/shared/platform/lockUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getAppVersion } from '@/shared/platform/sysUtil'
 
 const THEME_KEY = 'theme'
 const LANG_KEY = 'lang'
-const SERVICE_CONFIG_PREFIX = 'service-config:'
 
 const SUPPORTED_LANGS = ['zh-CN', 'en'] as const
 const THEME_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
@@ -79,6 +86,21 @@ const readStorage = (key: string): string | null => {
     return null
   }
 }
+
+const PREFERENCE_LOCAL_SNAPSHOT_KEYS = [
+  ...RESTORABLE_PREFERENCE_LOCAL_KEYS,
+  ...LEGACY_AUTO_RUN_LOCAL_KEYS
+] as const
+type RawPreferenceLocalSnapshot = Record<
+  (typeof PREFERENCE_LOCAL_SNAPSHOT_KEYS)[number],
+  string | null
+>
+
+/** 偏好回滚快照保留原始值及缺失状态，不经过备份载荷清洗。 */
+const collectRawPreferenceLocal = (): RawPreferenceLocalSnapshot =>
+  Object.fromEntries(
+    PREFERENCE_LOCAL_SNAPSHOT_KEYS.map((key) => [key, localStorage.getItem(key)])
+  ) as RawPreferenceLocalSnapshot
 
 // 语言由 useStorage 以 JSON 字符串写入（"zh-CN"），同时兼容旧备份恢复出的裸值
 const readLangStorage = (): string => {
@@ -144,7 +166,7 @@ const collectPreferencesPayload = (): PreferencesPayload => {
       const key = localStorage.key(i)
       if (!key?.startsWith(SERVICE_CONFIG_PREFIX)) continue
       const name = key.slice(SERVICE_CONFIG_PREFIX.length)
-      if (!isValidConfigName(name)) continue
+      if (!isServiceConfigStorageName(name)) continue
       const raw = localStorage.getItem(key)
       if (!raw) continue
       try {
@@ -188,6 +210,19 @@ const collectPreferencesPayload = (): PreferencesPayload => {
   }
 }
 
+/** 回滚快照不做业务清洗：前缀键的原始值（含空串/损坏 JSON/异常名称）都必须精确保留 */
+const collectRawServiceConfigs = (): Record<string, string> => {
+  const configs: Record<string, string> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith(SERVICE_CONFIG_PREFIX)) continue
+    const value = localStorage.getItem(key)
+    if (value === null) throw new Error('service config snapshot changed during enumeration')
+    configs[key] = value
+  }
+  return configs
+}
+
 /** 采集外观：主题与语言（明暗由主题自身的色板决定） */
 const collectAppearancePayload = (): AppearancePayload => {
   const rawTheme = readStorage(THEME_KEY) || ''
@@ -211,24 +246,21 @@ const collectMirrorPayload = (): MirrorPayload => {
   return payload
 }
 
-const collectWebValue = async (): Promise<string> => {
-  const list = await useMockData().readWebConfigList()
-  return JSON.stringify(list)
-}
+const collectWebValue = async (): Promise<string> =>
+  runWebConfigTransaction(async ({ snapshot }) => JSON.stringify(await snapshot()))
 
 const collectConfigItems = async (): Promise<BackupItem[]> => {
   const { listTomlFiles, readFileContent } = useMockData()
-  const files = (await listTomlFiles()).filter((name) => name.endsWith('.toml'))
+  const files = (await listTomlFiles({ throwOnError: true })).filter((name) =>
+    name.endsWith('.toml')
+  )
   const items: BackupItem[] = []
   for (const file of files) {
-    try {
-      const content = (await readFileContent(`${CONFIG_PATH}/${file}`)) as string
-      // readFileContent 读取失败会返回空串，跳过避免把无效条目写入备份
-      if (!content.trim()) continue
-      items.push(createBackupItem('configs', file, content))
-    } catch {
-      /* 单个配置读取失败时跳过，避免整份备份无法创建 */
-    }
+    const content = (await readFileContent(`${CONFIG_PATH}/${file}`, {
+      throwOnError: true
+    })) as string
+    if (!content.trim()) continue
+    items.push(createBackupItem('configs', file, content))
   }
   return items
 }
@@ -264,7 +296,10 @@ export interface BackupContentCounts {
 /** 分类内容数量（仅用于创建页展示，配置与 Web 配置为动态数量） */
 export const getBackupContentCounts = async (): Promise<BackupContentCounts> => {
   const { listTomlFiles, readWebConfigList } = useMockData()
-  const [files, web] = await Promise.all([listTomlFiles(), readWebConfigList()])
+  const [files, web] = await Promise.all([
+    listTomlFiles({ throwOnError: true }),
+    readWebConfigList()
+  ])
   return {
     configs: files.filter((name) => name.endsWith('.toml')).length,
     web: Array.isArray(web) ? web.length : 0
@@ -360,22 +395,27 @@ export const pickBackupFile = async (): Promise<PickBackupResult> => {
 
 /** 采集本地当前值，用于导入时逐项比较（未提供的条目按本地不存在处理） */
 export const collectLocalBackupValues = async (
-  manifest: BackupManifest
+  manifest: BackupManifest,
+  webTransaction?: WebConfigTransactionOps
 ): Promise<Record<string, string | null>> => {
   const selected = new Set(manifest.categories)
   const values: Record<string, string | null> = {}
   if (selected.has('configs')) {
     const { listTomlFiles, readFileContent } = useMockData()
-    const files = (await listTomlFiles()).filter((name) => name.endsWith('.toml'))
+    const files = (await listTomlFiles({ throwOnError: true })).filter((name) =>
+      name.endsWith('.toml')
+    )
     for (const file of files) {
-      try {
-        values[`config:${file}`] = (await readFileContent(`${CONFIG_PATH}/${file}`)) as string
-      } catch {
-        /* 读取失败按不存在处理，恢复时会提示为新增/冲突 */
-      }
+      values[`config:${file}`] = (await readFileContent(`${CONFIG_PATH}/${file}`, {
+        throwOnError: true
+      })) as string
     }
   }
-  if (selected.has('web')) values.web = await collectWebValue()
+  if (selected.has('web')) {
+    values.web = webTransaction
+      ? JSON.stringify(await webTransaction.snapshot())
+      : await collectWebValue()
+  }
   if (selected.has('preferences')) {
     values.preferences = JSON.stringify(collectPreferencesPayload())
   }
@@ -388,9 +428,33 @@ export const collectLocalBackupValues = async (
 }
 
 /** 读取本地当前值并生成恢复计划（含冲突检测与内容校验） */
-export const createRestorePlan = async (manifest: BackupManifest): Promise<RestorePlan> => {
-  const localValues = await collectLocalBackupValues(manifest)
-  return buildRestorePlan(manifest, localValues)
+export const createRestorePlan = async (manifest: BackupManifest): Promise<RestorePlan> =>
+  runTomlTransaction(async () => {
+    const localValues = await collectLocalBackupValues(manifest)
+    return buildRestorePlan(manifest, localValues)
+  })
+
+export class RestorePlanChangedError extends Error {
+  readonly code = 'restore_plan_changed'
+
+  constructor() {
+    super('restore_plan_changed')
+    this.name = 'RestorePlanChangedError'
+  }
+}
+
+/** 计划只描述生成时的本地状态；应用前重新读取并比较全部可恢复条目，任一漂移都需重新规划 */
+const assertRestorePlanUnchanged = async (
+  plan: RestorePlan,
+  webTransaction?: WebConfigTransactionOps
+): Promise<void> => {
+  const currentValues = await collectLocalBackupValues(plan.manifest, webTransaction)
+  for (const entry of plan.entries) {
+    if (entry.status === 'invalid') continue
+    const currentValue = currentValues[entry.item.id] ?? null
+    const currentHash = currentValue === null ? null : sha256Hex(currentValue)
+    if (currentHash !== entry.localHash) throw new RestorePlanChangedError()
+  }
 }
 
 /** 外部主题 CSS 不随备份迁移：文件不存在时回退为跟随系统主题 */
@@ -407,13 +471,25 @@ const resolveRestorableTheme = async (theme: string): Promise<string> => {
 
 const applyPreferencesPayload = (
   payload: PreferencesPayload,
-  options: { replaceServiceConfigs?: boolean } = {}
+  options: {
+    replaceServiceConfigs?: boolean
+    rawServiceConfigs?: Record<string, string>
+    rawPreferenceLocal?: RawPreferenceLocalSnapshot
+  } = {}
 ): void => {
-  for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(payload.local, key)) {
-      localStorage.setItem(key, payload.local[key])
-    } else {
-      localStorage.removeItem(key)
+  if (options.rawPreferenceLocal) {
+    for (const key of PREFERENCE_LOCAL_SNAPSHOT_KEYS) {
+      const value = options.rawPreferenceLocal[key]
+      if (value === null) localStorage.removeItem(key)
+      else localStorage.setItem(key, value)
+    }
+  } else {
+    for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(payload.local, key)) {
+        localStorage.setItem(key, payload.local[key])
+      } else {
+        localStorage.removeItem(key)
+      }
     }
   }
   // 旧备份可能只带 settings.autoRun* 本地键：迁移进 store（单一真源）后清理残留
@@ -426,7 +502,9 @@ const applyPreferencesPayload = (
   if (patch.autoRunConfigName === undefined && legacy.autoRunConfigName !== undefined) {
     patch.autoRunConfigName = legacy.autoRunConfigName
   }
-  for (const key of LEGACY_AUTO_RUN_LOCAL_KEYS) localStorage.removeItem(key)
+  if (!options.rawPreferenceLocal) {
+    for (const key of LEGACY_AUTO_RUN_LOCAL_KEYS) localStorage.removeItem(key)
+  }
   // 回滚需要精确还原：先清空本地服务安装记录，再写回快照；正常恢复按“合并”处理，
   // 不删除本地其它配置的记录，避免已有服务失去方式识别。
   if (options.replaceServiceConfigs) {
@@ -437,7 +515,8 @@ const applyPreferencesPayload = (
     }
     for (const key of tracked) localStorage.removeItem(key)
   }
-  for (const [key, value] of Object.entries(payload.serviceConfigs)) {
+  const serviceConfigs = options.rawServiceConfigs ?? payload.serviceConfigs
+  for (const [key, value] of Object.entries(serviceConfigs)) {
     localStorage.setItem(key, value)
   }
   // store 已由 pinia 持久化插件管理，$patch 会同步写回 localStorage
@@ -498,7 +577,10 @@ const applyMirror = (item: BackupItem): void => {
   }
 }
 
-const applyEntry = async (item: BackupItem): Promise<void> => {
+const applyEntry = async (
+  item: BackupItem,
+  webTransaction?: WebConfigTransactionOps
+): Promise<void> => {
   switch (item.category) {
     case 'configs':
       if (!isValidBackupConfigName(item.name)) throw new Error('invalid config name')
@@ -507,7 +589,8 @@ const applyEntry = async (item: BackupItem): Promise<void> => {
     case 'web': {
       const list = parseWebConfigValue(item.value)
       if (!list) throw new Error('invalid web config payload')
-      await useMockData().writeWebConfigList(list as unknown as FormWebData[])
+      if (!webTransaction) throw new Error('web restore requires queue transaction')
+      await webTransaction.replace(list as unknown as FormWebData[])
       return
     }
     case 'preferences':
@@ -536,29 +619,44 @@ export interface ApplyRestoreResult {
 
 type RestoreSnapshot =
   | { kind: 'config-file'; path: string; existed: boolean; value: string }
-  | { kind: 'web-list'; existed: boolean; value: string }
-  | { kind: 'preferences'; value: string }
+  | { kind: 'web-list'; value: string }
+  | {
+      kind: 'preferences'
+      value: string
+      rawServiceConfigs: Record<string, string>
+      rawPreferenceLocal: RawPreferenceLocalSnapshot
+    }
   | { kind: 'appearance'; value: string }
   | { kind: 'security'; value: string }
   | { kind: 'mirror'; value: string }
 
 /** 采集恢复目标的当前状态；任何一步失败都中止恢复，不产生部分写入 */
-const captureRestoreSnapshot = async (item: BackupItem): Promise<RestoreSnapshot> => {
+const captureRestoreSnapshot = async (
+  item: BackupItem,
+  webTransaction?: WebConfigTransactionOps
+): Promise<RestoreSnapshot> => {
   switch (item.category) {
     case 'configs': {
       const path = `${CONFIG_PATH}/${item.name}`
-      const files = await useMockData().listTomlFiles()
+      const files = await useMockData().listTomlFiles({ throwOnError: true })
       const existed = files.includes(item.name)
-      const value = existed ? ((await useMockData().readFileContent(path)) as string) : ''
+      const value = existed
+        ? ((await useMockData().readFileContent(path, { throwOnError: true })) as string)
+        : ''
       return { kind: 'config-file', path, existed, value }
     }
     case 'web': {
-      const value = await collectWebValue()
-      // data.json 缺失与空列表在读路径上等价，按空列表回滚即可
-      return { kind: 'web-list', existed: value !== '[]', value }
+      if (!webTransaction) throw new Error('web restore requires queue transaction')
+      const list = await webTransaction.snapshot()
+      return { kind: 'web-list', value: JSON.stringify(list) }
     }
     case 'preferences':
-      return { kind: 'preferences', value: JSON.stringify(collectPreferencesPayload()) }
+      return {
+        kind: 'preferences',
+        value: JSON.stringify(collectPreferencesPayload()),
+        rawServiceConfigs: collectRawServiceConfigs(),
+        rawPreferenceLocal: collectRawPreferenceLocal()
+      }
     case 'appearance':
       return { kind: 'appearance', value: JSON.stringify(collectAppearancePayload()) }
     case 'security':
@@ -570,7 +668,11 @@ const captureRestoreSnapshot = async (item: BackupItem): Promise<RestoreSnapshot
   }
 }
 
-const rollbackRestoreEntry = async (item: BackupItem, snapshot: unknown): Promise<void> => {
+const rollbackRestoreEntry = async (
+  item: BackupItem,
+  snapshot: unknown,
+  webTransaction?: WebConfigTransactionOps
+): Promise<void> => {
   const snap = snapshot as RestoreSnapshot
   if (snap.kind === 'config-file') {
     if (snap.existed) await useMockData().writeFileContent(snap.path, snap.value)
@@ -578,21 +680,27 @@ const rollbackRestoreEntry = async (item: BackupItem, snapshot: unknown): Promis
     return
   }
   if (snap.kind === 'web-list') {
-    if (snap.existed) {
-      const list = parseWebConfigValue(snap.value)
-      if (!list) throw new Error('invalid web snapshot')
-      await useMockData().writeWebConfigList(list as unknown as FormWebData[])
-    } else {
-      await useMockData().deleteFileOrDir(`${CONFIG_PATH}/${CONFIG_FILE_NAME}`)
-    }
+    const list = parseWebConfigValue(snap.value)
+    if (!list) throw new Error('invalid web snapshot')
+    if (!webTransaction) throw new Error('web restore requires queue transaction')
+    // 缺失与空列表在读路径上等价，统一在队列内写回快照（包括空数组），不直接删除文件
+    await webTransaction.replace(list as unknown as FormWebData[])
     return
   }
   if (snap.kind !== item.category) throw new Error('restore snapshot mismatch')
   switch (snap.kind) {
     case 'preferences': {
-      const payload = sanitizePreferencesPayload(snap.value)
+      // 本地键可能含空串/损坏值，不能用整份载荷反清洗；store 仍按原快照策略恢复。
+      const snapshotPayload = JSON.parse(snap.value) as { store?: unknown }
+      const payload = sanitizePreferencesPayload(
+        JSON.stringify({ version: 1, store: snapshotPayload.store })
+      )
       if (!payload) throw new Error('invalid preferences snapshot')
-      applyPreferencesPayload(payload, { replaceServiceConfigs: true })
+      applyPreferencesPayload(payload, {
+        replaceServiceConfigs: true,
+        rawServiceConfigs: snap.rawServiceConfigs,
+        rawPreferenceLocal: snap.rawPreferenceLocal
+      })
       return
     }
     case 'appearance':
@@ -611,13 +719,25 @@ const rollbackRestoreEntry = async (item: BackupItem, snapshot: unknown): Promis
 export const applyRestore = async (
   plan: RestorePlan,
   choices: Record<string, RestoreChoice>
-): Promise<ApplyRestoreResult> => {
-  const items = plan.entries
-    .filter((entry) => entry.status !== 'invalid' && choices[entry.item.id] === 'backup')
-    .map((entry) => entry.item)
-  return runRestoreTransaction(items, {
-    snapshot: captureRestoreSnapshot,
-    apply: applyEntry,
-    rollback: rollbackRestoreEntry
+): Promise<ApplyRestoreResult> =>
+  runTomlTransaction(async () => {
+    const items = plan.entries
+      .filter((entry) => entry.status !== 'invalid' && choices[entry.item.id] === 'backup')
+      .map((entry) => entry.item)
+    const runTransaction = (webTransaction?: WebConfigTransactionOps) =>
+      runRestoreTransaction(items, {
+        snapshot: (item) => captureRestoreSnapshot(item, webTransaction),
+        apply: (item) => applyEntry(item, webTransaction),
+        rollback: (item, snapshot) => rollbackRestoreEntry(item, snapshot, webTransaction)
+      })
+
+    if (items.some((item) => item.category === 'web')) {
+      // 校验与恢复必须占用同一次 Web 队列事务，检查结束后不能释放给页面写入。
+      return runWebConfigTransaction(async (webTransaction) => {
+        await assertRestorePlanUnchanged(plan, webTransaction)
+        return runTransaction(webTransaction)
+      })
+    }
+    await assertRestorePlanUnchanged(plan)
+    return runTransaction()
   })
-}

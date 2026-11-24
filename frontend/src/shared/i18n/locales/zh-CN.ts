@@ -538,6 +538,7 @@ export default {
     installService: '安装服务',
     selectWebConfig: '选择一个 Web 配置以查看详情',
     configNotFound: 'Web 配置不存在或已被删除',
+    loadFailed: 'Web 配置读取失败，已保留上一份列表；可从配置目录的 data.json.bak 恢复',
     emptyTitle: '还没有 Web 配置',
     emptyDesc: '添加 config-server 地址，即可连接 Web 控制台',
     androidDesktopOnly: '当前仅支持管理配置；启动 Web 配置需在桌面端进行',
@@ -549,7 +550,6 @@ export default {
     deleteMsg: '确定要删除配置「{name}」吗？此操作不可撤销。',
     uninstallTitle: '卸载服务',
     uninstallMsg: '确定要卸载「{name}」的 Windows 服务吗？',
-    installMethod: '安装方式',
     runUser: '运行用户',
     runUserPlaceholder: '留空使用 LocalSystem',
     userPassword: '用户密码',
@@ -602,6 +602,7 @@ export default {
     userEmpty: '用户名不能为空',
     userInvalid: "只能包含字母、数字、{'@'}、{'.'}、-、_",
     hostEmpty: '主机不能为空',
+    hostInvalid: '主机只能是域名或 IP（字母、数字、点、连字符）',
     portInvalid: '端口需为 1–65535 的整数'
   },
   newSettings: {
@@ -754,6 +755,14 @@ export default {
     installConfirmServiceHint: '服务需在切换后重新启动。',
     installSuccess: '内核 {version} 安装成功',
     installFail: '安装失败',
+    installRollbackFail:
+      '内核安装失败且旧内核恢复失败。备份位于 {path}，请从日志中定位 resource/core-unrestored 目录，手动恢复后重试。',
+    coreBackupFailed: '备份旧内核失败，未开始安装',
+    coreBackupRollbackFailed:
+      '备份旧内核失败且回滚未完成，安装已中止。旧内核备份保留在 {path}，请手动恢复后重试。',
+    coreExtractFailed: '内核解压或写入失败，已尝试恢复旧内核',
+    coreVerifyFailed: '内核文件校验失败，已尝试恢复旧内核',
+    coreDetectFailed: '内核版本探测失败，已尝试恢复旧内核',
     downloadFailFull: '下载失败',
     checkingCore: '检测中…',
     unknown: '未知',
@@ -884,6 +893,7 @@ export default {
     reloadNow: '立即重新加载',
     noSelection: '没有选择需要恢复的条目',
     restoreFailed: '恢复备份失败',
+    restorePlanChanged: '本地数据已变化，已重新生成恢复计划，请确认后再次应用',
     planFailed: '备份与本地数据比对失败',
     statusSame: '相同',
     statusNew: '新增',

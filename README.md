@@ -8,9 +8,11 @@ LightTier 是一款专为 [EasyTier](https://github.com/EasyTier/EasyTier) 内�
 - 一键启动/停止组网：并发启动串行队列、端口冲突预检、P2P 直连通知
 - 实时运行监控：节点列表、Peer 详情、NAT 类型、上传/下载/延迟趋势图（120 点环形缓冲）
 - Web 配置管理：远程配置服务器（config-server）连接管理与服务化
-- 服务管理：nssm / 官方 CLI 双模式安装 Windows 服务，开机自启
+- 服务管理：nssm / 官方 CLI 双模式安装 Windows 服务；SCM 统一通过安全启动器再次校验内核，开机自启
 - 退出节点路由：启用后自动写入系统路由表，停止自动清除，异常退出残留自动补清
-- 内核管理：从内置兼容列表下载/安装 EasyTier 内核（v2.4.5–v2.7.1），GitHub 镜像加速源自动测速
+- 内核管理：从内置兼容列表下载/安装 EasyTier 内核（v2.4.5–v2.7.1），GitHub 镜像加速源自动测速；安装包与 core/cli 均按官方摘要校验
+- 更新完整性：桌面与 Android 更新包均以官方 Release SHA-256 为信任源，镜像只提供下载字节
+- 数据安全：配置与 Web 数据采用串行事务、原子替换、写前备份和失败回滚；内核切换保留独立恢复备份
 - 主题系统：奶油 / 暗色基础主题，内置 12 款主题（红白机、Claude、青瓷等）与用户导入主题（CSS 变量热切换，持久化）
 - 多语言：简体中文 / English
 - 其他：系统托盘、锁屏密码、启动自动运行、日志清理、检查更新、快捷菜单（刷新 / 检查更新 / 打开配置目录）
@@ -124,15 +126,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\lt-repack-all.ps1
 ├── src-tauri/               # Tauri 应用壳（命令注册、capability、gen/android）
 │   └── src/commands/        # #[tauri::command] 薄包装：process / system / update
 ├── crates/                  # Cargo workspace 成员（实现层）
-│   ├── core/                # lighttier-core：日志、端口检测、外链
+│   ├── core/                # lighttier-core：日志、端口检测、外链、内核清单与执行校验
 │   ├── desktop/             # lighttier-desktop：进程/服务、更新安装（仅桌面 target）
+│   ├── runtime/            # lighttier-runtime：运行态扫描与监控订阅服务
 │   └── android/             # lighttier-android：进程内内核 instance / rpc / vpn（仅 Android target）
 ├── android/                 # Android 打包脚本 + tauri-plugin-vpnservice 本地 vendor
 ├── scripts/                 # 双端打包与 nightly 发布脚本
 └── target/                  # Cargo workspace 构建产物（含桌面安装包 bundle/）
 ```
 
-Rust 依赖方向：`src-tauri → crates/{core,desktop,android}`；`crates/*` 之间不互相依赖。`tauri::generate_handler!` 仍在 `src-tauri` 中注册薄包装命令，跨 crate 只方法调用。
+Rust 依赖方向：`src-tauri → crates/{core,desktop,runtime,android}`；desktop/runtime 可依赖 `core`，runtime 仅在 Android target 依赖 `android`。`tauri::generate_handler!` 仍在 `src-tauri` 中注册薄包装命令，跨 crate 只方法调用。
 
 前端依赖方向单向：`app → features → entities/shared`；feature 之间禁止互相 import，`entities/shared` 不得反向依赖 `app/features`（ESLint `no-restricted-imports` 强制）。
 

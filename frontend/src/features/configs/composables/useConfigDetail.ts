@@ -14,8 +14,11 @@ export interface DetailError {
 }
 
 interface UseConfigDetailOptions {
-  readFileContent: (path: string) => Promise<string | ArrayBuffer>
-  writeFileContent: (path: string, content: string) => Promise<void>
+  readFileContent: (
+    path: string,
+    options?: { throwOnError?: boolean }
+  ) => Promise<string | ArrayBuffer>
+  writeFileWithBackup: (path: string, content: string) => Promise<void>
   isTauri: boolean
   t: (key: string) => string
 }
@@ -88,7 +91,7 @@ function getDemoConfig(name: string): EasyTierConfig {
 }
 
 export function useConfigDetail(options: UseConfigDetailOptions) {
-  const { readFileContent, writeFileContent, isTauri, t } = options
+  const { readFileContent, writeFileWithBackup, isTauri, t } = options
 
   const selectedDetail = ref<EasyTierConfig | null>(null)
   const detailState = ref<DetailState>('idle')
@@ -138,7 +141,9 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
 
     let content: string
     try {
-      content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`)) as string
+      content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
+        throwOnError: true
+      })) as string
     } catch {
       if (stale()) return
       detailState.value = 'error'
@@ -157,7 +162,7 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
       // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
       if (migrateLightTierConfig(cfg)) {
         try {
-          await writeFileContent(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+          await writeFileWithBackup(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
         } catch {
           /* 回写失败不阻断详情展示 */
         }

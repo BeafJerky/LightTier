@@ -96,14 +96,13 @@ class MainActivity : TauriActivity() {
    * missing（文件不存在）/ invalid（文件名非法）/ error。
    */
   private inner class InstallerBridge {
-    private val apkNamePattern = Regex("^[A-Za-z0-9._-]+\\.apk$")
-
     @JavascriptInterface
     fun installApk(fileName: String): String {
-      if (!apkNamePattern.matches(fileName)) return "invalid"
-      // Tauri 的 AppData 在 Android 映射为 dataDir（不是 filesDir）
-      val apk = File(File(dataDir, "resource/update"), fileName)
+      if (!ApkUpdate.isValidApkFileName(fileName)) return "invalid"
+      val updateDir = File(dataDir, "resource/update").canonicalFile
+      val apk = File(updateDir, fileName)
       if (!apk.isFile) return "missing"
+      if (apk.canonicalFile.parentFile != updateDir) return "invalid"
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
         !packageManager.canRequestPackageInstalls()
       ) {
@@ -117,27 +116,41 @@ class MainActivity : TauriActivity() {
         }
         return "permission"
       }
-      // FileProvider 只暴露 cache/files 等标准目录，先复制到 cacheDir 再共享
-      val shared = File(File(cacheDir, "update"), "update.apk")
-      try {
-        shared.parentFile?.mkdirs()
-        apk.copyTo(shared, overwrite = true)
+      // JS 只提供文件名；期望摘要必须由原生从固定官方 HTTPS 源重新获取。
+      // FileProvider 只暴露 cache/files 等标准目录，先复制到唯一暂存文件并校验完整包体。
+      val sharedDir = File(cacheDir, "update")
+      val shared = try {
+        if (!sharedDir.isDirectory && !sharedDir.mkdirs()) return "error"
+        ApkUpdate.cleanupExpiredSharedApks(sharedDir, APK_INSTALL_CLEANUP_DELAY_MS)
+        File.createTempFile("update-", ".apk", sharedDir)
       } catch (e: Exception) {
         return "error"
       }
-      val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", shared)
-      val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.android.package-archive")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-      mainHandler.post {
-        runCatching { startActivity(intent) }
-      }
-      return "started"
+      return ApkUpdate.copyVerifyAndLaunch(
+        source = apk,
+        target = shared,
+        fileName = fileName,
+        cleanupDelayMillis = APK_INSTALL_CLEANUP_DELAY_MS,
+        launch = {
+          val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", shared)
+          val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
+          // Do not post: the bridge must observe ActivityManager launch failures synchronously.
+          startActivity(intent)
+        },
+        scheduleCleanup = { delay, cleanup ->
+          // Keep the URI readable throughout the installer's asynchronous package/session flow.
+          mainHandler.postDelayed(cleanup, delay)
+        }
+      )
     }
   }
 
   companion object {
+    // Long enough for the external installer to copy/parse the APK and create its install session.
+    private const val APK_INSTALL_CLEANUP_DELAY_MS = 10 * 60 * 1000L
     private val SAFE_AREA_BOOTSTRAP = """
       (function () {
         function apply() {

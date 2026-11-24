@@ -166,11 +166,6 @@
   gap: var(--theme-space-1);
 }
 
-.nwc-svc-radio-group {
-  display: flex;
-  gap: var(--theme-space-3);
-}
-
 /* 复用 wcf-* 样式（原定义在 WebConfigForm.vue scoped 中，跨组件不生效） */
 .wcf-label {
   font-size: 12px;
@@ -178,51 +173,6 @@
   letter-spacing: 0.5px;
   color: var(--theme-text-secondary, #7a6e5e);
   text-transform: uppercase;
-}
-
-.wcf-radio {
-  position: relative;
-  display: inline-flex;
-  padding: var(--theme-space-2) var(--theme-space-4);
-  font-size: 13px;
-  color: var(--theme-text-secondary, #7a6e5e);
-  cursor: pointer;
-  background: transparent;
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: var(--theme-radius-pill, 100px);
-  transition: var(--theme-transition-interactive);
-  align-items: center;
-  gap: var(--theme-space-2);
-}
-
-.wcf-radio:hover {
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-/* 原生 radio 隐藏后，键盘聚焦时在整个胶囊上显示焦点环 */
-.wcf-radio:has(input:focus-visible) {
-  outline: 2px solid var(--theme-accent-primary, #e8a0a0);
-  outline-offset: 2px;
-}
-
-.wcf-radio.active {
-  color: var(--theme-accent-primary, #e8a0a0);
-  background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.06);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-}
-
-.wcf-radio-dot {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid var(--theme-border, #ede4db);
-  border-radius: 50%;
-  transition: var(--theme-transition-colors);
-}
-
-.wcf-radio.active .wcf-radio-dot {
-  background: var(--theme-accent-primary, #e8a0a0);
-  border-color: var(--theme-accent-primary, #e8a0a0);
-  box-shadow: inset 0 0 0 2px var(--theme-bg-card, #fff);
 }
 
 .wcf-footer {

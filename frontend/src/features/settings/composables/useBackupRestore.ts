@@ -15,6 +15,7 @@ import {
   exportBackup,
   getBackupContentCounts,
   pickBackupFile,
+  RestorePlanChangedError,
   type BackupContentCounts
 } from './useAppBackup'
 import {
@@ -462,6 +463,20 @@ export function useBackupRestore() {
         )
       }
     } catch (error) {
+      if (error instanceof RestorePlanChangedError) {
+        try {
+          const nextPlan = await createRestorePlan(plan.manifest)
+          restorePlan.value = nextPlan
+          choices.value = createDefaultChoices(nextPlan.entries)
+          phase.value = 'plan'
+          toast.warning(t('newBackup.restorePlanChanged'))
+        } catch (replanError) {
+          console.error('重新生成恢复计划失败:', replanError)
+          phase.value = 'plan'
+          toast.error(t('newBackup.restoreFailed'))
+        }
+        return
+      }
       console.error('恢复备份失败:', error)
       phase.value = 'plan'
       toast.error(t('newBackup.restoreFailed'))

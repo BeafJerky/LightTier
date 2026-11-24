@@ -28,3 +28,17 @@ export const isAndroid = (): boolean => {
   }
   return cachedAndroid
 }
+
+let cachedWindows: boolean | undefined
+
+/** 是否运行在 Windows（结果缓存）；浏览器 mock 等非 Tauri 环境返回 false */
+export const isWindows = (): boolean => {
+  if (cachedWindows === undefined) {
+    try {
+      cachedWindows = type() === 'windows'
+    } catch {
+      cachedWindows = false
+    }
+  }
+  return cachedWindows
+}

@@ -15,7 +15,10 @@ pub fn config_dir(app: &AppHandle) -> Option<PathBuf> {
 }
 
 fn core_dir(app: &AppHandle) -> Option<PathBuf> {
-    app.path().resource_dir().ok().map(|p| p.join("resource").join("core"))
+    app.path()
+        .resource_dir()
+        .ok()
+        .map(|p| p.join("resource").join("core"))
 }
 
 fn executable_name() -> &'static str {
@@ -26,13 +29,21 @@ fn executable_name() -> &'static str {
     }
 }
 
-fn cli_program(app: &AppHandle) -> String {
-    if let Some(path) = core_dir(app).map(|dir| dir.join(executable_name())) {
-        if path.exists() {
-            return path.to_string_lossy().to_string();
-        }
+/// 解析并校验内核目录下的 easytier-cli；缺失或哈希不符时拒绝执行，
+/// 不回退 PATH（避免被同名程序劫持）。
+fn resolve_cli(
+    core: Option<PathBuf>,
+) -> Result<lighttier_core::kernel_manifest::VerifiedExecutable, String> {
+    let dir = core.ok_or_else(|| "无法定位内核目录".to_string())?;
+    let path = dir.join(executable_name());
+    if !path.exists() {
+        return Err(format!("内核未安装: {}", path.display()));
     }
-    "easytier-cli".to_string()
+    lighttier_core::kernel_manifest::open_verified_exe(
+        &path,
+        lighttier_core::kernel_manifest::CoreFile::Cli,
+        &dir,
+    )
 }
 
 fn hide_console(cmd: &mut Command) {
@@ -47,7 +58,7 @@ fn hide_console(cmd: &mut Command) {
 /// 桌面扫描间隔：进程列表查询成本较高，15s 足以发现外部启动/退出。
 pub const SCAN_INTERVAL_MS: u64 = 15_000;
 
-async fn run_program(program: &str, args: &[&str], timeout: Duration) -> Result<String, String> {
+async fn run_program(program: &Path, args: &[&str], timeout: Duration) -> Result<String, String> {
     let mut cmd = Command::new(program);
     cmd.args(args)
         .stdout(std::process::Stdio::piped())
@@ -57,14 +68,15 @@ async fn run_program(program: &str, args: &[&str], timeout: Duration) -> Result<
 
     let output = tokio::time::timeout(timeout, cmd.output())
         .await
-        .map_err(|_| format!("{program} 执行超时"))?
-        .map_err(|e| format!("{program} 启动失败: {e}"))?;
+        .map_err(|_| format!("{} 执行超时", program.display()))?
+        .map_err(|e| format!("{} 启动失败: {e}", program.display()))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
-            "{program} 执行失败: {}",
+            "{} 执行失败: {}",
+            program.display(),
             stderr.trim().to_string() + stdout.trim()
         ));
     }
@@ -79,8 +91,14 @@ async fn scan_process_output(timeout: Duration) -> Result<String, String> {
         Select-Object @{N='commandLine';E={$_.CommandLine}}, @{N='pid';E={$_.ProcessId}} | \
         ConvertTo-Json -Compress";
     run_program(
-        "powershell",
-        &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        Path::new("powershell"),
+        &[
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
         timeout,
     )
     .await
@@ -88,7 +106,7 @@ async fn scan_process_output(timeout: Duration) -> Result<String, String> {
 
 #[cfg(not(windows))]
 async fn scan_process_output(timeout: Duration) -> Result<String, String> {
-    run_program("ps", &["-eo", "pid=,args="], timeout).await
+    run_program(Path::new("ps"), &["-eo", "pid=,args="], timeout).await
 }
 
 /// 扫描运行中的内核进程，只保留当前配置目录内的实例。
@@ -139,11 +157,7 @@ fn parse_scan_output(raw: &str, catalog: &[String]) -> Vec<RunningInstance> {
         .collect()
 }
 
-fn build_instance(
-    command_line: &str,
-    pid: u32,
-    catalog: &[String],
-) -> Option<RunningInstance> {
+fn build_instance(command_line: &str, pid: u32, catalog: &[String]) -> Option<RunningInstance> {
     let config_file_name = catalog
         .iter()
         .find(|name| command_line.contains(&format!("{name}.toml")))
@@ -181,20 +195,21 @@ pub async fn query_node_peer(
         .clone()
         .unwrap_or_else(|| "127.0.0.1:15888".to_string())
         .replace("0.0.0.0", "127.0.0.1");
-    let cli = cli_program(app);
+    let cli = resolve_cli(core_dir(app))?;
 
     let node_raw = run_program(
-        &cli,
+        cli.path(),
         &["-p", &portal, "--output", "json", "node"],
         Duration::from_secs(10),
     )
     .await?;
     let peer_raw = run_program(
-        &cli,
+        cli.path(),
         &["-p", &portal, "--output", "json", "peer"],
         Duration::from_secs(10),
     )
     .await?;
+    drop(cli);
 
     let node: Value =
         serde_json::from_str(&node_raw).map_err(|e| format!("节点数据解析失败: {e}"))?;
@@ -213,4 +228,36 @@ pub fn config_file_path(app: &AppHandle, file_name: &str) -> Option<PathBuf> {
         .and_then(|n| n.to_str())
         .unwrap_or(file_name);
     config_dir(app).map(|dir| dir.join(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("lt-runtime-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn rejects_missing_core_dir() {
+        assert!(resolve_cli(None).is_err());
+    }
+
+    #[test]
+    fn rejects_absent_cli() {
+        let dir = temp_dir("cli-absent");
+        assert!(resolve_cli(Some(dir.clone())).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejects_unverified_cli() {
+        let dir = temp_dir("cli-bad");
+        std::fs::write(dir.join(executable_name()), b"not the kernel").unwrap();
+        assert!(resolve_cli(Some(dir.clone())).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -54,6 +54,7 @@ pub fn run() {
             commands::sysops::sysops_cli_run,
             commands::sysops::sysops_ensure_executable,
             commands::sysops::sysops_verify_core_package,
+            commands::sysops::sysops_verify_core_files,
             commands::update::launch_update_installer,
             commands::runtime::runtime_get_snapshot,
             commands::runtime::runtime_set_catalog,

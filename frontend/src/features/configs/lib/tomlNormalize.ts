@@ -5,6 +5,39 @@
  * 展示/解析场景可合并默认标量，保存场景只剔空值，避免配置文件膨胀。
  */
 import defaultData from '@/entities/config/defaultData'
+import * as toml from 'smol-toml'
+
+export const isTomlSemanticEqual = (left: unknown, right: unknown): boolean => {
+  if (Object.is(left, right)) return true
+  if (left instanceof Date || right instanceof Date) {
+    return left instanceof Date && right instanceof Date && left.getTime() === right.getTime()
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => isTomlSemanticEqual(value, right[index]))
+    )
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord).sort()
+  const rightKeys = Object.keys(rightRecord).sort()
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] && isTomlSemanticEqual(leftRecord[key], rightRecord[key])
+    )
+  )
+}
+
+export const serializeTomlPreservingUnchanged = (
+  raw: string,
+  config: Record<string, any>
+): string => (isTomlSemanticEqual(toml.parse(raw), config) ? raw : toml.stringify(config))
 
 const isEmptyValue = (value: unknown): boolean => {
   if (value === undefined || value === null || value === '') return true

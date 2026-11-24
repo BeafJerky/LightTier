@@ -14,6 +14,10 @@ import { isValidConfigName } from '@/shared/lib/configNameUtil'
 import { normalizeIslandSettings, type IslandSettings } from '@/shared/lib/island/settings'
 import { sha256Hex } from '@/shared/platform/lockUtil'
 import { validateToml } from '@/shared/lib/tomlValidationUtil'
+import {
+  isServiceConfigStorageName,
+  SERVICE_CONFIG_PREFIX
+} from '@/shared/platform/serviceInstallRecord'
 
 export const BACKUP_APP = 'lighttier'
 export const BACKUP_FORMAT_VERSION = 1
@@ -87,7 +91,6 @@ const PREFERENCE_BOOLEAN_LOCAL_KEYS = new Set([
   'settings.minimizeOnStart',
   'settings.onboardingDone'
 ])
-const SERVICE_CONFIG_PREFIX = 'service-config:'
 
 const CATEGORY_ORDER = new Map(BACKUP_CATEGORIES.map((category, index) => [category, index]))
 
@@ -488,7 +491,7 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
     const entries = Object.entries(rawServiceConfigs)
     if (entries.length > MAX_SERVICE_CONFIGS) return null
     for (const [name, rawConfig] of entries) {
-      if (!isValidConfigName(name)) return null
+      if (!isServiceConfigStorageName(name)) return null
       if (!isBoundedString(rawConfig, MAX_STRING_SETTING_LENGTH)) return null
       let parsedConfig: unknown
       try {
@@ -808,7 +811,7 @@ export interface RestoreTransactionResult {
 }
 
 /**
- * 恢复事务：先完成全部快照，再逐项应用；任一条失败则逆序回滚已应用项。
+ * 恢复事务：先完成全部快照，再逐项应用；任一条失败则逆序回滚当前项与已应用项。
  *
  * 回滚本身失败时保留部分写入并如实返回 rolledBack=false，交由界面提示用户
  * 使用事先导出的备份人工恢复，避免误报“已回滚”。
@@ -824,9 +827,10 @@ export const runRestoreTransaction = async <T extends { id: string }>(
 
   const appliedSnapshots: Array<{ item: T; snapshot: unknown }> = []
   for (const entry of snapshots) {
+    // apply 可能已部分写入当前项，因此开始尝试时就纳入逆序回滚范围
+    appliedSnapshots.push(entry)
     try {
       await ops.apply(entry.item)
-      appliedSnapshots.push(entry)
     } catch (error) {
       console.error('恢复备份条目失败:', entry.item.id, error)
       let rolledBack = true
