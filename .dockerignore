@@ -1,0 +1,9 @@
+*
+!crates
+!crates/agent
+!crates/agent/**
+!deploy
+!deploy/docker
+!deploy/docker/Dockerfile
+crates/agent/target
+crates/agent/.cargo-home

@@ -1,0 +1,27 @@
+services:
+  lighttier:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: lighttier-agent:dev
+    container_name: lighttier-agent-dev
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./data:/data
+    environment:
+      - LT_BIND=0.0.0.0:17800
+      - LT_LOG=info
+    tmpfs: [/tmp]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/lighttier-agent", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

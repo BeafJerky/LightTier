@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.11.0 (2026-11-25)
+
+> 新增独立 Linux/fnOS 服务端 lighttier-agent（M1）与 Docker 部署：浏览器可访问健康检查、元信息与鉴权接口，无前端包时提供诊断页；桌面与移动端行为不变。
+
+- 服务端（M1）
+  - 新增独立 Cargo 工程 `crates/agent`（空 `[workspace]`，不参与根 workspace 构建），axum 0.8 单进程服务，默认监听 `0.0.0.0:17800`、数据目录 `/data`，可用 `LT_BIND` / `LT_DATA_DIR` 覆盖
+  - 单管理员鉴权：Argon2id 密码（不少于 10 位）；8 位初始化令牌只写入日志与 `state/setup-token`；5 次/60 秒按 IP 限流（先占配额再校验）；会话令牌仅以 SHA-256 落盘；Cookie 为 HttpOnly + SameSite=Strict，30 天绝对 / 7 天滑动过期，`LT_COOKIE_SECURE=1` 时加 Secure
+  - 非 GET 请求强制同源校验：Origin 的 authority 与 Host 不区分 ASCII 大小写比较，不做默认端口归一；未配置反向代理时跨源请求返回 403 `permission_denied`
+  - 接口：`/api/v1/healthz`、`/readyz`、`/meta`、`/auth/setup`、`/auth/login`、`/auth/logout`、`/auth/session`、`/auth/password`；未知 `/api/v1/*` 统一返回 `{"error":{"code","message"}}`，无前端包时 `/` 提供中英双语诊断页
+  - CLI：`serve`、`version`、`healthcheck`、`print-setup-token`、`reset-password`
+- 部署
+  - `deploy/docker`：多阶段 Dockerfile（rust 1.90 构建 / debian-slim 运行）、host 网络 + 只读根文件系统 + `cap_drop: ALL` + NET_ADMIN/NET_RAW + `/dev/net/tun` 的 compose、冒烟脚本与含反向代理 Origin 说明的 README
+- 边界
+  - 本次仅 M1：配置/实例 CRUD、监控、内核包、主题/路由与前端 agent 模式留给后续里程碑，Web 管理界面尚不可用
+  - Windows 与 Android 代码零改动（仅同步版本号）；agent 测试全部在 WSL/Docker Linux 环境执行
+- 验证
+  - agent 27 项测试通过（含并发登录限流、会话持久化与过期、原子写并发、同源 403、未知 API 404），`cargo fmt -- --check` 干净
+  - WSL 冒烟两轮通过（初始化 → 登录），容器内 health / meta / session 与 404 契约实测，浏览器诊断页确认
+  - 桌面与 Android 基线复验：`pnpm ts:check`、`pnpm test`（62 文件 / 578 项）、`cargo check --workspace` 通过
+
 ## 2.10.5 (2026-11-25)
 
 > 第二轮审查与两轮独立复审修复：收紧可执行文件与更新包信任边界，补强配置、内核、服务和备份恢复的数据完整性及并发安全。

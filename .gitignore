@@ -74,3 +74,4 @@ key.properties
 
 # ----- lithe 任务运行器本地目录（工具生成，不入库）-----
 .lithe/
+deploy/docker/data/
