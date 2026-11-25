@@ -16,11 +16,43 @@ const ORIGIN: &str = "http://localhost:17800";
 async fn app(dir: &std::path::Path) -> axum::Router {
     let cfg = AgentConfig::from_pairs(vec![
         ("LT_DATA_DIR".to_string(), dir.display().to_string()),
+        (
+            "LT_WEB_DIR".to_string(),
+            dir.join("web").display().to_string(),
+        ),
         ("LT_BIND".to_string(), "127.0.0.1:17800".to_string()),
     ])
     .unwrap();
     let auth = AuthStore::load(&cfg).await.unwrap();
-    build_router(Arc::new(AppState::new(cfg, auth)))
+    let configs = Arc::new(lighttier_agent::configs::Configs::new(&cfg.data_dir));
+    let audit = Arc::new(lighttier_agent::audit::Audit::new(&cfg.data_dir));
+    let settings = Arc::new(
+        lighttier_agent::settings::SettingsStore::load(&cfg.data_dir)
+            .await
+            .unwrap(),
+    );
+    let supervisor = Arc::new(
+        lighttier_agent::supervisor::Supervisor::load(
+            &cfg.data_dir,
+            Some(dir.join("core")),
+            configs.clone(),
+            settings.clone(),
+        )
+        .await
+        .unwrap(),
+    );
+    build_router(Arc::new(AppState::new(
+        cfg,
+        auth,
+        configs,
+        audit,
+        settings,
+        supervisor,
+        Arc::new(lighttier_agent::cli::CliQuery::new(
+            dir,
+            Some(dir.join("core")),
+        )),
+    )))
 }
 
 fn peer() -> ConnectInfo<SocketAddr> {

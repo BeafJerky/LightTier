@@ -34,4 +34,10 @@ else
 fi
 
 echo "session: $(curl -fsS -b "$COOKIE" "$BASE/api/v1/auth/session")"
-echo "OK: open $BASE in a browser (M1 diagnostic page)."
+configs="$(curl -fsS -b "$COOKIE" "$BASE/api/v1/configs")"
+echo "configs:   $configs"
+instances="$(curl -fsS -b "$COOKIE" "$BASE/api/v1/instances")"
+echo "instances: $instances"
+settings="$(curl -fsS -b "$COOKIE" "$BASE/api/v1/settings")"
+echo "settings:  $settings"
+echo "OK: open $BASE in a browser (M1 diagnostic page; M2 API is live)."

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.12.0 (2026-11-25)
+
+### 新增
+
+- `lighttier-agent`（Linux/fnOS）M2：TOML 配置增删改查（哈希乐观锁、导入导出、重命名）、实例启停/重启、node/peers/monitor 查询（1 秒缓存、失败返回 stale 数据）、设置读写（自动拉起、no-Tun、日志级别）、端口冲突检查与 `core_missing` 诊断、审计日志。
+- Docker 部署：内核版本目录放置说明、TUN 可用性与降级、自动拉起、备份与 curl 示例。
+
+### 边界
+
+- 内核包安装、主题、路由与前端 agent 模式仍属后续里程碑；桌面与 Android 代码无改动。
+
 ## 2.11.0 (2026-11-25)
 
 > 新增独立 Linux/fnOS 服务端 lighttier-agent（M1）与 Docker 部署：浏览器可访问健康检查、元信息与鉴权接口，无前端包时提供诊断页；桌面与移动端行为不变。

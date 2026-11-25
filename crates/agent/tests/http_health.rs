@@ -18,7 +18,32 @@ async fn test_state(dir: &std::path::Path) -> Arc<AppState> {
     ])
     .unwrap();
     let auth = lighttier_agent::auth::AuthStore::load(&cfg).await.unwrap();
-    Arc::new(AppState::new(cfg, auth))
+    let configs = Arc::new(lighttier_agent::configs::Configs::new(&cfg.data_dir));
+    let audit = Arc::new(lighttier_agent::audit::Audit::new(&cfg.data_dir));
+    let settings = Arc::new(
+        lighttier_agent::settings::SettingsStore::load(&cfg.data_dir)
+            .await
+            .unwrap(),
+    );
+    // No core is installed and no instance is started here, so a missing core
+    // directory is fine; the supervisor only needs the path for later starts.
+    let supervisor = Arc::new(
+        lighttier_agent::supervisor::Supervisor::load(
+            &cfg.data_dir,
+            Some(dir.join("core")),
+            configs.clone(),
+            settings.clone(),
+        )
+        .await
+        .unwrap(),
+    );
+    let cli = Arc::new(lighttier_agent::cli::CliQuery::new(
+        &cfg.data_dir,
+        Some(dir.join("core")),
+    ));
+    Arc::new(AppState::new(
+        cfg, auth, configs, audit, settings, supervisor, cli,
+    ))
 }
 
 #[tokio::test]
