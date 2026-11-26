@@ -284,3 +284,188 @@ async fn node_peers_and_monitor_roundtrip() {
         "instance_not_running"
     );
 }
+
+#[tokio::test]
+async fn health_requires_auth_and_samples_running_instances() {
+    let dir = tempfile::tempdir().unwrap();
+    fake_core(dir.path());
+    let app = test_app(dir.path()).await;
+    let cookie = session(&app, dir.path()).await;
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request("GET", "/api/v1/instances/health", None, None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/v1/instances/health",
+            None,
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let empty = json_body(res).await;
+    assert!(empty["revision"].as_u64().unwrap() >= 1);
+    assert!(empty["sampledAt"].as_i64().unwrap() > 0);
+    assert_eq!(empty["instances"].as_array().map(Vec::len), Some(0));
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/configs/home",
+            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15921\"\nhostname = \"nas\"\n" })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/v1/instances/home/start",
+            Some(serde_json::json!({})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 与桌面 quality_from_peers 用例同数据：Local 排除、空串跳过、字符串指标求均值。
+    write_exec(
+        &dir.path().join("core/v9.9.9/easytier-cli"),
+        "#!/bin/sh\ncase \"$5\" in\n  node) echo '{\"hostname\":\"nas\"}' ;;\n  peer) echo '[{\"cost\":\"Local\",\"lat_ms\":\"1\",\"loss_rate\":\"0\"},{\"cost\":\"p2p\",\"lat_ms\":\"20\",\"loss_rate\":\"1.5\"},{\"cost\":\"relay\",\"lat_ms\":\"\",\"loss_rate\":\"0.5\"},{\"cost\":\"relay\",\"lat_ms\":\"40\",\"loss_rate\":\"\"}]' ;;\n  *) exit 2 ;;\nesac\n",
+    );
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/v1/instances/health",
+            None,
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let snapshot = json_body(res).await;
+    assert!(snapshot["revision"].as_u64().unwrap() > empty["revision"].as_u64().unwrap());
+    let samples = snapshot["instances"].as_array().unwrap();
+    assert_eq!(samples.len(), 1);
+    assert_eq!(samples[0]["configFileName"], "home");
+    assert_eq!(samples[0]["ok"], true);
+    assert_eq!(samples[0]["avgLatencyMs"], 30.0);
+    assert_eq!(samples[0]["lossRate"], 1.0);
+    assert_eq!(samples[0]["peerCount"], 3);
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/v1/instances/home/stop",
+            Some(serde_json::json!({})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/v1/instances/health",
+            None,
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let stopped = json_body(res).await;
+    assert_eq!(stopped["instances"].as_array().map(Vec::len), Some(0));
+}
+
+#[tokio::test]
+async fn health_marks_failed_cli_query_without_metrics() {
+    let dir = tempfile::tempdir().unwrap();
+    fake_core(dir.path());
+    write_exec(
+        &dir.path().join("core/v9.9.9/easytier-cli"),
+        "#!/bin/sh\nexit 3\n",
+    );
+    let app = test_app(dir.path()).await;
+    let cookie = session(&app, dir.path()).await;
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/configs/office",
+            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15922\"\nhostname = \"office\"\n" })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/v1/instances/office/start",
+            Some(serde_json::json!({})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/v1/instances/health",
+            None,
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    // 单实例 CLI 失败不能把整个请求打成 5xx。
+    assert_eq!(res.status(), StatusCode::OK);
+    let snapshot = json_body(res).await;
+    let samples = snapshot["instances"].as_array().unwrap();
+    assert_eq!(samples.len(), 1);
+    assert_eq!(samples[0]["configFileName"], "office");
+    assert_eq!(samples[0]["ok"], false);
+    assert_eq!(samples[0]["peerCount"], 0);
+    assert!(samples[0].get("avgLatencyMs").is_none());
+    assert!(samples[0].get("lossRate").is_none());
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/v1/instances/office/stop",
+            Some(serde_json::json!({})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}

@@ -142,6 +142,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(settings_routes::get).put(settings_routes::put),
         )
         .route("/api/v1/instances", get(instance_routes::list))
+        .route("/api/v1/instances/health", get(instance_routes::health))
         .route("/api/v1/instances/{id}/start", post(instance_routes::start))
         .route("/api/v1/instances/{id}/stop", post(instance_routes::stop))
         .route(

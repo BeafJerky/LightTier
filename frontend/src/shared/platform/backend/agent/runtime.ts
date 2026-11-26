@@ -6,12 +6,18 @@
  *   （catalog 为配置目录中的全部合法 id，含已停止配置）
  * - `GET /api/v1/instances/{id}/monitor` → `{ node: {stale,data,error?}, peers: {...} }`
  *   两侧已是服务端封装的监控值（采样失败/超时返回上一份数据 + stale）。
+ * - `GET /api/v1/instances/health` → `RuntimeHealthSnapshot` 同形（灵动岛按需采样）。
  *
  * 适配器把 HTTP 形状转成 `runtimeApi.RuntimeSnapshot` 同形对象，页面侧的类型与
  * 转换函数（`toRunningItem` / `toRuntimeInstance`）保持不变；轮询由调用方按 3s
  * 节奏驱动（服务端另有 1s 采样缓存兜底）。
  */
-import type { RuntimeInstance, RuntimeSnapshot } from '../../runtimeApi'
+import type {
+  RuntimeHealthSample,
+  RuntimeHealthSnapshot,
+  RuntimeInstance,
+  RuntimeSnapshot
+} from '../../runtimeApi'
 import { isApiError, request } from '../http'
 import type { Backend, MonitorValue } from '../types'
 
@@ -38,6 +44,20 @@ interface MonitorSideWire {
 interface MonitorWire {
   node?: MonitorSideWire
   peers?: MonitorSideWire
+}
+
+interface HealthSampleWire {
+  configFileName?: string
+  ok?: boolean
+  avgLatencyMs?: number
+  lossRate?: number
+  peerCount?: number
+}
+
+interface HealthWire {
+  revision?: number
+  sampledAt?: number
+  instances?: HealthSampleWire[]
 }
 
 /** 客户端单调递增版本号：每次成功拉取快照 +1，页面据此判定是否为新数据 */
@@ -93,6 +113,19 @@ const fallbackSide = (
   return previous ? { ...previous, stale: true, error } : { ...EMPTY_SIDE, stale: true, error }
 }
 
+const finiteOr = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback
+
+const optionalFinite = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+
+const isHealthSample = (
+  value: HealthSampleWire | null | undefined
+): value is HealthSampleWire & { configFileName: string } =>
+  typeof value?.configFileName === 'string' && value.configFileName.length > 0
+
+const EMPTY_HEALTH: RuntimeHealthSnapshot = { revision: 0, sampledAt: 0, instances: [] }
+
 export const agentRuntime: Backend['runtime'] = {
   instances: async () => {
     const payload = await request<InstanceListWire>('/api/v1/instances')
@@ -128,6 +161,31 @@ export const agentRuntime: Backend['runtime'] = {
         node: fallbackSide(lastNodeValues, id, message),
         peers: fallbackSide(lastPeerValues, id, message)
       }
+    }
+  },
+
+  health: async () => {
+    try {
+      const payload = await request<HealthWire>('/api/v1/instances/health')
+      const wire = payload ?? {}
+      const instances: RuntimeHealthSample[] = (Array.isArray(wire.instances) ? wire.instances : [])
+        .filter(isHealthSample)
+        .map((item) => ({
+          configFileName: item.configFileName,
+          ok: item.ok === true,
+          avgLatencyMs: optionalFinite(item.avgLatencyMs),
+          lossRate: optionalFinite(item.lossRate),
+          peerCount: finiteOr(item.peerCount, 0)
+        }))
+      return {
+        revision: finiteOr(wire.revision, 0),
+        sampledAt: finiteOr(wire.sampledAt, 0),
+        instances
+      }
+    } catch (error) {
+      // 401 交给全局会话失效流程；其余失败返回空快照，调用方静默跳过本轮
+      if (isApiError(error) && error.status === 401) throw error
+      return { ...EMPTY_HEALTH }
     }
   }
 }

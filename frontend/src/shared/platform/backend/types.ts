@@ -5,7 +5,7 @@
  * agent 模式返回 HTTP 适配器。字段口径以本文件为准，后续任务按此实现，
  * 不在适配器内部发明新形状。
  */
-import type { RuntimeSnapshot } from '../runtimeApi'
+import type { RuntimeHealthSnapshot, RuntimeSnapshot } from '../runtimeApi'
 
 export type BackendKind = 'native' | 'agent'
 
@@ -127,6 +127,7 @@ export interface Backend {
   runtime: {
     instances(): Promise<RuntimeSnapshot>
     monitor(id: string): Promise<{ node: MonitorValue; peers: MonitorValue }>
+    health(): Promise<RuntimeHealthSnapshot>
   }
   logs: {
     list(): Promise<LogList>

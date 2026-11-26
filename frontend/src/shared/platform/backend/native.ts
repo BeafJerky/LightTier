@@ -87,7 +87,9 @@ export const createNativeBackend = (): Backend => ({
       // 原生后端本身就是运行态来源：原样返回同形快照，不做二次转换
       return getRuntimeSnapshot()
     },
-    monitor: () => unsupported('runtime.monitor')
+    monitor: () => unsupported('runtime.monitor'),
+    // 桌面健康采样走事件订阅（subscribeHealth），runtimeApi 无一次性快照命令
+    health: async () => ({ revision: 0, sampledAt: 0, instances: [] })
   },
   logs: {
     list: () => unsupported('logs.list'),

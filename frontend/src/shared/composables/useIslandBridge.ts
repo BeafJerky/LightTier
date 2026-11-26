@@ -10,6 +10,7 @@ import { pickLatestManagerRelease } from '@/shared/lib/releaseUtil'
 import { collectQualitySamples } from '@/shared/lib/island/health'
 import { compareVersions, getAppVersion } from '@/shared/platform/sysUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
+import { backendMode, backendRuntime } from '@/shared/platform/backend'
 import {
   onHealthSnapshot,
   runtimeAvailable,
@@ -50,6 +51,8 @@ export function useIslandBridge() {
   let healthUnlisten: UnlistenFn | null = null
   let healthKey = ''
   let healthSyncChain: Promise<void> = Promise.resolve()
+  let agentHealthTimer = 0
+  let agentHealthKey = ''
 
   const sync = useRunningListSync({
     onError: () => {
@@ -97,8 +100,61 @@ export function useIslandBridge() {
     }
   }
 
+  const agentHealthWanted = (): boolean =>
+    backendMode() === 'agent' &&
+    island.settings.enabled &&
+    island.settings.types.quality &&
+    easy.runningList.length > 0
+
+  const stopAgentHealth = (): void => {
+    agentHealthKey = ''
+    window.clearTimeout(agentHealthTimer)
+    agentHealthTimer = 0
+  }
+
+  const agentHealthTick = async (key: string): Promise<void> => {
+    if (disposed || agentHealthKey !== key) return
+    if (!agentHealthWanted() || document.visibilityState !== 'visible') {
+      stopAgentHealth()
+      return
+    }
+    try {
+      const snapshot = await backendRuntime().health()
+      // 实例集合已变化或已卸载：旧请求的结果不再上报，也不再续期
+      if (disposed || agentHealthKey !== key) return
+      for (const { name, sample } of collectQualitySamples(snapshot.instances)) {
+        island.reportQuality(name, sample)
+      }
+    } catch {
+      // 采样失败静默跳过本轮，按原节奏等下一轮，不做连续重试
+    }
+    if (disposed || agentHealthKey !== key) return
+    if (!agentHealthWanted() || document.visibilityState !== 'visible') {
+      stopAgentHealth()
+      return
+    }
+    agentHealthTimer = window.setTimeout(() => {
+      agentHealthTimer = 0
+      void agentHealthTick(key)
+    }, HEALTH_INTERVAL_MS)
+  }
+
+  const syncAgentHealth = (): void => {
+    if (backendMode() !== 'agent' || disposed) return
+    if (!agentHealthWanted() || document.visibilityState !== 'visible') {
+      stopAgentHealth()
+      return
+    }
+    const key = names().join('|')
+    if (key === agentHealthKey) return
+    stopAgentHealth()
+    agentHealthKey = key
+    void agentHealthTick(key)
+  }
+
   const scheduleHealthSync = (): void => {
     healthSyncChain = healthSyncChain.then(syncHealth).catch(() => {})
+    syncAgentHealth()
   }
 
   if (runtimeAvailable()) {
@@ -231,7 +287,11 @@ export function useIslandBridge() {
   }
 
   const onVisibility = () => {
-    if (document.hidden) return
+    if (document.hidden) {
+      stopAgentHealth()
+      return
+    }
+    syncAgentHealth()
     if (initializing) {
       window.clearTimeout(retryTimer)
       retryTimer = 0
@@ -248,6 +308,7 @@ export function useIslandBridge() {
   onScopeDispose(() => {
     disposed = true
     window.clearTimeout(retryTimer)
+    stopAgentHealth()
     document.removeEventListener('visibilitychange', onVisibility)
     healthUnlisten?.()
     healthUnlisten = null

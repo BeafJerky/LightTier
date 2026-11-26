@@ -191,6 +191,78 @@ describe('agentRuntime', () => {
     expect((error as ApiError).status).toBe(401)
     expect(unauthorized).toHaveBeenCalledTimes(1)
   })
+
+  it('health：GET /instances/health，投影同形样本并丢弃非法条目', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        revision: 7,
+        sampledAt: 1_730_000_000,
+        instances: [
+          { configFileName: 'home', ok: true, avgLatencyMs: 30, lossRate: 1, peerCount: 3 },
+          { configFileName: 'office', ok: false, peerCount: 0 },
+          // 缺 configFileName 的条目直接丢弃
+          { ok: true, peerCount: 1 },
+          // 非法指标省略 / 归零，而不是把脏值传给灵动岛
+          { configFileName: 'bad', ok: true, avgLatencyMs: 'x', peerCount: null }
+        ]
+      })
+    )
+
+    const snapshot = await agentRuntime.health()
+
+    const [url, init] = lastCall()
+    expect(url).toBe('/api/v1/instances/health')
+    expect(init.method).toBe('GET')
+    expect(snapshot.revision).toBe(7)
+    expect(snapshot.sampledAt).toBe(1_730_000_000)
+    expect(snapshot.instances).toEqual([
+      { configFileName: 'home', ok: true, avgLatencyMs: 30, lossRate: 1, peerCount: 3 },
+      {
+        configFileName: 'office',
+        ok: false,
+        avgLatencyMs: undefined,
+        lossRate: undefined,
+        peerCount: 0
+      },
+      {
+        configFileName: 'bad',
+        ok: true,
+        avgLatencyMs: undefined,
+        lossRate: undefined,
+        peerCount: 0
+      }
+    ])
+  })
+
+  it('health：空响应给出空快照', async () => {
+    fetchMock.mockResolvedValue(new Response('', { status: 200 }))
+
+    const snapshot = await agentRuntime.health()
+
+    expect(snapshot).toEqual({ revision: 0, sampledAt: 0, instances: [] })
+  })
+
+  it('health：非 401 失败返回空快照而不是抛错', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('network down'))
+
+    const snapshot = await agentRuntime.health()
+
+    expect(snapshot).toEqual({ revision: 0, sampledAt: 0, instances: [] })
+  })
+
+  it('health：401 原样抛出并触发全局会话失效', async () => {
+    const unauthorized = vi.fn()
+    disposeUnauthorized = onUnauthorized(unauthorized)
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { error: { code: 'auth_required', message: 'login required' } })
+    )
+
+    const error = await agentRuntime.health().catch((e: unknown) => e)
+
+    expect(isApiError(error)).toBe(true)
+    expect((error as ApiError).status).toBe(401)
+    expect(unauthorized).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('agentRunner', () => {
