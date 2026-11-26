@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RestorePlan } from '@/features/settings/lib/backupUtil'
+import { GITHUB_EASYTIER } from '@/shared/constants/easytier'
 
 const mocks = vi.hoisted(() => {
   const files = new Map<string, string>()
@@ -49,6 +50,44 @@ const mocks = vi.hoisted(() => {
   }
   return state
 })
+
+// agent 门面桩：mode 由各用例切换，native 用例保持默认值
+const agent = vi.hoisted(() => ({
+  mode: 'native' as 'native' | 'agent',
+  webSupported: true,
+  server: {
+    autoStartLastRunning: false,
+    noTun: false,
+    logLevel: 'info',
+    coreMirror: ''
+  },
+  mirrorLocked: false,
+  configs: {
+    list: vi.fn(),
+    read: vi.fn(),
+    write: vi.fn(),
+    remove: vi.fn()
+  },
+  settings: {
+    get: vi.fn(),
+    put: vi.fn()
+  },
+  packages: { list: vi.fn() },
+  web: {
+    list: vi.fn(),
+    replace: vi.fn()
+  }
+}))
+
+vi.mock('@/shared/platform/backend', () => ({
+  backendMode: () => agent.mode,
+  backendConfigs: () => agent.configs,
+  backendSettings: () => agent.settings,
+  backendPackages: () => agent.packages,
+  backendWeb: () => agent.web,
+  backendCapabilities: () => ({ web: agent.webSupported }),
+  isApiError: () => false
+}))
 
 vi.mock('@/shared/platform/mockData', () => ({
   useMockData: () => ({
@@ -132,58 +171,85 @@ const webValue = (name: string, port = 22020): string =>
     }
   ])
 
-describe('useAppBackup（快照与原子恢复）', () => {
-  beforeEach(() => {
-    mocks.files.clear()
-    mocks.tomlFiles.length = 0
-    mocks.storage.clear()
-    mocks.failWriteSuffix = ''
-    mocks.failReadPath = ''
-    mocks.failReadWeb = false
-    mocks.failListToml = false
-    mocks.listToml.mockReset().mockImplementation(async (options?: { throwOnError?: boolean }) => {
-      if (mocks.failListToml && options?.throwOnError) throw new Error('list failed')
-      return [...mocks.tomlFiles]
-    })
-    mocks.islandState.settings = {
-      enabled: true,
-      idle: 'count',
-      types: { error: true, update: true, quality: true, feedback: true },
-      silent: false,
-      motion: 'system',
-      face: true
-    }
-    vi.clearAllMocks()
-    mocks.fileWrite.mockReset().mockImplementation(async (path: string, value: string) => {
-      if (mocks.failWriteSuffix && path.endsWith(mocks.failWriteSuffix)) {
-        throw new Error('write failed')
-      }
-      mocks.files.set(path, value)
-    })
-    mocks.webRead.mockReset().mockImplementation(async () => {
-      if (mocks.failReadWeb) throw new Error('web read failed')
-      const value = mocks.files.get('config/data.json')
-      return value ? JSON.parse(value) : []
-    })
-    mocks.webWrite.mockReset().mockImplementation(async (list: unknown[]) => {
-      mocks.files.set('config/data.json', JSON.stringify(list))
-    })
-    mocks.deleteFile.mockReset().mockImplementation(async (path: string) => {
-      mocks.files.delete(path)
-    })
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: {
-        getItem: (key: string) => mocks.storage.get(key) ?? null,
-        setItem: (key: string, value: string) => mocks.storage.set(key, value),
-        removeItem: (key: string) => mocks.storage.delete(key),
-        key: (index: number) => Array.from(mocks.storage.keys())[index] ?? null,
-        get length() {
-          return mocks.storage.size
-        }
-      }
-    })
+const resetBackupEnv = (): void => {
+  mocks.files.clear()
+  mocks.tomlFiles.length = 0
+  mocks.storage.clear()
+  mocks.failWriteSuffix = ''
+  mocks.failReadPath = ''
+  mocks.failReadWeb = false
+  mocks.failListToml = false
+  mocks.listToml.mockReset().mockImplementation(async (options?: { throwOnError?: boolean }) => {
+    if (mocks.failListToml && options?.throwOnError) throw new Error('list failed')
+    return [...mocks.tomlFiles]
   })
+  mocks.islandState.settings = {
+    enabled: true,
+    idle: 'count',
+    types: { error: true, update: true, quality: true, feedback: true },
+    silent: false,
+    motion: 'system',
+    face: true
+  }
+  vi.clearAllMocks()
+  mocks.fileWrite.mockReset().mockImplementation(async (path: string, value: string) => {
+    if (mocks.failWriteSuffix && path.endsWith(mocks.failWriteSuffix)) {
+      throw new Error('write failed')
+    }
+    mocks.files.set(path, value)
+  })
+  mocks.webRead.mockReset().mockImplementation(async () => {
+    if (mocks.failReadWeb) throw new Error('web read failed')
+    const value = mocks.files.get('config/data.json')
+    return value ? JSON.parse(value) : []
+  })
+  mocks.webWrite.mockReset().mockImplementation(async (list: unknown[]) => {
+    mocks.files.set('config/data.json', JSON.stringify(list))
+  })
+  mocks.deleteFile.mockReset().mockImplementation(async (path: string) => {
+    mocks.files.delete(path)
+  })
+  agent.mode = 'native'
+  agent.webSupported = true
+  agent.mirrorLocked = false
+  agent.server = {
+    autoStartLastRunning: false,
+    noTun: false,
+    logLevel: 'info',
+    coreMirror: ''
+  }
+  agent.settings.get.mockReset().mockImplementation(async () => ({ ...agent.server }))
+  agent.settings.put.mockReset().mockImplementation(async (patch: Partial<typeof agent.server>) => {
+    Object.assign(agent.server, patch)
+  })
+  agent.packages.list.mockReset().mockImplementation(async () => ({
+    installed: [],
+    available: [],
+    installAllowed: true,
+    mirrorLocked: agent.mirrorLocked
+  }))
+  agent.configs.list.mockReset().mockResolvedValue([])
+  agent.configs.read.mockReset().mockResolvedValue({ toml: '', hash: '' })
+  agent.configs.write.mockReset().mockResolvedValue('')
+  agent.configs.remove.mockReset().mockResolvedValue(undefined)
+  agent.web.list.mockReset().mockResolvedValue([])
+  agent.web.replace.mockReset().mockResolvedValue([])
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => mocks.storage.get(key) ?? null,
+      setItem: (key: string, value: string) => mocks.storage.set(key, value),
+      removeItem: (key: string) => mocks.storage.delete(key),
+      key: (index: number) => Array.from(mocks.storage.keys())[index] ?? null,
+      get length() {
+        return mocks.storage.size
+      }
+    }
+  })
+}
+
+describe('useAppBackup（快照与原子恢复）', () => {
+  beforeEach(resetBackupEnv)
 
   it('生成恢复计划等待普通 TOML 事务结束', async () => {
     const { runTomlTransaction } = await import('@/shared/platform/webConfigStorage')
@@ -689,5 +755,288 @@ describe('useAppBackup（快照与原子恢复）', () => {
         types: { error: false, update: true, quality: false, feedback: true }
       })
     )
+  })
+})
+
+describe('useAppBackup（agent 服务端语义）', () => {
+  beforeEach(resetBackupEnv)
+
+  const LOCK_HASH = `sha256$${'a'.repeat(32)}$${'b'.repeat(64)}`
+
+  const preferencesValue = (store: Record<string, unknown>, server?: Record<string, unknown>) =>
+    JSON.stringify({
+      version: 1,
+      store,
+      local: {},
+      serviceConfigs: {},
+      ...(server ? { server } : {})
+    })
+
+  const mirrorValue = (payload: Record<string, unknown>): string =>
+    JSON.stringify({ version: 1, ...payload })
+
+  it('agent 采集偏好写入服务端设置段，桌面形态不写', async () => {
+    const { collectBackupItems } = await import('@/features/settings/composables/useAppBackup')
+
+    const [nativeItem] = await collectBackupItems(['preferences'])
+    expect(JSON.parse(nativeItem.value)).not.toHaveProperty('server')
+
+    agent.mode = 'agent'
+    agent.server = {
+      autoStartLastRunning: true,
+      noTun: true,
+      logLevel: 'debug',
+      coreMirror: 'https://m.example'
+    }
+    const [item] = await collectBackupItems(['preferences'])
+    expect(JSON.parse(item.value).server).toEqual({
+      autoStartLastRunning: true,
+      noTun: true,
+      logLevel: 'debug',
+      coreMirror: 'https://m.example/'
+    })
+  })
+
+  it('恢复偏好把自动运行与服务端段写回服务端', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    const plan = await makePlan([
+      entry(
+        createBackupItem(
+          'preferences',
+          '',
+          preferencesValue(
+            { autoRunNetworkSetting: true },
+            { noTun: true, logLevel: 'trace', coreMirror: 'https://m.example/' }
+          )
+        )
+      )
+    ])
+    const result = await applyRestore(plan, { preferences: 'backup' })
+
+    expect(result).toEqual({ applied: 1, failed: [], rolledBack: false })
+    expect(agent.settings.put).toHaveBeenCalledWith({
+      autoStartLastRunning: true,
+      noTun: true,
+      logLevel: 'trace',
+      coreMirror: 'https://m.example/'
+    })
+  })
+
+  it('旧备份偏好（无服务端段）只同步自动运行设置，不覆盖其它服务端字段', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    agent.server = {
+      autoStartLastRunning: true,
+      noTun: true,
+      logLevel: 'debug',
+      coreMirror: 'https://keep.example/'
+    }
+    const plan = await makePlan([
+      entry(createBackupItem('preferences', '', preferencesValue({ autoRunNetworkSetting: false })))
+    ])
+    const result = await applyRestore(plan, { preferences: 'backup' })
+
+    expect(result.applied).toBe(1)
+    expect(agent.settings.put).toHaveBeenCalledWith({ autoStartLastRunning: false })
+    expect(agent.server).toEqual({
+      autoStartLastRunning: false,
+      noTun: true,
+      logLevel: 'debug',
+      coreMirror: 'https://keep.example/'
+    })
+  })
+
+  it('服务端写入失败时偏好恢复本地与服务端一起回滚', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    mocks.storage.set('settings.minimizeOnStart', '0')
+    agent.settings.put.mockRejectedValueOnce(new Error('settings failed'))
+    const plan = await makePlan([
+      entry(
+        createBackupItem(
+          'preferences',
+          '',
+          preferencesValue({ autoRunNetworkSetting: true }, { noTun: true })
+        )
+      )
+    ])
+    const result = await applyRestore(plan, { preferences: 'backup' })
+
+    expect(result).toEqual({ applied: 0, failed: ['preferences'], rolledBack: true })
+    expect(agent.settings.put).toHaveBeenCalledTimes(2)
+    expect(agent.settings.put).toHaveBeenLastCalledWith({
+      autoStartLastRunning: false,
+      noTun: false,
+      logLevel: 'info',
+      coreMirror: ''
+    })
+    expect(mocks.storage.get('settings.minimizeOnStart')).toBe('0')
+  })
+
+  it('agent 下 security 条目标记为不支持，恢复时不写本地锁', async () => {
+    const { applyRestore, createRestorePlan } =
+      await import('@/features/settings/composables/useAppBackup')
+    const { buildBackupManifest, createBackupItem } =
+      await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    mocks.storeState.lockPassword = 'current-lock'
+    const item = createBackupItem('security', '', LOCK_HASH)
+    const manifest = buildBackupManifest({
+      mode: 'full',
+      categories: ['security'],
+      items: [item],
+      appVersion: 'test'
+    })
+    const plan = await createRestorePlan(manifest)
+
+    expect(plan.entries[0].status).toBe('invalid')
+    expect(plan.entries[0].issue).toBe('unsupported-platform')
+    const result = await applyRestore(plan, { security: 'backup' })
+    expect(result).toEqual({ applied: 0, failed: [], rolledBack: false })
+    expect(mocks.storeState.$patch).not.toHaveBeenCalled()
+  })
+
+  it('mirror 锁定：恢复本地列表但跳过服务端写入并返回提示', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    agent.mirrorLocked = true
+    agent.server = {
+      autoStartLastRunning: false,
+      noTun: false,
+      logLevel: 'info',
+      coreMirror: 'https://locked.example/'
+    }
+    const plan = await makePlan([
+      entry(
+        createBackupItem(
+          'mirror',
+          '',
+          mirrorValue({ source: 'https://m.example/', custom: ['https://m.example/'], hidden: [] })
+        )
+      )
+    ])
+    const result = await applyRestore(plan, { mirror: 'backup' })
+
+    expect(result).toEqual({
+      applied: 1,
+      failed: [],
+      rolledBack: false,
+      warnings: ['mirror-locked']
+    })
+    expect(agent.settings.put).not.toHaveBeenCalled()
+    expect(mocks.storage.get('mirror.custom')).toBe(JSON.stringify(['https://m.example/']))
+  })
+
+  it('mirror 未锁定：生效源同步到服务端 coreMirror，官方源写空串', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    const plan = await makePlan([
+      entry(createBackupItem('mirror', '', mirrorValue({ source: 'https://m.example/' })))
+    ])
+    await applyRestore(plan, { mirror: 'backup' })
+    expect(agent.settings.put).toHaveBeenLastCalledWith({ coreMirror: 'https://m.example/' })
+
+    const officialPlan = await makePlan([
+      entry(
+        createBackupItem(
+          'mirror',
+          '',
+          mirrorValue({ source: 'https://github.com/EasyTier/EasyTier/' })
+        )
+      )
+    ])
+    await applyRestore(officialPlan, { mirror: 'backup' })
+    expect(agent.settings.put).toHaveBeenLastCalledWith({ coreMirror: '' })
+  })
+
+  it('agent 采集 mirror 时官方直连（服务端空串）落为官方源，可恢复回官方', async () => {
+    const { collectBackupItems } = await import('@/features/settings/composables/useAppBackup')
+
+    agent.mode = 'agent'
+    agent.server = {
+      autoStartLastRunning: false,
+      noTun: false,
+      logLevel: 'info',
+      coreMirror: ''
+    }
+    const [item] = await collectBackupItems(['mirror'])
+    expect(JSON.parse(item.value).source).toBe(GITHUB_EASYTIER)
+  })
+
+  it('服务端加速源写入失败时 mirror 恢复回滚服务端与本地', async () => {
+    const { applyRestore } = await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    agent.server = {
+      autoStartLastRunning: false,
+      noTun: false,
+      logLevel: 'info',
+      coreMirror: 'https://old.example/'
+    }
+    mocks.storage.set('mirror.source', 'https://old.example/')
+    mocks.storage.set('mirror.custom', JSON.stringify(['https://old.example/']))
+    agent.settings.put.mockRejectedValueOnce(new Error('mirror failed'))
+    const plan = await makePlan([
+      entry(
+        createBackupItem(
+          'mirror',
+          '',
+          mirrorValue({ source: 'https://new.example/', custom: ['https://new.example/'] })
+        )
+      )
+    ])
+    const result = await applyRestore(plan, { mirror: 'backup' })
+
+    expect(result).toEqual({ applied: 0, failed: ['mirror'], rolledBack: true })
+    expect(agent.settings.put).toHaveBeenLastCalledWith({ coreMirror: 'https://old.example/' })
+    expect(mocks.storage.get('mirror.source')).toBe('https://old.example/')
+  })
+
+  it('agent 下 Web 分类采集、计数与恢复都走服务端，不触碰浏览器 Mock', async () => {
+    const { applyRestore, collectBackupItems, getBackupContentCounts } =
+      await import('@/features/settings/composables/useAppBackup')
+    const { createBackupItem } = await import('@/features/settings/lib/backupUtil')
+
+    agent.mode = 'agent'
+    const remote = [
+      {
+        configFileName: 'home',
+        protocol: 'udp',
+        host: '127.0.0.1',
+        port: 22020,
+        userName: 'user'
+      }
+    ]
+    agent.web.list.mockResolvedValue(remote)
+
+    const items = await collectBackupItems(['web'])
+    expect(agent.web.list).toHaveBeenCalled()
+    expect(mocks.webRead).not.toHaveBeenCalled()
+    expect(JSON.parse(items[0].value)).toEqual(remote)
+
+    expect(await getBackupContentCounts()).toEqual({ configs: 0, web: 1 })
+    expect(mocks.webRead).not.toHaveBeenCalled()
+
+    const plan = await makePlan([entry(createBackupItem('web', '', webValue('restored')))])
+    const result = await applyRestore(plan, { web: 'backup' })
+
+    expect(result).toEqual({ applied: 1, failed: [], rolledBack: false })
+    expect(mocks.webWrite).not.toHaveBeenCalled()
+    expect(agent.web.replace).toHaveBeenCalledWith([
+      expect.objectContaining({ configFileName: 'restored' })
+    ])
   })
 })

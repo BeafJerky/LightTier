@@ -12,6 +12,7 @@
  */
 import { isValidConfigName } from '@/shared/lib/configNameUtil'
 import { normalizeIslandSettings, type IslandSettings } from '@/shared/lib/island/settings'
+import { normalizeMirrorPrefix } from '@/shared/lib/mirrorUtil'
 import { sha256Hex } from '@/shared/platform/lockUtil'
 import { validateToml } from '@/shared/lib/tomlValidationUtil'
 import {
@@ -42,6 +43,7 @@ export type BackupItemIssue =
   | 'appearance-json'
   | 'security-format'
   | 'mirror-json'
+  | 'unsupported-platform'
   | 'unknown-category'
 
 export type BackupParseError =
@@ -69,6 +71,8 @@ const WEB_USER_PATTERN = /^[a-zA-Z0-9@._-]{1,36}$/
 const HASH_PATTERN = /^[0-9a-f]{64}$/
 const LOCK_HASH_PATTERN = /^sha256\$[0-9a-f]{32}\$[0-9a-f]{64}$/
 const SUPPORTED_LANGS = ['zh-CN', 'en'] as const
+/** agent 服务端设置的日志级别白名单（与 crates/agent settings 的 LOG_LEVELS 一致） */
+const SERVER_LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const
 
 /** 仍需写入 localStorage 的偏好（自动运行设置已改为 Pinia 单一真源） */
 export const RESTORABLE_PREFERENCE_LOCAL_KEYS = [
@@ -393,6 +397,18 @@ export const isValidBackupConfigName = (name: string): boolean => {
   return isValidConfigName(name.slice(0, -'.toml'.length))
 }
 
+/**
+ * agent 服务端设置段：仅 agent 采集时写入；桌面 / Android 的备份没有该段，
+ * 恢复时也忽略它（本机不存在这些概念）。字段全部可选，旧备份不受影响。
+ */
+export interface ServerSettingsPayload {
+  autoStartLastRunning?: boolean
+  noTun?: boolean
+  logLevel?: string
+  /** 生效加速源前缀（归一化后带尾部斜杠）；空串表示官方直连 */
+  coreMirror?: string
+}
+
 export interface PreferencesPayload {
   version: 1
   store: {
@@ -407,6 +423,7 @@ export interface PreferencesPayload {
   }
   local: Record<string, string>
   serviceConfigs: Record<string, string>
+  server?: ServerSettingsPayload
 }
 
 /** 清洗应用偏好载荷：仅保留白名单字段与正确类型，任何已知字段类型错误均整体拒绝 */
@@ -422,7 +439,15 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
   const rawStore = raw.store
   const rawLocal = raw.local
   const rawServiceConfigs = raw.serviceConfigs
-  if (!isRecord(rawStore) && !isRecord(rawLocal) && !isRecord(rawServiceConfigs)) return null
+  const rawServer = raw.server
+  if (
+    !isRecord(rawStore) &&
+    !isRecord(rawLocal) &&
+    !isRecord(rawServiceConfigs) &&
+    !isRecord(rawServer)
+  ) {
+    return null
+  }
 
   const store: PreferencesPayload['store'] = {}
   if (rawStore !== undefined) {
@@ -506,7 +531,43 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
     }
   }
 
-  return { version: 1, store, local, serviceConfigs }
+  const server: ServerSettingsPayload = {}
+  let hasServer = false
+  if (rawServer !== undefined) {
+    if (!isRecord(rawServer)) return null
+    hasServer = true
+    for (const key of ['autoStartLastRunning', 'noTun'] as const) {
+      if (rawServer[key] === undefined) continue
+      if (!isBoolean(rawServer[key])) return null
+      server[key] = rawServer[key]
+    }
+    if (rawServer.logLevel !== undefined) {
+      const level = rawServer.logLevel
+      if (typeof level !== 'string' || !(SERVER_LOG_LEVELS as readonly string[]).includes(level)) {
+        return null
+      }
+      server.logLevel = level
+    }
+    if (rawServer.coreMirror !== undefined) {
+      const mirror = rawServer.coreMirror
+      if (typeof mirror !== 'string') return null
+      if (mirror) {
+        const normalized = normalizeMirrorPrefix(mirror)
+        if (!normalized) return null
+        server.coreMirror = normalized
+      } else {
+        server.coreMirror = ''
+      }
+    }
+  }
+
+  return {
+    version: 1,
+    store,
+    local,
+    serviceConfigs,
+    ...(hasServer ? { server } : {})
+  }
 }
 
 export interface AppearancePayload {
@@ -718,12 +779,16 @@ export interface RestorePlan {
  * - new：本地不存在（默认使用备份）
  * - safe：差量项且本地仍等于基准（默认使用备份）
  * - conflict：本地与备份不同，含差量项在本地被删除的情况（默认保留本地）
- * - invalid：内容不合法，强制跳过
+ * - invalid：内容不合法或当前平台不支持该分类，强制跳过
+ *
+ * `unsupportedCategories` 由调用方按运行形态传入（如 agent 不支持桌面本机锁屏密码）。
  */
 export const buildRestorePlan = (
   manifest: BackupManifest,
-  localValues: Record<string, string | null | undefined>
+  localValues: Record<string, string | null | undefined>,
+  unsupportedCategories: BackupCategory[] = []
 ): RestorePlan => {
+  const unsupported = new Set(unsupportedCategories)
   const counts: RestorePlanCounts = { same: 0, new: 0, safe: 0, conflict: 0, invalid: 0 }
   const entries = manifest.items
     .map<RestorePlanEntry>((item) => {
@@ -731,7 +796,9 @@ export const buildRestorePlan = (
         ? (localValues[item.id] ?? null)
         : null
       const localHash = localValue === null ? null : sha256Hex(localValue)
-      const issue = validateBackupItem(item)
+      const issue = unsupported.has(item.category)
+        ? 'unsupported-platform'
+        : validateBackupItem(item)
       if (issue) {
         return { item, status: 'invalid', issue, localValue, localHash }
       }

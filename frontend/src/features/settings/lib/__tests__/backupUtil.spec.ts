@@ -272,6 +272,26 @@ describe('buildRestorePlan（冲突检测）', () => {
     expect(byId.get('web')?.status).toBe('conflict')
   })
 
+  it('当前形态不支持的分类判为 invalid 并标注 unsupported-platform', () => {
+    const plan = buildRestorePlan(
+      makeManifest([configItem('a.toml', TOML_A), createBackupItem('security', '', LOCK_HASH)], {
+        categories: ['configs', 'security']
+      }),
+      { 'config:a.toml': TOML_A, security: LOCK_HASH },
+      ['security']
+    )
+    const byId = new Map(plan.entries.map((entry) => [entry.item.id, entry]))
+    expect(byId.get('config:a.toml')?.status).toBe('same')
+    expect(byId.get('security')?.status).toBe('invalid')
+    expect(byId.get('security')?.issue).toBe('unsupported-platform')
+    expect(plan.counts).toEqual({ same: 1, new: 0, safe: 0, conflict: 0, invalid: 1 })
+    expect(countRestoreSelection(plan.entries, createDefaultChoices(plan.entries))).toEqual({
+      backup: 0,
+      local: 1,
+      invalid: 1
+    })
+  })
+
   it('默认选择与统计：新增/可安全合并用备份，冲突保留本地，无效项跳过', () => {
     const plan = buildRestorePlan(
       makeManifest(
@@ -461,6 +481,57 @@ describe('分类载荷校验', () => {
         JSON.stringify({ local: { 'settings.autoRunConfigName': ' 家庭 ' } })
       )
     ).toBeNull()
+  })
+
+  it('偏好载荷的 agent 服务端段逐字段校验类型与取值', () => {
+    const payload = sanitizePreferencesPayload(
+      JSON.stringify({
+        version: 1,
+        store: { autoRunNetworkSetting: true },
+        server: {
+          autoStartLastRunning: true,
+          noTun: false,
+          logLevel: 'debug',
+          coreMirror: 'https://mirror.example'
+        }
+      })
+    )
+    expect(payload?.server).toEqual({
+      autoStartLastRunning: true,
+      noTun: false,
+      logLevel: 'debug',
+      coreMirror: 'https://mirror.example/'
+    })
+    // 空串表示官方直连，允许
+    expect(
+      sanitizePreferencesPayload(JSON.stringify({ server: { coreMirror: '' } }))?.server
+    ).toEqual({ coreMirror: '' })
+
+    // 已知字段类型/取值错误整体拒绝
+    expect(
+      sanitizePreferencesPayload(JSON.stringify({ server: { autoStartLastRunning: 'true' } }))
+    ).toBeNull()
+    expect(sanitizePreferencesPayload(JSON.stringify({ server: { noTun: 1 } }))).toBeNull()
+    expect(
+      sanitizePreferencesPayload(JSON.stringify({ server: { logLevel: 'verbose' } }))
+    ).toBeNull()
+    expect(
+      sanitizePreferencesPayload(JSON.stringify({ server: { coreMirror: 'ftp://mirror' } }))
+    ).toBeNull()
+    expect(sanitizePreferencesPayload(JSON.stringify({ server: 'nope' }))).toBeNull()
+  })
+
+  it('旧备份偏好没有服务端段时仍可解析，且不凭空生成 server', () => {
+    const payload = sanitizePreferencesPayload(
+      JSON.stringify({
+        version: 1,
+        store: { autoRunNetworkSetting: false },
+        local: {},
+        serviceConfigs: {}
+      })
+    )
+    expect(payload).not.toBeNull()
+    expect(payload && 'server' in payload).toBe(false)
   })
 
   it('外观载荷校验主题与语言', () => {

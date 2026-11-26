@@ -21,6 +21,7 @@ import {
   MIRROR_SOURCE_KEY
 } from '@/shared/composables/useMirrorProbe'
 import { loadThemeCss } from '@/shared/composables/useExternalThemes'
+import { normalizeMirrorPrefix as normalizeServerMirrorPrefix } from '@/shared/lib/mirrorUtil'
 import { useMockData } from '@/shared/platform/mockData'
 import {
   runTomlTransaction,
@@ -52,7 +53,8 @@ import {
   type MirrorPayload,
   type PreferencesPayload,
   type RestoreChoice,
-  type RestorePlan
+  type RestorePlan,
+  type ServerSettingsPayload
 } from '@/features/settings/lib/backupUtil'
 import {
   isServiceConfigStorageName,
@@ -61,7 +63,15 @@ import {
 import { migrateLockPassword, sha256Hex } from '@/shared/platform/lockUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getAppVersion } from '@/shared/platform/sysUtil'
-import { backendConfigs, backendMode, isApiError } from '@/shared/platform/backend'
+import {
+  backendCapabilities,
+  backendConfigs,
+  backendMode,
+  backendPackages,
+  backendSettings,
+  backendWeb,
+  isApiError
+} from '@/shared/platform/backend'
 
 const THEME_KEY = 'theme'
 const LANG_KEY = 'lang'
@@ -79,6 +89,29 @@ const runtimeIsTauri = (): boolean => {
 }
 
 const isDesktopRuntime = (): boolean => runtimeIsTauri() && !isAndroid()
+
+const isAgentMode = (): boolean => backendMode() === 'agent'
+
+/** 当前形态不支持恢复的分类：agent 没有桌面本机锁屏，security 不适用 */
+export const unsupportedBackupCategories = (): BackupCategory[] =>
+  isAgentMode() ? ['security'] : []
+
+/** agent 服务端设置的完整快照，用于恢复失败时精确回滚 */
+interface ServerSettingsSnapshot {
+  autoStartLastRunning: boolean
+  noTun: boolean
+  logLevel: string
+  coreMirror: string
+}
+
+/** agent 加速源状态：locked 来自 LT_CORE_MIRROR 环境变量 */
+interface AgentMirrorState {
+  locked: boolean
+  coreMirror: string
+}
+
+/** 恢复过程中的非致命提示（由界面转成 i18n 文案） */
+export type RestoreWarning = 'mirror-locked'
 
 const readStorage = (key: string): string | null => {
   try {
@@ -152,8 +185,21 @@ const readMirrorList = (key: string): string[] => {
     .filter((item, index, list) => list.indexOf(item) === index)
 }
 
-/** 采集应用偏好：easytier 持久化字段 + settings.* 独立键 + 服务安装方式 */
-const collectPreferencesPayload = (): PreferencesPayload => {
+/** agent 服务端设置快照：只在 agent 采集时写入偏好载荷的 server 段 */
+const collectServerSettings = async (): Promise<ServerSettingsSnapshot> => {
+  const settings = await backendSettings().get()
+  return {
+    autoStartLastRunning: settings.autoStartLastRunning,
+    noTun: settings.noTun,
+    logLevel: settings.logLevel,
+    coreMirror: settings.coreMirror ? (normalizeServerMirrorPrefix(settings.coreMirror) ?? '') : ''
+  }
+}
+
+/** 采集应用偏好：easytier 持久化字段 + settings.* 独立键 + 服务安装方式（agent 另有服务端段） */
+const collectPreferencesPayload = async (
+  serverSettings?: ServerSettingsPayload
+): Promise<PreferencesPayload> => {
   const store = useEasyTierStore()
   const local: Record<string, string> = {}
   for (const key of RESTORABLE_PREFERENCE_LOCAL_KEYS) {
@@ -191,7 +237,7 @@ const collectPreferencesPayload = (): PreferencesPayload => {
     })
 
   const island = useIslandStore()
-  return {
+  const payload: PreferencesPayload = {
     version: 1,
     store: {
       p2pNotifySetting: store.p2pNotifySetting,
@@ -209,6 +255,9 @@ const collectPreferencesPayload = (): PreferencesPayload => {
     local,
     serviceConfigs: orderedServiceConfigs
   }
+  // 桌面 / Android 的备份不写 server 段：本机没有这些概念
+  if (isAgentMode()) payload.server = serverSettings ?? (await collectServerSettings())
+  return payload
 }
 
 /** 回滚快照不做业务清洗：前缀键的原始值（含空串/损坏 JSON/异常名称）都必须精确保留 */
@@ -235,12 +284,15 @@ const collectAppearancePayload = (): AppearancePayload => {
   }
 }
 
-/** 采集加速源：选择结果与自定义/隐藏列表 */
-const collectMirrorPayload = (): MirrorPayload => {
-  const source = readStorage(MIRROR_SOURCE_KEY)
+/** 采集加速源：选择结果与自定义/隐藏列表（agent 的生效源以服务端设置为准） */
+const collectMirrorPayload = async (): Promise<MirrorPayload> => {
+  // 服务端空串代表官方直连，恢复时必须能表达这个确定状态
+  const storedSource = isAgentMode()
+    ? (await backendSettings().get()).coreMirror || GITHUB_EASYTIER
+    : readStorage(MIRROR_SOURCE_KEY)
   const payload: MirrorPayload = { version: 1 }
-  if (source && URL_PATTERN.test(source)) {
-    payload.source = normalizeMirrorStorageSource(source)
+  if (storedSource && URL_PATTERN.test(storedSource)) {
+    payload.source = normalizeMirrorStorageSource(storedSource)
   }
   payload.custom = readMirrorList(MIRROR_CUSTOM_KEY)
   payload.hidden = readMirrorList(MIRROR_HIDDEN_KEY)
@@ -286,7 +338,9 @@ export const collectBackupItems = async (categories: BackupCategory[]): Promise<
     items.push(createBackupItem('web', '', await collectWebValue()))
   }
   if (selected.has('preferences')) {
-    items.push(createBackupItem('preferences', '', JSON.stringify(collectPreferencesPayload())))
+    items.push(
+      createBackupItem('preferences', '', JSON.stringify(await collectPreferencesPayload()))
+    )
   }
   if (selected.has('appearance')) {
     items.push(createBackupItem('appearance', '', JSON.stringify(collectAppearancePayload())))
@@ -295,7 +349,7 @@ export const collectBackupItems = async (categories: BackupCategory[]): Promise<
     items.push(createBackupItem('security', '', useEasyTierStore().lockPassword))
   }
   if (selected.has('mirror')) {
-    items.push(createBackupItem('mirror', '', JSON.stringify(collectMirrorPayload())))
+    items.push(createBackupItem('mirror', '', JSON.stringify(await collectMirrorPayload())))
   }
   return items
 }
@@ -307,14 +361,15 @@ export interface BackupContentCounts {
 
 /** 分类内容数量（仅用于创建页展示，配置与 Web 配置为动态数量） */
 export const getBackupContentCounts = async (): Promise<BackupContentCounts> => {
-  if (backendMode() === 'agent') {
+  if (isAgentMode()) {
+    // agent：配置与 Web 配置都由服务端托管，统计不得读浏览器 Mock
     const [metas, web] = await Promise.all([
       backendConfigs().list(),
-      useMockData().readWebConfigList()
+      backendCapabilities().web ? backendWeb().list() : Promise.resolve([])
     ])
     return {
       configs: metas.length,
-      web: Array.isArray(web) ? web.length : 0
+      web: web.length
     }
   }
   const { listTomlFiles, readWebConfigList } = useMockData()
@@ -447,13 +502,13 @@ export const collectLocalBackupValues = async (
       : await collectWebValue()
   }
   if (selected.has('preferences')) {
-    values.preferences = JSON.stringify(collectPreferencesPayload())
+    values.preferences = JSON.stringify(await collectPreferencesPayload())
   }
   if (selected.has('appearance')) {
     values.appearance = JSON.stringify(collectAppearancePayload())
   }
   if (selected.has('security')) values.security = useEasyTierStore().lockPassword
-  if (selected.has('mirror')) values.mirror = JSON.stringify(collectMirrorPayload())
+  if (selected.has('mirror')) values.mirror = JSON.stringify(await collectMirrorPayload())
   return values
 }
 
@@ -461,7 +516,7 @@ export const collectLocalBackupValues = async (
 export const createRestorePlan = async (manifest: BackupManifest): Promise<RestorePlan> =>
   runTomlTransaction(async () => {
     const localValues = await collectLocalBackupValues(manifest)
-    return buildRestorePlan(manifest, localValues)
+    return buildRestorePlan(manifest, localValues, unsupportedBackupCategories())
   })
 
 export class RestorePlanChangedError extends Error {
@@ -499,14 +554,15 @@ const resolveRestorableTheme = async (theme: string): Promise<string> => {
   }
 }
 
-const applyPreferencesPayload = (
+const applyPreferencesPayload = async (
   payload: PreferencesPayload,
   options: {
     replaceServiceConfigs?: boolean
     rawServiceConfigs?: Record<string, string>
     rawPreferenceLocal?: RawPreferenceLocalSnapshot
+    rawServerSettings?: ServerSettingsSnapshot | null
   } = {}
-): void => {
+): Promise<void> => {
   if (options.rawPreferenceLocal) {
     for (const key of PREFERENCE_LOCAL_SNAPSHOT_KEYS) {
       const value = options.rawPreferenceLocal[key]
@@ -554,12 +610,27 @@ const applyPreferencesPayload = (
   if (payload.store.islandSettings) {
     useIslandStore().restoreSettings(payload.store.islandSettings)
   }
+  if (!isAgentMode()) return
+  // 回滚：服务端设置按快照整份写回，避免留下“本地已回滚、服务端还是新值”
+  if (options.rawServerSettings) {
+    await backendSettings().put({ ...options.rawServerSettings })
+    return
+  }
+  const serverPatch: ServerSettingsPayload = {}
+  // 自动运行设置以本地 store 的恢复值为准（旧备份的 legacy 键也已并入 patch），
+  // 备份里没有该值时退回 server 段记录的值
+  const autoRun = patch.autoRunNetworkSetting ?? payload.server?.autoStartLastRunning
+  if (autoRun !== undefined) serverPatch.autoStartLastRunning = autoRun
+  if (payload.server?.noTun !== undefined) serverPatch.noTun = payload.server.noTun
+  if (payload.server?.logLevel !== undefined) serverPatch.logLevel = payload.server.logLevel
+  if (payload.server?.coreMirror !== undefined) serverPatch.coreMirror = payload.server.coreMirror
+  if (Object.keys(serverPatch).length) await backendSettings().put(serverPatch)
 }
 
-const applyPreferences = (item: BackupItem): void => {
+const applyPreferences = async (item: BackupItem): Promise<void> => {
   const payload = sanitizePreferencesPayload(item.value)
   if (!payload) throw new Error('invalid preferences payload')
-  applyPreferencesPayload(payload)
+  await applyPreferencesPayload(payload)
 }
 
 const applyAppearance = async (item: BackupItem): Promise<void> => {
@@ -582,9 +653,16 @@ const applySecurity = (item: BackupItem): void => {
   useEasyTierStore().$patch({ lockPassword: value })
 }
 
-const applyMirror = (item: BackupItem): void => {
-  const payload = sanitizeMirrorPayload(item.value)
-  if (!payload) throw new Error('invalid mirror payload')
+/** 读 agent 加速源状态：locked 为部署方环境变量锁定，coreMirror 为服务端生效源 */
+const readAgentMirrorState = async (): Promise<AgentMirrorState> => {
+  const [info, settings] = await Promise.all([backendPackages().list(), backendSettings().get()])
+  return { locked: info.mirrorLocked, coreMirror: settings.coreMirror }
+}
+
+/** 服务端 coreMirror 口径：官方源存空串（与 useMirrorProbe 的选择语义一致） */
+const toServerMirror = (source: string): string => (source === `${GITHUB_EASYTIER}/` ? '' : source)
+
+const applyMirrorLocal = (payload: MirrorPayload): void => {
   if (payload.source !== undefined) {
     if (!payload.source) {
       localStorage.removeItem(MIRROR_SOURCE_KEY)
@@ -607,9 +685,33 @@ const applyMirror = (item: BackupItem): void => {
   }
 }
 
+const applyMirror = async (
+  item: BackupItem,
+  options: { restore?: AgentMirrorState | null; warnings?: RestoreWarning[] } = {}
+): Promise<void> => {
+  const payload = sanitizeMirrorPayload(item.value)
+  if (!payload) throw new Error('invalid mirror payload')
+  applyMirrorLocal(payload)
+  if (!isAgentMode()) return
+  if (options.restore) {
+    if (options.restore.locked) return
+    await backendSettings().put({ coreMirror: options.restore.coreMirror })
+    return
+  }
+  if (payload.source === undefined) return
+  const state = await readAgentMirrorState()
+  if (state.locked) {
+    // 环境变量锁定：服务端拒绝写入，保留部署方选择并明确提示而不是静默失败
+    options.warnings?.push('mirror-locked')
+    return
+  }
+  await backendSettings().put({ coreMirror: toServerMirror(payload.source) })
+}
+
 const applyEntry = async (
   item: BackupItem,
-  webTransaction?: WebConfigTransactionOps
+  webTransaction?: WebConfigTransactionOps,
+  warnings?: RestoreWarning[]
 ): Promise<void> => {
   switch (item.category) {
     case 'configs':
@@ -629,16 +731,18 @@ const applyEntry = async (
       return
     }
     case 'preferences':
-      applyPreferences(item)
+      await applyPreferences(item)
       return
     case 'appearance':
       await applyAppearance(item)
       return
     case 'security':
+      // agent 没有桌面本机锁屏：恢复计划已判为不支持，这里再拦一次防止误写
+      if (isAgentMode()) throw new Error('security backup is not supported in agent mode')
       applySecurity(item)
       return
     case 'mirror':
-      applyMirror(item)
+      await applyMirror(item, { warnings })
       return
     default:
       throw new Error(`unknown backup category: ${(item as BackupItem).category}`)
@@ -650,6 +754,8 @@ export interface ApplyRestoreResult {
   failed: string[]
   /** 中途失败后已回滚到操作前状态；回滚自身失败时为 false */
   rolledBack: boolean
+  /** 非致命提示（仅成功路径返回）：目前只有加速源被环境变量锁定 */
+  warnings?: RestoreWarning[]
 }
 
 type RestoreSnapshot =
@@ -660,10 +766,12 @@ type RestoreSnapshot =
       value: string
       rawServiceConfigs: Record<string, string>
       rawPreferenceLocal: RawPreferenceLocalSnapshot
+      /** agent 才采集：服务端设置原值，回滚时整份写回 */
+      rawServerSettings: ServerSettingsSnapshot | null
     }
   | { kind: 'appearance'; value: string }
   | { kind: 'security'; value: string }
-  | { kind: 'mirror'; value: string }
+  | { kind: 'mirror'; value: string; agentMirror: AgentMirrorState | null }
 
 /** 采集恢复目标的当前状态；任何一步失败都中止恢复，不产生部分写入 */
 const captureRestoreSnapshot = async (
@@ -692,19 +800,27 @@ const captureRestoreSnapshot = async (
       const list = await webTransaction.snapshot()
       return { kind: 'web-list', value: JSON.stringify(list) }
     }
-    case 'preferences':
+    case 'preferences': {
+      // agent 先取一次服务端快照：既写进 value 参与冲突比较，也供回滚原样写回
+      const rawServerSettings = isAgentMode() ? await collectServerSettings() : null
       return {
         kind: 'preferences',
-        value: JSON.stringify(collectPreferencesPayload()),
+        value: JSON.stringify(await collectPreferencesPayload(rawServerSettings ?? undefined)),
         rawServiceConfigs: collectRawServiceConfigs(),
-        rawPreferenceLocal: collectRawPreferenceLocal()
+        rawPreferenceLocal: collectRawPreferenceLocal(),
+        rawServerSettings
       }
+    }
     case 'appearance':
       return { kind: 'appearance', value: JSON.stringify(collectAppearancePayload()) }
     case 'security':
       return { kind: 'security', value: useEasyTierStore().lockPassword }
     case 'mirror':
-      return { kind: 'mirror', value: JSON.stringify(collectMirrorPayload()) }
+      return {
+        kind: 'mirror',
+        value: JSON.stringify(await collectMirrorPayload()),
+        agentMirror: isAgentMode() ? await readAgentMirrorState() : null
+      }
     default:
       throw new Error(`unknown backup category: ${(item as BackupItem).category}`)
   }
@@ -751,10 +867,11 @@ const rollbackRestoreEntry = async (
         JSON.stringify({ version: 1, store: snapshotPayload.store })
       )
       if (!payload) throw new Error('invalid preferences snapshot')
-      applyPreferencesPayload(payload, {
+      await applyPreferencesPayload(payload, {
         replaceServiceConfigs: true,
         rawServiceConfigs: snap.rawServiceConfigs,
-        rawPreferenceLocal: snap.rawPreferenceLocal
+        rawPreferenceLocal: snap.rawPreferenceLocal,
+        rawServerSettings: snap.rawServerSettings
       })
       return
     }
@@ -765,7 +882,7 @@ const rollbackRestoreEntry = async (
       useEasyTierStore().$patch({ lockPassword: snap.value })
       return
     case 'mirror':
-      applyMirror({ ...item, value: snap.value })
+      await applyMirror({ ...item, value: snap.value }, { restore: snap.agentMirror })
       return
   }
 }
@@ -779,20 +896,24 @@ export const applyRestore = async (
     const items = plan.entries
       .filter((entry) => entry.status !== 'invalid' && choices[entry.item.id] === 'backup')
       .map((entry) => entry.item)
+    const warnings: RestoreWarning[] = []
     const runTransaction = (webTransaction?: WebConfigTransactionOps) =>
       runRestoreTransaction(items, {
         snapshot: (item) => captureRestoreSnapshot(item, webTransaction),
-        apply: (item) => applyEntry(item, webTransaction),
+        apply: (item) => applyEntry(item, webTransaction, warnings),
         rollback: (item, snapshot) => rollbackRestoreEntry(item, snapshot, webTransaction)
       })
 
-    if (items.some((item) => item.category === 'web')) {
-      // 校验与恢复必须占用同一次 Web 队列事务，检查结束后不能释放给页面写入。
-      return runWebConfigTransaction(async (webTransaction) => {
-        await assertRestorePlanUnchanged(plan, webTransaction)
-        return runTransaction(webTransaction)
-      })
-    }
-    await assertRestorePlanUnchanged(plan)
-    return runTransaction()
+    const result = items.some((item) => item.category === 'web')
+      ? // 校验与恢复必须占用同一次 Web 队列事务，检查结束后不能释放给页面写入。
+        await runWebConfigTransaction(async (webTransaction) => {
+          await assertRestorePlanUnchanged(plan, webTransaction)
+          return runTransaction(webTransaction)
+        })
+      : await (async () => {
+          await assertRestorePlanUnchanged(plan)
+          return runTransaction()
+        })()
+    // 回滚路径不返回提示，避免“恢复失败已回滚”时再出现误导性的跳过说明
+    return warnings.length && result.failed.length === 0 ? { ...result, warnings } : result
   })

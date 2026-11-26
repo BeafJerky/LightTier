@@ -969,6 +969,8 @@ export default {
     useBackup: 'Use backup',
     useLocal: 'Keep local',
     securityNote: 'Restoring the lock password immediately replaces the current password.',
+    mirrorLockedSkipped:
+      'The download mirror is locked by the deployment; server sync was skipped.',
     restoreMergeHint:
       'Restoring merges items into local data; local items not present in the backup are kept.',
     restorePartial: 'Restored {count} items, {failed} failed',
@@ -1002,6 +1004,8 @@ export default {
     issueAppearanceJson: 'Invalid appearance data format',
     issueSecurityFormat: 'Invalid password verification value',
     issueMirrorJson: 'Invalid mirror data format',
+    issueUnsupportedPlatform:
+      'The lock password belongs to the desktop app and does not apply to the server form',
     issueUnknownCategory: 'Unknown backup category',
     itemChoiceLabel: 'Restore choice for {name}',
     confirmTitle: 'Confirm restore',

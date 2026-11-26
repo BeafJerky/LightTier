@@ -7,7 +7,7 @@
  * 弹窗组件只保留 v-model 同步与模板，打开/关闭与卸载清理通过本 composable 的回调衔接。
  */
 import { computed, nextTick, ref } from 'vue'
-import { backendMode } from '@/shared/platform/backend'
+import { backendCapabilities, backendMode } from '@/shared/platform/backend'
 import { useI18n } from 'vue-i18n'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import {
@@ -17,6 +17,7 @@ import {
   getBackupContentCounts,
   pickBackupFile,
   RestorePlanChangedError,
+  unsupportedBackupCategories,
   type BackupContentCounts
 } from './useAppBackup'
 import {
@@ -73,11 +74,13 @@ export function useBackupRestore() {
   }
 
   // ===== 创建备份 =====
-  // agent 没有 Web 配置（server 不托管 easytier-web 设置），隐藏该分类而不是统计 mock 数据
+  // agent：Web 配置由服务端托管，能力位未声明时隐藏；锁屏密码属于桌面本机，服务端形态不适用
   const isAgentMode = backendMode() === 'agent'
-  const availableCategories = computed<BackupCategory[]>(() =>
-    isAgentMode ? BACKUP_CATEGORIES.filter((key) => key !== 'web') : [...BACKUP_CATEGORIES]
-  )
+  const availableCategories = computed<BackupCategory[]>(() => {
+    const unsupported = new Set<BackupCategory>(unsupportedBackupCategories())
+    if (isAgentMode && !backendCapabilities().web) unsupported.add('web')
+    return BACKUP_CATEGORIES.filter((key) => !unsupported.has(key))
+  })
   const contentCounts = ref<BackupContentCounts>({ configs: 0, web: 0 })
   const selectedCategories = ref<BackupCategory[]>([...BACKUP_CATEGORIES])
   const mode = ref<BackupMode>('full')
@@ -251,6 +254,7 @@ export function useBackupRestore() {
     'appearance-json': 'issueAppearanceJson',
     'security-format': 'issueSecurityFormat',
     'mirror-json': 'issueMirrorJson',
+    'unsupported-platform': 'issueUnsupportedPlatform',
     'unknown-category': 'issueUnknownCategory'
   }
   const issueLabel = (issue: BackupItemIssue): string => t(`newBackup.${ISSUE_KEYS[issue]}`)
@@ -455,6 +459,9 @@ export function useBackupRestore() {
         return entry ? itemTitle(entry) : id
       })
       phase.value = 'done'
+      if (result.warnings?.includes('mirror-locked')) {
+        toast.warning(t('newBackup.mirrorLockedSkipped'))
+      }
       if (result.rolledBack) {
         toast.error(t('newBackup.restoreRolledBack'))
       } else if (result.failed.length === 0) {
