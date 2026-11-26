@@ -21,6 +21,8 @@ pub mod supervisor;
 pub mod theme_routes;
 pub mod themes;
 pub mod tun;
+pub mod web_config_routes;
+pub mod web_configs;
 
 use std::sync::Arc;
 

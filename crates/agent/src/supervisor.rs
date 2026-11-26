@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -319,48 +320,24 @@ impl Supervisor {
         let log_dir = self.data_dir.join("logs/core").join(id);
         storage::ensure_dir(&log_dir).await?;
         let level = normalize_log_level(parsed.log_level.as_deref(), &settings.log_level);
-        let mut command = tokio::process::Command::new(&core.core);
-        command
-            .arg("--file-log-dir")
-            .arg(&log_dir)
-            .arg("--file-log-level")
-            .arg(&level)
-            .arg("--file-log-size")
-            .arg("10")
-            .arg("--file-log-count")
-            .arg("10")
-            .arg("--config-file")
-            .arg(self.configs.path(id))
-            .arg("--rpc-portal")
-            .arg(&parsed.rpc_portal)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .kill_on_drop(false);
+        let mut args: Vec<OsString> = vec![
+            "--file-log-dir".into(),
+            log_dir.clone().into_os_string(),
+            "--file-log-level".into(),
+            level.into(),
+            "--file-log-size".into(),
+            "10".into(),
+            "--file-log-count".into(),
+            "10".into(),
+            "--config-file".into(),
+            self.configs.path(id).into_os_string(),
+            "--rpc-portal".into(),
+            parsed.rpc_portal.clone().into(),
+        ];
         if settings.no_tun {
-            command.arg("--no-tun");
+            args.push("--no-tun".into());
         }
-        // Own session + parent-death signal: `stop` can signal the whole group
-        // and the kernel never outlives the agent.
-        unsafe {
-            command.pre_exec(|| {
-                libc::setsid();
-                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM, 0, 0, 0);
-                Ok(())
-            });
-        }
-        let mut child = command
-            .spawn()
-            .map_err(|err| ApiError::Internal(format!("spawn easytier-core: {err}")))?;
-        // A pid-less child could never be stopped (pid 0 is rejected by `stop`
-        // forever), so kill it best-effort and fail instead of registering a ghost.
-        let pid = match child.id() {
-            Some(pid) if pid != 0 => pid,
-            _ => {
-                let _ = child.start_kill();
-                return Err(ApiError::Internal("spawn returned no pid".into()));
-            }
-        };
+        let (mut child, pid) = spawn_kernel(&core.core, args)?;
         let stderr = child.stderr.take();
         // Register the pid before the waiter can observe the exit, otherwise a
         // kernel that dies immediately would leave a stale pid behind.
@@ -661,7 +638,47 @@ async fn port_free(host: &str, port: u16, mode: PortMode) -> bool {
         .unwrap_or(false)
 }
 
-fn terminate(pid: u32, signal: i32) {
+/// Spawns a kernel binary in its own session with a parent-death signal, so
+/// `stop` can signal the whole group and no kernel outlives the agent.
+///
+/// Shared by TOML instances and web-config processes: both are the same kernel
+/// under different arguments, and both must be cleaned up the same way when the
+/// agent exits. Returns the child and its pid; a pid-less child is killed and
+/// reported as a failure instead of being registered as a ghost.
+pub(crate) fn spawn_kernel(
+    program: &Path,
+    args: Vec<OsString>,
+) -> Result<(tokio::process::Child, u32), ApiError> {
+    let mut command = tokio::process::Command::new(program);
+    command
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(false);
+    unsafe {
+        command.pre_exec(|| {
+            libc::setsid();
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM, 0, 0, 0);
+            Ok(())
+        });
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|err| ApiError::Internal(format!("spawn easytier-core: {err}")))?;
+    let pid = match child.id() {
+        Some(pid) if pid != 0 => pid,
+        _ => {
+            let _ = child.start_kill();
+            return Err(ApiError::Internal("spawn returned no pid".into()));
+        }
+    };
+    Ok((child, pid))
+}
+
+/// Signals the process group of `pid` (falling back to the process itself)
+/// so a kernel and its children never outlive a stop.
+pub(crate) fn terminate(pid: u32, signal: i32) {
     unsafe {
         if libc::kill(-(pid as i32), signal) != 0 {
             libc::kill(pid as i32, signal);

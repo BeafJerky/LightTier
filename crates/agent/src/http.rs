@@ -32,6 +32,8 @@ use crate::supervisor::Supervisor;
 use crate::theme_routes;
 use crate::themes::Themes;
 use crate::tun;
+use crate::web_config_routes;
+use crate::web_configs::WebConfigs;
 
 #[derive(Clone)]
 pub struct RequestId(pub String);
@@ -47,6 +49,7 @@ pub struct AppState {
     pub packages: Arc<Packages>,
     pub logs: Arc<Logs>,
     pub themes: Arc<Themes>,
+    pub web_configs: Arc<WebConfigs>,
 }
 
 impl AppState {
@@ -63,6 +66,13 @@ impl AppState {
     ) -> Self {
         Self {
             themes: Arc::new(Themes::new(&cfg.data_dir)),
+            // Same kernel roots as the supervisor: the web-config spawn must run
+            // the same binary `/packages` reports as active.
+            web_configs: Arc::new(WebConfigs::new(
+                &cfg.data_dir,
+                packages.core_roots(),
+                settings.clone(),
+            )),
             cfg,
             auth,
             configs,
@@ -104,6 +114,9 @@ struct Features {
     kernel: bool,
     logs: bool,
     default_route_change: bool,
+    /// Server-side web configs (easytier-core `--config-server`): the page is
+    /// only shown when the agent itself can run those processes.
+    web: bool,
 }
 
 /// One selectable kernel release. `channel` is the lowercase wire name
@@ -140,6 +153,21 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/v1/settings",
             get(settings_routes::get).put(settings_routes::put),
+        )
+        // Web configs: the table itself plus one process action per record. The
+        // literal segment (`/web-configs`) and `{configFileName}` never collide,
+        // and the id can never contain a `/` (`validate_config_id`).
+        .route(
+            "/api/v1/web-configs",
+            get(web_config_routes::list).put(web_config_routes::put),
+        )
+        .route(
+            "/api/v1/web-configs/{configFileName}/start",
+            post(web_config_routes::start),
+        )
+        .route(
+            "/api/v1/web-configs/{configFileName}/stop",
+            post(web_config_routes::stop),
         )
         .route("/api/v1/instances", get(instance_routes::list))
         .route("/api/v1/instances/health", get(instance_routes::health))
@@ -383,6 +411,7 @@ async fn meta(State(state): State<Arc<AppState>>) -> Json<Meta> {
             kernel: true,
             logs: true,
             default_route_change: false,
+            web: true,
         },
         core_versions,
     })
