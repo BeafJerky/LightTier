@@ -3,12 +3,19 @@
  * store.lockPassword 仅存校验串 sha256$salt$hash（随 pinia persist 持久化），绝不落明文；
  * 关闭设置弹窗时由父组件调用 resetLockForm 清空未提交的明文输入。
  */
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { LtInput } from '@/shared/ui'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { hashLockPassword } from '@/shared/platform/lockUtil'
+import { backendAuth, backendMode, isApiError } from '@/shared/platform/backend'
+import {
+  AUTH_PASSWORD_MIN_LENGTH,
+  authErrorKey,
+  useAgentSessionStore
+} from '@/shared/store/agentSession'
 import type { SettingsConfirm } from './settingsTypes'
 
 const LOCK_PWD_MIN_LENGTH = 6
@@ -17,6 +24,9 @@ export function useSettingsSecurity(confirm: SettingsConfirm) {
   const store = useEasyTierStore()
   const toast = useCreamToast()
   const { t } = useI18n()
+  const router = useRouter()
+  const agentSession = useAgentSessionStore()
+  const isAgent = computed(() => backendMode() === 'agent')
 
   const lockPwdVisible = ref(false)
   const lockPwdInput = ref('')
@@ -86,6 +96,62 @@ export function useSettingsSecurity(confirm: SettingsConfirm) {
     toast.success(t('newSettings.lockPasswordCleared'))
   }
 
+  // agent：服务端管理密码（与桌面锁屏密码无关）
+  const agentPwdVisible = ref(false)
+  const agentPwdInput = ref('')
+  const agentPwdConfirm = ref('')
+  const agentPwdError = ref('')
+  const agentPwdBusy = ref(false)
+
+  const resetAgentPwdForm = () => {
+    agentPwdInput.value = ''
+    agentPwdConfirm.value = ''
+    agentPwdError.value = ''
+    agentPwdVisible.value = false
+    agentPwdBusy.value = false
+  }
+
+  // 改密成功 / 会话已失效：服务端会话均已不存在，标记本地未认证并回登录页
+  const gotoLogin = async (notice: 'changed' | 'expired') => {
+    resetAgentPwdForm()
+    agentSession.invalidate()
+    await router.replace({ path: '/login', query: { notice } })
+  }
+
+  const commitAgentPassword = async () => {
+    if (agentPwdBusy.value) return
+    const pwd = agentPwdInput.value
+    if (!pwd) {
+      agentPwdError.value = t('newSettings.agentPasswordRequired')
+      return
+    }
+    if (pwd.length < AUTH_PASSWORD_MIN_LENGTH) {
+      agentPwdError.value = t('newSettings.agentPasswordTooShort', {
+        min: AUTH_PASSWORD_MIN_LENGTH
+      })
+      return
+    }
+    if (pwd !== agentPwdConfirm.value) {
+      agentPwdError.value = t('newSettings.agentPasswordMismatch')
+      return
+    }
+    agentPwdBusy.value = true
+    try {
+      await backendAuth().changePassword(pwd)
+    } catch (error) {
+      // 会话已失效（如其它端改密清空了会话）：与成功同样回登录页
+      if (isApiError(error) && error.code === 'auth_required') {
+        await gotoLogin('expired')
+        return
+      }
+      agentPwdError.value = t(authErrorKey(error, 'changePassword'))
+      return
+    } finally {
+      agentPwdBusy.value = false
+    }
+    await gotoLogin('changed')
+  }
+
   return {
     lockPwdVisible,
     lockPwdInput,
@@ -97,6 +163,14 @@ export function useSettingsSecurity(confirm: SettingsConfirm) {
     startLockEdit,
     cancelLockEdit,
     commitLockPassword,
-    handleClearLockPassword
+    handleClearLockPassword,
+    isAgent,
+    agentPwdVisible,
+    agentPwdInput,
+    agentPwdConfirm,
+    agentPwdError,
+    agentPwdBusy,
+    resetAgentPwdForm,
+    commitAgentPassword
   }
 }

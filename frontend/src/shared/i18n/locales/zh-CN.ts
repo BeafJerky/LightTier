@@ -818,6 +818,13 @@ export default {
     lockPasswordDisabled: '未启用',
     lockPasswordClear: '清除',
     lockPasswordCleared: '锁屏密码已清除',
+    agentPassword: '管理密码',
+    agentPasswordDesc: '修改服务端管理密码；成功后所有会话将失效，需用新密码重新登录',
+    agentPasswordNewPlaceholder: '输入新密码（至少 {min} 位）',
+    agentPasswordRequired: '请输入新密码',
+    agentPasswordTooShort: '密码至少 {min} 位',
+    agentPasswordMismatch: '两次输入的密码不一致',
+    agentPasswordSubmit: '修改密码',
     lockPwdShow: '显示密码',
     lockPwdHide: '隐藏密码',
     checkUpdate: '检查更新',
@@ -1045,7 +1052,9 @@ export default {
     authRateLimited: '尝试次数过多，请稍后再试',
     authSetupRequired: 'Agent 尚未初始化，请先完成初始化',
     networkError: '无法连接 LightTier Agent，请确认服务正在运行后重试',
-    sessionExpired: '登录状态已失效，请重新登录'
+    sessionExpired: '登录状态已失效，请重新登录',
+    changePasswordInvalid: '新密码不符合要求，请检查后重试',
+    passwordChanged: '密码已修改，请用新密码登录'
   },
   agentError: {
     instanceRunning: '实例已在运行',

@@ -7,6 +7,7 @@
  * - `POST /api/v1/auth/login`     body `{ password }`
  * - `POST /api/v1/auth/setup`     body `{ token, password }` → 204
  * - `POST /api/v1/auth/logout`    → 204
+ * - `POST /api/v1/auth/password`  body `{ password }` → 204（成功后服务端清空全部会话）
  */
 import { request } from '../http'
 import type { Backend, Meta, Session } from '../types'
@@ -45,5 +46,14 @@ export const agentAuth: Backend['auth'] = {
   },
   logout: async () => {
     await request('/api/v1/auth/logout', { method: 'POST' })
+  },
+  changePassword: async (password) => {
+    // 新密码不合规（auth_invalid）属表单级错误，按 silentAuth 抑制全局 401 跳转；
+    // 会话失效（auth_required）由调用方按错误码自行处理
+    await request('/api/v1/auth/password', {
+      method: 'POST',
+      body: { password },
+      silentAuth: true
+    })
   }
 }

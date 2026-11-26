@@ -109,6 +109,7 @@ export interface Backend {
     login(pw: string): Promise<void>
     setup(token: string, pw: string): Promise<void>
     logout(): Promise<void>
+    changePassword(password: string): Promise<void>
   }
   configs: {
     list(): Promise<ConfigMeta[]>

@@ -51,7 +51,8 @@ export const createNativeBackend = (): Backend => ({
     session: async () => ({ authenticated: true }),
     login: async () => {},
     setup: async () => {},
-    logout: async () => {}
+    logout: async () => {},
+    changePassword: () => unsupported('auth.changePassword')
   },
   configs: {
     list: () => unsupported('configs.list'),

@@ -163,12 +163,27 @@ describe('useAgentSessionStore', () => {
     await expect(store.logout()).rejects.toBeInstanceOf(TypeError)
     expect(store.authenticated).toBe(false)
   })
+
+  it('invalidate：仅清本地登录态，不调用登出接口', async () => {
+    api.session.mockResolvedValue({ authenticated: true })
+    const store = useAgentSessionStore()
+    await store.refresh()
+    expect(store.authenticated).toBe(true)
+
+    store.invalidate()
+
+    expect(store.authenticated).toBe(false)
+    expect(api.logout).not.toHaveBeenCalled()
+  })
 })
 
 describe('authErrorKey', () => {
   it('按错误码映射到 i18n key', () => {
     expect(authErrorKey(apiError('auth_invalid', 401))).toBe('newAuth.authInvalid')
     expect(authErrorKey(apiError('auth_invalid', 401), 'setup')).toBe('newAuth.setupInvalid')
+    expect(authErrorKey(apiError('auth_invalid', 401), 'changePassword')).toBe(
+      'newAuth.changePasswordInvalid'
+    )
     expect(authErrorKey(apiError('auth_rate_limited', 429))).toBe('newAuth.authRateLimited')
     expect(authErrorKey(apiError('setup_required', 428))).toBe('newAuth.authSetupRequired')
     expect(authErrorKey(apiError('already_initialized', 409))).toBe('newAuth.alreadyInitialized')

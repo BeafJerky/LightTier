@@ -859,6 +859,14 @@ export default {
     lockPasswordDisabled: 'Disabled',
     lockPasswordClear: 'Clear',
     lockPasswordCleared: 'Lock password cleared',
+    agentPassword: 'Admin password',
+    agentPasswordDesc:
+      'Change the server admin password. All sessions are signed out on success; sign in again with the new password.',
+    agentPasswordNewPlaceholder: 'New password (at least {min} characters)',
+    agentPasswordRequired: 'Enter a new password',
+    agentPasswordTooShort: 'Password must be at least {min} characters',
+    agentPasswordMismatch: 'Passwords do not match',
+    agentPasswordSubmit: 'Change password',
     lockPwdShow: 'Show password',
     lockPwdHide: 'Hide password',
     checkUpdate: 'Check for Updates',
@@ -1099,7 +1107,9 @@ export default {
     authRateLimited: 'Too many attempts. Please try again later.',
     authSetupRequired: 'The agent is not set up yet. Complete setup first.',
     networkError: 'Cannot reach LightTier Agent. Make sure the service is running, then retry.',
-    sessionExpired: 'Your session has expired. Sign in again.'
+    sessionExpired: 'Your session has expired. Sign in again.',
+    changePasswordInvalid: 'The new password was rejected. Check it and try again.',
+    passwordChanged: 'Password changed. Sign in with your new password.'
   },
   agentError: {
     instanceRunning: 'The instance is already running',

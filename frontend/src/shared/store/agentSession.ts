@@ -17,11 +17,16 @@ import { backendAuth, backendMode, isApiError } from '@/shared/platform/backend'
 export const AUTH_PASSWORD_MIN_LENGTH = 10
 
 /** 鉴权页展示后端错误码对应的 i18n key（setup 页的 401 表示令牌无效而非密码错误） */
-export const authErrorKey = (error: unknown, scope: 'login' | 'setup' = 'login'): string => {
+export const authErrorKey = (
+  error: unknown,
+  scope: 'login' | 'setup' | 'changePassword' = 'login'
+): string => {
   if (!isApiError(error)) return 'newAuth.networkError'
   switch (error.code) {
     case 'auth_invalid':
-      return scope === 'setup' ? 'newAuth.setupInvalid' : 'newAuth.authInvalid'
+      if (scope === 'setup') return 'newAuth.setupInvalid'
+      if (scope === 'changePassword') return 'newAuth.changePasswordInvalid'
+      return 'newAuth.authInvalid'
     case 'auth_rate_limited':
       return 'newAuth.authRateLimited'
     case 'setup_required':
@@ -93,6 +98,11 @@ export const useAgentSessionStore = defineStore('agentSession', () => {
     }
   }
 
+  /** 服务端已清空会话（如改密成功）：仅标记本地未认证，跳转登录页由调用方负责 */
+  const invalidate = (): void => {
+    authenticated.value = false
+  }
+
   return {
     authenticated,
     setupRequired,
@@ -101,6 +111,7 @@ export const useAgentSessionStore = defineStore('agentSession', () => {
     refresh,
     login,
     setup,
-    logout
+    logout,
+    invalidate
   }
 })

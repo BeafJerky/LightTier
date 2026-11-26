@@ -7,7 +7,120 @@
     :aria-labelledby="single ? undefined : 'sd-tab-security'"
     :tabindex="single ? undefined : 0"
   >
-    <div class="sd-security-card">
+    <!-- agent：服务端管理密码（改密成功后服务端清空会话，需重新登录） -->
+    <div v-if="isAgent" class="sd-security-card">
+      <div class="sd-security-head">
+        <div class="sd-security-title">
+          <span class="sd-row-title">{{ t('newSettings.agentPassword') }}</span>
+        </div>
+        <span class="sd-row-desc">{{ t('newSettings.agentPasswordDesc') }}</span>
+      </div>
+
+      <div class="sd-lock-form">
+        <div class="sd-lock-fields">
+          <div class="sd-lock-field">
+            <label class="sd-lock-label" for="sd-agent-pwd-new">{{
+              t('newSettings.lockPasswordNew')
+            }}</label>
+            <div class="sd-lock-input-bar">
+              <LtInput
+                v-model="agentPwdInput"
+                class="sd-lock-input"
+                variant="filled"
+                input-id="sd-agent-pwd-new"
+                :type="agentPwdVisible ? 'text' : 'password'"
+                :placeholder="
+                  t('newSettings.agentPasswordNewPlaceholder', { min: AUTH_PASSWORD_MIN_LENGTH })
+                "
+                :aria-label="t('newSettings.lockPasswordNew')"
+                :aria-invalid="!!agentPwdError"
+                :aria-describedby="agentPwdError ? 'sd-agent-pwd-error' : undefined"
+                autocomplete="new-password"
+                @input="agentPwdError = ''"
+                @keyup.enter="commitAgentPassword"
+              />
+              <LtButton
+                variant="text"
+                size="xs"
+                circle
+                class="sd-lock-eye"
+                type="button"
+                @mousedown.prevent
+                @click="agentPwdVisible = !agentPwdVisible"
+                :title="
+                  agentPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
+                "
+                :aria-label="
+                  agentPwdVisible ? t('newSettings.lockPwdHide') : t('newSettings.lockPwdShow')
+                "
+                :aria-pressed="agentPwdVisible"
+              >
+                <svg
+                  v-if="agentPwdVisible"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                  />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+                <svg
+                  v-else
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </LtButton>
+            </div>
+          </div>
+          <div class="sd-lock-field">
+            <label class="sd-lock-label" for="sd-agent-pwd-confirm">{{
+              t('newSettings.lockPasswordConfirm')
+            }}</label>
+            <LtInput
+              v-model="agentPwdConfirm"
+              class="sd-lock-input"
+              variant="filled"
+              input-id="sd-agent-pwd-confirm"
+              :type="agentPwdVisible ? 'text' : 'password'"
+              :placeholder="t('newSettings.lockPasswordConfirmPlaceholder')"
+              :aria-label="t('newSettings.lockPasswordConfirm')"
+              :aria-invalid="!!agentPwdError"
+              :aria-describedby="agentPwdError ? 'sd-agent-pwd-error' : undefined"
+              autocomplete="new-password"
+              @input="agentPwdError = ''"
+              @keyup.enter="commitAgentPassword"
+            />
+          </div>
+        </div>
+        <span v-if="agentPwdError" id="sd-agent-pwd-error" class="sd-field-error" role="alert">{{
+          agentPwdError
+        }}</span>
+        <div class="sd-lock-actions">
+          <LtButton
+            variant="primary"
+            type="button"
+            :loading="agentPwdBusy"
+            :disabled="agentPwdBusy"
+            @click="commitAgentPassword"
+            >{{ t('newSettings.agentPasswordSubmit') }}</LtButton
+          >
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="sd-security-card">
       <div class="sd-security-head">
         <div class="sd-security-title">
           <span class="sd-row-title">{{ t('newSettings.lockPassword') }}</span>
@@ -146,6 +259,7 @@
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/shared/store/agentSession'
 import { injectRequired } from '@/shared/lib/inject'
 import { SETTINGS_SECURITY_KEY } from './context'
 
@@ -163,7 +277,14 @@ const {
   startLockEdit,
   cancelLockEdit,
   commitLockPassword,
-  handleClearLockPassword
+  handleClearLockPassword,
+  isAgent,
+  agentPwdVisible,
+  agentPwdInput,
+  agentPwdConfirm,
+  agentPwdError,
+  agentPwdBusy,
+  commitAgentPassword
 } = injectRequired(SETTINGS_SECURITY_KEY, 'SecuritySection')
 </script>
 

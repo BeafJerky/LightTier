@@ -106,6 +106,49 @@ describe('agentAuth', () => {
     expect(init.method).toBe('POST')
   })
 
+  it('changePassword：POST /api/v1/auth/password，body {password}，204 解析为 undefined', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+
+    await expect(agentAuth.changePassword('new-secret-pass')).resolves.toBeUndefined()
+
+    const [url, init] = lastCall()
+    expect(url).toBe('/api/v1/auth/password')
+    expect(init.method).toBe('POST')
+    expect(init.credentials).toBe('same-origin')
+    expect(init.headers).toMatchObject({ 'content-type': 'application/json' })
+    expect(JSON.parse(String(init.body))).toEqual({ password: 'new-secret-pass' })
+  })
+
+  it('changePassword：长度不足 auth_invalid 透传，且不触发全局会话失效回调', async () => {
+    const unauthorized = vi.fn()
+    disposeUnauthorized = onUnauthorized(unauthorized)
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { error: { code: 'auth_invalid', message: 'invalid credentials' } })
+    )
+
+    await expect(agentAuth.changePassword('short')).rejects.toMatchObject({
+      code: 'auth_invalid',
+      status: 401
+    })
+    expect(unauthorized).not.toHaveBeenCalled()
+  })
+
+  it('changePassword：未初始化 setup_required 透传并触发初始化回调', async () => {
+    const setupRequired = vi.fn()
+    disposeSetupRequired = onSetupRequired(setupRequired)
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(428, { error: { code: 'setup_required', message: 'setup required' } })
+    )
+
+    await expect(agentAuth.changePassword('new-secret-pass')).rejects.toMatchObject({
+      code: 'setup_required',
+      status: 428
+    })
+    expect(setupRequired).toHaveBeenCalledTimes(1)
+  })
+
   it('meta：把字符串 apiVersion 归一为数字', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(200, {

@@ -7,17 +7,25 @@
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { LtButton, LtInput } from '@/shared/ui'
 import { authErrorKey, useAgentSessionStore } from '@/shared/store/agentSession'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const session = useAgentSessionStore()
 
 const password = ref('')
 const errorKey = ref('')
 const submitting = ref(false)
+
+// 改密成功 / 会话失效跳转携带的提示（toast 容器随布局卸载，改在登录页常驻展示）
+const noticeKey = computed(() => {
+  if (route.query.notice === 'changed') return 'newAuth.passwordChanged'
+  if (route.query.notice === 'expired') return 'newAuth.sessionExpired'
+  return ''
+})
 
 const canSubmit = computed(() => password.value.length > 0 && !submitting.value)
 // 未初始化时后端返回 setup_required：错误提示旁给出初始化入口
@@ -45,6 +53,7 @@ const submit = async () => {
       <img class="lt-auth__logo" src="/logo.png" alt="" />
       <h1 class="lt-auth__title">{{ t('newAuth.loginTitle') }}</h1>
       <p class="lt-auth__subtitle">{{ t('newAuth.loginSubtitle') }}</p>
+      <p v-if="noticeKey" class="lt-auth__notice" role="status">{{ t(noticeKey) }}</p>
       <label class="lt-auth__label" for="agent-login-password">
         {{ t('newAuth.passwordLabel') }}
       </label>
@@ -129,6 +138,17 @@ const submit = async () => {
   line-height: 1.5;
   color: var(--theme-text-secondary);
   text-align: center;
+}
+
+.lt-auth__notice {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  margin: 0 0 var(--theme-space-4);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--theme-color-success, #7fba8a);
+  background: rgb(var(--theme-color-success-rgb, 127, 186, 138), 0.12);
+  border: 1px solid var(--theme-color-success, #7fba8a);
+  border-radius: var(--theme-radius-md, 10px);
 }
 
 .lt-auth__label {
