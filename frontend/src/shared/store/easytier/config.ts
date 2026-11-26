@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { resourceDir } from '@tauri-apps/api/path'
 import type { FormWebData } from '@/entities/config/formTypes'
 import { useMockData } from '@/shared/platform/mockData'
+import { backendConfigs, backendMode } from '@/shared/platform/backend'
 
 export function createConfigDomain() {
   const configPath = ref('resource')
@@ -75,12 +76,21 @@ export function createConfigDomain() {
     configListLoading.value = true
     configLoadTask = (async () => {
       try {
-        const { listTomlFiles } = useMockData()
-        const files = await listTomlFiles()
-        configList.value = files.map((f: string) => ({
-          configFileName: f.replace('.toml', ''),
-          fileName: f
-        }))
+        if (backendMode() === 'agent') {
+          // agent 模式：配置名即服务端 id（不含 .toml），fileName 仅用于既有展示/日志口径
+          const metas = await backendConfigs().list()
+          configList.value = metas.map((meta) => ({
+            configFileName: meta.id,
+            fileName: `${meta.id}.toml`
+          }))
+        } else {
+          const { listTomlFiles } = useMockData()
+          const files = await listTomlFiles()
+          configList.value = files.map((f: string) => ({
+            configFileName: f.replace('.toml', ''),
+            fileName: f
+          }))
+        }
         configListLoaded.value = true
       } catch {
         /* 彻底失败，保持空列表 */

@@ -22,6 +22,13 @@ pub enum ApiError {
     CoreMissing,
     DiskFull,
     NotFound,
+    PackageExists,
+    BadPackage { detail: String },
+    ChecksumMismatch,
+    CoreVersionUnsupported,
+    TaskInProgress,
+    BuiltinPackage,
+    CoreOverrideReadOnly,
     Internal(String),
 }
 
@@ -45,6 +52,13 @@ impl ApiError {
             Self::CoreMissing => "core_missing",
             Self::DiskFull => "disk_full",
             Self::NotFound => "not_found",
+            Self::PackageExists => "package_exists",
+            Self::BadPackage { .. } => "bad_package",
+            Self::ChecksumMismatch => "checksum_mismatch",
+            Self::CoreVersionUnsupported => "core_version_unsupported",
+            Self::TaskInProgress => "task_in_progress",
+            Self::BuiltinPackage => "builtin_package",
+            Self::CoreOverrideReadOnly => "core_override_read_only",
             Self::Internal(_) => "internal",
         }
     }
@@ -73,6 +87,15 @@ impl ApiError {
             Self::CoreMissing => "easytier core is not installed".into(),
             Self::DiskFull => "disk is full".into(),
             Self::NotFound => "not found".into(),
+            Self::PackageExists => "kernel version is already installed".into(),
+            Self::BadPackage { detail } => format!("unusable kernel package: {detail}"),
+            Self::ChecksumMismatch => "kernel package checksum mismatch".into(),
+            Self::CoreVersionUnsupported => "kernel version is not in the release manifest".into(),
+            Self::TaskInProgress => "an install task for this version is running".into(),
+            Self::BuiltinPackage => "built-in kernel version cannot be removed".into(),
+            Self::CoreOverrideReadOnly => {
+                "installs are disabled while a core directory override is configured".into()
+            }
             Self::Internal(detail) => format!("internal error: {detail}"),
         }
     }
@@ -82,12 +105,23 @@ impl ApiError {
             Self::InvalidToml { detail } | Self::InvalidSettings { detail } => {
                 Some(json!({ "detail": detail }))
             }
+            Self::BadPackage { detail } => Some(json!({ "detail": detail })),
             Self::ConflictHash { expected, actual } => {
                 Some(json!({ "expected": expected, "actual": actual }))
             }
             Self::PortInUse { port, owner } => Some(json!({ "port": port, "owner": owner })),
             _ => None,
         }
+    }
+
+    /// The `{code, message[, params]}` object clients see, also stored on failed
+    /// install tasks so a task snapshot carries the same shape as an HTTP error.
+    pub fn payload(&self) -> Value {
+        let mut error = json!({ "code": self.code(), "message": self.message() });
+        if let Some(params) = self.params() {
+            error["params"] = params;
+        }
+        error
     }
 
     fn status(&self) -> StatusCode {
@@ -106,7 +140,14 @@ impl ApiError {
             | Self::InstanceRunning
             | Self::InstanceNotRunning
             | Self::PortInUse { .. }
-            | Self::CoreMissing => StatusCode::CONFLICT,
+            | Self::CoreMissing
+            | Self::PackageExists
+            | Self::TaskInProgress
+            | Self::CoreOverrideReadOnly => StatusCode::CONFLICT,
+            Self::BadPackage { .. } | Self::ChecksumMismatch | Self::CoreVersionUnsupported => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
+            Self::BuiltinPackage => StatusCode::FORBIDDEN,
             Self::DiskFull => StatusCode::INSUFFICIENT_STORAGE,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -117,10 +158,7 @@ impl ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status();
-        let mut error = json!({ "code": self.code(), "message": self.message() });
-        if let Some(params) = self.params() {
-            error["params"] = params;
-        }
+        let error = self.payload();
         (status, Json(json!({ "error": error }))).into_response()
     }
 }

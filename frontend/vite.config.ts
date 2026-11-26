@@ -105,6 +105,14 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       host: '0.0.0.0',
       // tauri.conf.json5 的 devUrl 固定 4000，被占用时必须直接失败，避免 Vite 自动换端口后应用连错地址
       strictPort: true,
+      // ?agent=1 时前端经 Vite 代理访问本机 lighttier-agent（默认监听 17800）；
+      // 不重写路径，agent 端点即 /api/v1/*。其余模式不发任何 /api 请求。
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:17800',
+          changeOrigin: false
+        }
+      },
       watch: {
         // Rust 构建产物不需要触发前端热更新
         ignored: ['**/src-tauri/**', '../src-tauri/**']

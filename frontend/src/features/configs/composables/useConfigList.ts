@@ -41,6 +41,7 @@ import { useRunningListSync } from '@/shared/composables/useRunningListSync'
 import { isExitRouteEnabled, setExitRouteEnabled } from '@/entities/config/lighttierConfigUtil'
 import { useConfigDetail } from './useConfigDetail'
 import { useConfigServices } from './useConfigServices'
+import { agentErrorI18n, backendConfigs, backendMode, isApiError } from '@/shared/platform/backend'
 
 interface UseConfigListOptions {
   /** 页面级自定义确认弹窗（由壳组件提供，Promise<boolean>） */
@@ -93,6 +94,8 @@ export function useConfigList(options: UseConfigListOptions) {
   const editConfigName = ref('')
   const editTomlContent = ref('')
   const editDialogMode = ref<'add' | 'edit'>('edit')
+  // agent 模式：打开编辑时读取的配置 hash，保存时作为 PUT expectedHash 做乐观并发校验
+  const editConfigHash = ref('')
 
   // ===== Windows 服务面板（仅非 Android） =====
   const {
@@ -203,6 +206,7 @@ export function useConfigList(options: UseConfigListOptions) {
     selectedDetail,
     detailState,
     detailError,
+    detailHash,
     detailErrorTitle,
     routeFilter,
     filteredRoutes,
@@ -345,9 +349,17 @@ export function useConfigList(options: UseConfigListOptions) {
       return
     }
     try {
-      const raw = (await readFileContent(`${CONFIG_PATH}/${selectedConfig.value.fileName}`, {
-        throwOnError: true
-      })) as string
+      let raw: string
+      if (backendMode() === 'agent') {
+        // agent 模式：读服务端配置并记录基线 hash，保存时用于冲突检测
+        const document = await backendConfigs().read(selectedConfig.value.configFileName)
+        editConfigHash.value = document.hash
+        raw = document.toml
+      } else {
+        raw = (await readFileContent(`${CONFIG_PATH}/${selectedConfig.value.fileName}`, {
+          throwOnError: true
+        })) as string
+      }
       // 必须先切回 edit：openAdd 会把模式置为 add，若不复位会导致后续编辑按“新建”处理
       // （隐藏字段/重名校验/标题错误），也破坏“新建隐藏、存量警告”的版本适配策略
       editDialogMode.value = 'edit'
@@ -362,49 +374,95 @@ export function useConfigList(options: UseConfigListOptions) {
   // 编辑/新增弹窗保存回调：备份旧文件 → 写入 TOML → 回调结果（失败时弹窗保持打开）
   const handleSaved = async (name: string, content: string, done: (ok: boolean) => void) => {
     const isAdd = editDialogMode.value === 'add'
-    let backupFailed = false
-    try {
-      await runTomlTransaction(async () => {
-        if (!isAdd) {
-          // 覆盖前备份上一版；备份失败视为保存失败，避免用户误以为有回滚点
-          try {
-            const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`, {
-              throwOnError: true
-            })) as string
-            await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
-          } catch {
-            backupFailed = true
-            throw new Error('backup failed')
+    if (backendMode() === 'agent') {
+      try {
+        // 新增不带 expectedHash；编辑带打开时的基线 hash，服务端 409 表示已被并发修改
+        editConfigHash.value = await backendConfigs().write(
+          name,
+          content,
+          isAdd ? undefined : editConfigHash.value || undefined
+        )
+        // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
+        await easyTierStore.reloadConfigFiles()
+        if (easyTierStore.configList.some((c) => c.configFileName === name)) {
+          toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
+        } else {
+          console.warn('[config] saved but missing from list:', name)
+          toast(t('newCommon.savedButUnlisted'), 'warning')
+        }
+        await refreshRuntimeState()
+        done(true)
+      } catch (e) {
+        console.error('[config] agent save failed:', name, e)
+        if (isApiError(e) && e.code === 'conflict_hash') {
+          // 服务端已有更新：提示刷新并同步列表/详情，弹窗保持打开，避免静默覆盖他人修改
+          toast(t('newConfig.hashConflict'), 'warning', 5000)
+          await easyTierStore.reloadConfigFiles()
+          if (selectedConfig.value) {
+            await loadConfigDetail(selectedConfig.value)
+            editConfigHash.value = detailHash.value
+          }
+        } else {
+          // 稳定错误码（如 invalid_id）先换成本地化文案，未覆盖的才展示原始 message
+          const mapped = agentErrorI18n(e)
+          const detail = mapped ? t(mapped.key, mapped.params ?? {}) : getErrorMessage(e)
+          if (detail) {
+            toast(
+              t(isAdd ? 'newCommon.addFailDetail' : 'newCommon.saveFailDetail', { msg: detail }),
+              'error',
+              5000
+            )
+          } else {
+            toast(t(isAdd ? 'newCommon.addFail' : 'newCommon.saveFail'), 'error')
           }
         }
-        await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
-      })
-      // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
-      await easyTierStore.reloadConfigFiles()
-      if (easyTierStore.configList.some((c) => c.configFileName === name)) {
-        toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
-      } else {
-        // 文件写入成功但列表没读到：单独提示，避免和写盘失败混淆
-        console.warn('[config] saved but missing from list:', `${CONFIG_PATH}/${name}.toml`)
-        toast(t('newCommon.savedButUnlisted'), 'warning')
+        done(false)
       }
-      await refreshRuntimeState()
-      done(true)
-    } catch (e) {
-      console.error('[config] save failed:', `${CONFIG_PATH}/${name}.toml`, e)
-      const detail = getErrorMessage(e)
-      if (!isAdd && backupFailed) {
-        toast(t('newConfig.backupFailed'), 'error')
-      } else if (detail) {
-        toast(
-          t(isAdd ? 'newCommon.addFailDetail' : 'newCommon.saveFailDetail', { msg: detail }),
-          'error',
-          5000
-        )
-      } else {
-        toast(t(isAdd ? 'newCommon.addFail' : 'newCommon.saveFail'), 'error')
+    } else {
+      let backupFailed = false
+      try {
+        await runTomlTransaction(async () => {
+          if (!isAdd) {
+            // 覆盖前备份上一版；备份失败视为保存失败，避免用户误以为有回滚点
+            try {
+              const previous = (await readFileContent(`${CONFIG_PATH}/${name}.toml`, {
+                throwOnError: true
+              })) as string
+              await writeFileContent(`${CONFIG_PATH}/${name}.toml.bak`, previous)
+            } catch {
+              backupFailed = true
+              throw new Error('backup failed')
+            }
+          }
+          await writeFileContent(`${CONFIG_PATH}/${name}.toml`, content)
+        })
+        // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
+        await easyTierStore.reloadConfigFiles()
+        if (easyTierStore.configList.some((c) => c.configFileName === name)) {
+          toast(isAdd ? t('newCommon.addSuccess') : t('newCommon.saveSuccess'), 'success')
+        } else {
+          // 文件写入成功但列表没读到：单独提示，避免和写盘失败混淆
+          console.warn('[config] saved but missing from list:', `${CONFIG_PATH}/${name}.toml`)
+          toast(t('newCommon.savedButUnlisted'), 'warning')
+        }
+        await refreshRuntimeState()
+        done(true)
+      } catch (e) {
+        console.error('[config] save failed:', `${CONFIG_PATH}/${name}.toml`, e)
+        const detail = getErrorMessage(e)
+        if (!isAdd && backupFailed) {
+          toast(t('newConfig.backupFailed'), 'error')
+        } else if (detail) {
+          toast(
+            t(isAdd ? 'newCommon.addFailDetail' : 'newCommon.saveFailDetail', { msg: detail }),
+            'error',
+            5000
+          )
+        } else {
+          toast(t(isAdd ? 'newCommon.addFail' : 'newCommon.saveFail'), 'error')
+        }
+        done(false)
       }
-      done(false)
     }
   }
 
@@ -417,6 +475,7 @@ export function useConfigList(options: UseConfigListOptions) {
     }
     editDialogMode.value = 'add'
     editConfigName.value = ''
+    editConfigHash.value = ''
     // 初始模板不写 rpc_portal：v2.5.0 起该字段已从配置移除（桌面运行时由 CLI 参数注入，
     // v2.4.5 也可在表单中手动开启）；避免新建配置即触发“字段已失效”警告
     editTomlContent.value = 'hostname = ""\ninstance_name = ""\ndhcp = true\n'
@@ -447,15 +506,20 @@ export function useConfigList(options: UseConfigListOptions) {
     )
     if (!ok) return
     try {
-      // 删除配置前清除该配置持有的退出路由（失败则中止，避免留下无法追踪的残留）
-      if (isTauri) {
-        const routeResult = await clearExitRoute(target.configFileName)
-        if (!routeResult.ok) {
-          toast(t('newConfig.exitRouteFail'), 'error', 4000)
-          return
+      if (backendMode() === 'agent') {
+        // agent 模式：退出路由为桌面能力（isTauri 为 false），服务端删除时自行清理同名 .bak
+        await backendConfigs().remove(target.configFileName)
+      } else {
+        // 删除配置前清除该配置持有的退出路由（失败则中止，避免留下无法追踪的残留）
+        if (isTauri) {
+          const routeResult = await clearExitRoute(target.configFileName)
+          if (!routeResult.ok) {
+            toast(t('newConfig.exitRouteFail'), 'error', 4000)
+            return
+          }
         }
+        await runTomlTransaction(() => deleteFileOrDir(`${CONFIG_PATH}/${target.fileName}`))
       }
-      await runTomlTransaction(() => deleteFileOrDir(`${CONFIG_PATH}/${target.fileName}`))
       clearTrend(target.configFileName)
       toast(t('newCommon.deleteSuccess'), 'success')
       selectedConfig.value = null

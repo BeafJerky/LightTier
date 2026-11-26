@@ -9,17 +9,11 @@ use tokio::sync::Mutex;
 
 use crate::error::ApiError;
 use crate::ids::validate_config_id;
+use crate::packages::Packages;
 use crate::settings::SettingsStore;
 use crate::storage;
 
-/// Resolved EasyTier kernel binaries. `cli` is `None` when the release does not
-/// ship `easytier-cli` next to `easytier-core`.
-#[derive(Debug, Clone)]
-pub struct CorePaths {
-    pub core: PathBuf,
-    pub cli: Option<PathBuf>,
-    pub version: String,
-}
+pub use crate::packages::CorePaths;
 
 /// The subset of an EasyTier TOML config the supervisor needs: where the RPC
 /// portal listens, which listeners are opened, and the kernel log level.
@@ -229,6 +223,22 @@ impl Supervisor {
         Ok(out)
     }
 
+    /// Core-mutation barrier: the lock every `start`/`stop`/`restart` holds.
+    ///
+    /// It exists for the one action that deletes the tree a spawn would read.
+    /// Acquiring it first turns "check whether anything runs the active version"
+    /// and "remove that version" into one atomic step: a start that already
+    /// passed its own running check is either done (so the caller sees it) or
+    /// still waiting (so it runs after the tree is gone, and fails loudly).
+    ///
+    /// Callers **must** re-check the state after acquiring, because anything read
+    /// before the acquisition is already stale. The guard must be dropped before
+    /// serializing a response (or doing unrelated I/O) so a slow client cannot
+    /// stall every instance operation.
+    pub async fn exclusive_start(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.start_lock.lock().await
+    }
+
     /// Serialized entry point: `start_lock` is held for the whole body so a
     /// concurrent `stop`/`restart` can never interleave with a start.
     pub async fn start(&self, id: &str) -> Result<InstanceSnapshot, ApiError> {
@@ -251,7 +261,7 @@ impl Supervisor {
             return Err(ApiError::InstanceRunning);
         }
         let document = self.configs.get(id).await?;
-        let core = resolve_core_in(&self.core_roots)?;
+        let core = crate::packages::resolve_in(&self.core_roots)?;
         let parsed = parse_core_config(&document.toml)?;
         let settings = self.settings.get().await;
 
@@ -513,88 +523,23 @@ pub async fn autostart(supervisor: &Supervisor) {
     }
 }
 
-/// Search order for the kernel: explicit override, then the packaged
-/// `/opt/lighttier/core`, then `<data>/core`.
+/// Search list for the kernel: an explicit override, otherwise the roots
+/// `Packages` owns — the packaged `/opt/lighttier/core` and `<data>/core`.
 fn core_search_roots(data_dir: &Path, override_dir: Option<&Path>) -> Vec<PathBuf> {
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(dir) = override_dir {
-        roots.push(dir.to_path_buf());
+    match override_dir {
+        // `LT_CORE_DIR` replaces the list entirely: an operator who points the
+        // agent at a tree gets exactly that tree, never a mix with builtin.
+        Some(dir) => vec![dir.to_path_buf()],
+        None => Packages::new(data_dir).core_roots(),
     }
-    roots.push(PathBuf::from("/opt/lighttier/core"));
-    roots.push(data_dir.join("core"));
-    roots
 }
 
-/// Finds the newest usable kernel. Roots are tried in order — explicit override,
-/// then the packaged `/opt/lighttier/core`, then `<data>/core` — and the first
-/// root that holds a candidate wins. A root that itself contains
-/// `easytier-core` counts as a release whose version is the directory name.
+/// Resolves the newest usable kernel for callers that only know the data dir
+/// (the CLI helper). Same rule as the supervisor: highest version across the
+/// searched roots wins. Kept as `supervisor::resolve_core` for those callers;
+/// the implementation lives in [`crate::packages`].
 pub fn resolve_core(data_dir: &Path, override_dir: Option<&Path>) -> Result<CorePaths, ApiError> {
-    resolve_core_in(&core_search_roots(data_dir, override_dir))
-}
-
-/// Root-list seam: `resolve_core` and `Supervisor` both delegate here, and tests
-/// pass their own roots so a packaged core cannot influence the result.
-fn resolve_core_in(roots: &[PathBuf]) -> Result<CorePaths, ApiError> {
-    for root in roots {
-        if let Some(best) = core_candidates(root)
-            .into_iter()
-            .max_by_key(|candidate| version_key(&candidate.version))
-        {
-            return Ok(best);
-        }
-    }
-    Err(ApiError::CoreMissing)
-}
-
-fn core_candidates(root: &Path) -> Vec<CorePaths> {
-    let mut out = Vec::new();
-    let direct = root.join("easytier-core");
-    if direct.is_file() {
-        let version = root
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "local".into());
-        out.push(CorePaths {
-            core: direct,
-            cli: cli_beside(root),
-            version,
-        });
-    }
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let core = path.join("easytier-core");
-            if !core.is_file() {
-                continue;
-            }
-            let version = path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            out.push(CorePaths {
-                core,
-                cli: cli_beside(&path),
-                version,
-            });
-        }
-    }
-    out
-}
-
-fn cli_beside(dir: &Path) -> Option<PathBuf> {
-    let path = dir.join("easytier-cli");
-    path.is_file().then_some(path)
-}
-
-fn version_key(version: &str) -> Vec<u64> {
-    version
-        .split(|c: char| !c.is_ascii_digit())
-        .filter_map(|part| part.parse::<u64>().ok())
-        .collect()
+    crate::packages::resolve_in(&core_search_roots(data_dir, override_dir))
 }
 
 /// Levels easytier-core accepts for `--file-log-level`. The kernel parses the
@@ -760,6 +705,16 @@ mod tests {
             root,
             "#!/bin/sh\ntrap 'exit 0' TERM\nwhile true; do sleep 0.1; done\n",
         )
+    }
+
+    /// Installs `body` as `<root>/<version>/easytier-core` and returns the
+    /// version directory, so a test can point several roots at different
+    /// versions.
+    fn install_core(root: &Path, version: &str, body: &str) -> PathBuf {
+        let dir = root.join(version);
+        std::fs::create_dir_all(&dir).unwrap();
+        write_exec(&dir.join("easytier-core"), body);
+        dir
     }
 
     /// Fake kernel that records its argv (one entry per line) next to itself and
@@ -1048,6 +1003,45 @@ while true; do sleep 0.1; done
         assert_eq!(err.code(), "core_missing");
     }
 
+    /// M2 resolved per root (first root with a candidate won). M3 scans every
+    /// root and starts the highest version, so a newer kernel installed into
+    /// `<data>/core` takes over from the older one in the builtin root.
+    #[tokio::test]
+    async fn highest_version_across_roots_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        let root_a = dir.path().join("a");
+        let root_b = dir.path().join("b");
+        let old = install_core(&root_a, "v2.5.0", ARG_RECORDING_CORE);
+        let new = install_core(&root_b, "v2.6.4", ARG_RECORDING_CORE);
+        let data = dir.path().join("data");
+        let (configs, settings) = store(&data).await;
+        configs
+            .put("home", "rpc_portal = \"127.0.0.1:15931\"\n", None)
+            .await
+            .unwrap();
+
+        // A is listed first on purpose: the version decides, not the root order.
+        let roots = vec![root_a, root_b];
+        assert_eq!(
+            crate::packages::resolve_in(&roots).unwrap().version,
+            "v2.6.4"
+        );
+        let supervisor = Supervisor::load_with_roots(&data, roots, configs.clone(), settings)
+            .await
+            .unwrap();
+        supervisor.start("home").await.unwrap();
+
+        // The fake kernel records its argv next to itself, so the file's location
+        // proves which root's binary ran.
+        let args = read_args(&new.join("args.txt")).await;
+        assert_eq!(
+            value_after(&args, "--config-file"),
+            Some(configs.path("home").to_str().unwrap())
+        );
+        assert!(!old.join("args.txt").exists());
+        supervisor.stop("home").await.unwrap();
+    }
+
     #[tokio::test]
     async fn restart_spawns_new_process() {
         let dir = tempfile::tempdir().unwrap();
@@ -1098,8 +1092,9 @@ while true; do sleep 0.1; done
             supervisor.restart("home").await.unwrap_err().code(),
             "instance_not_running"
         );
+        // 反斜杠是路径分隔符，仍是非法 id（空格在 id 规则里合法）
         assert_eq!(
-            supervisor.restart("bad id").await.unwrap_err().code(),
+            supervisor.restart("bad\\id").await.unwrap_err().code(),
             "invalid_id"
         );
     }
@@ -1515,7 +1510,7 @@ file = "easytier"
     }
 
     #[test]
-    fn resolve_prefers_first_root_then_highest_version() {
+    fn resolve_prefers_highest_version_within_a_root() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("core");
         for version in ["v2.4.5", "v2.7.1", "v2.6.4"] {
@@ -1525,6 +1520,7 @@ file = "easytier"
         }
         let resolved = resolve_core(dir.path(), Some(&root)).unwrap();
         assert_eq!(resolved.version, "v2.7.1");
+        assert_eq!(resolved.core, root.join("v2.7.1/easytier-core"));
         assert!(resolved.cli.is_none());
     }
 }

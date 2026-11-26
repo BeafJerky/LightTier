@@ -309,6 +309,7 @@ import { usePageConfirm } from '@/shared/ui/usePageConfirm'
 import { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { isAndroid } from '@/shared/platform/platformUtil'
+import { backendCapabilities, backendMode } from '@/shared/platform/backend'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { useSettingsPreferences } from '../../composables/useSettingsPreferences'
 import { useSettingsKernel } from '../../composables/useSettingsKernel'
@@ -369,6 +370,9 @@ const isDesktopRuntime =
     }
   })()
 
+// agent 模式按服务端能力位隐藏不可用入口；native / mock 为 null（全部可见）
+const settingsCaps = backendMode() === 'agent' ? backendCapabilities() : null
+
 // 确认弹窗（替代原生 confirm）：将面板内确认操作 Promise 化，
 // 被其它方式关闭时按“取消”处理
 const {
@@ -417,7 +421,7 @@ const {
 } = kernel
 const { backupDialogVisible } = data
 
-provide(SETTINGS_ENV_KEY, { isDesktopRuntime, isAndroidPlatform })
+provide(SETTINGS_ENV_KEY, { isDesktopRuntime, isAndroidPlatform, capabilities: settingsCaps })
 provide(SETTINGS_PREFERENCES_KEY, preferences)
 provide(SETTINGS_KERNEL_KEY, kernel)
 provide(SETTINGS_UPDATE_KEY, update)
@@ -435,21 +439,30 @@ watch(visible, (v) => {
     kernel.mirrorAddError.value = ''
     // 备份与恢复同样作为下级弹窗，关闭设置时一并收起
     data.backupDialogVisible.value = false
+    // 设置弹窗常驻挂载：关闭时停掉 agent 安装轮询，服务端任务不受影响
+    kernel.stopAgentPoll()
   }
 })
 
 // Tab 导航
 const activeTab = ref('general')
-const tabs = [
-  { key: 'general', label: t('newSettings.general') },
-  { key: 'island', label: t('newSettings.island') },
-  { key: 'core', label: t('newSettings.coreMgmt') },
-  { key: 'data', label: t('newSettings.dataMgmt') },
-  { key: 'security', label: t('newSettings.security') },
-  { key: 'about', label: t('newSettings.about') }
-]
+// 托盘 / 灵动岛仅桌面原生运行时存在；agent 下不展示该分类
+const tabs = computed(() =>
+  [
+    { key: 'general', label: t('newSettings.general') },
+    { key: 'island', label: t('newSettings.island') },
+    { key: 'core', label: t('newSettings.coreMgmt') },
+    { key: 'data', label: t('newSettings.dataMgmt') },
+    { key: 'security', label: t('newSettings.security') },
+    { key: 'about', label: t('newSettings.about') }
+  ].filter((tab) => tab.key !== 'island' || !settingsCaps || settingsCaps.tray)
+)
 // 单页模式（Android 设置子路由）：section 直接决定渲染的分类，忽略内部 tab 状态
-const panelTab = computed(() => props.section || activeTab.value)
+const panelTab = computed(() => {
+  const requested = props.section || activeTab.value
+  if (requested === 'island' && settingsCaps && !settingsCaps.tray) return 'general'
+  return requested
+})
 
 // Tab 导航键盘操作：Up/Down/Left/Right 循环，Home/End 跳首尾（UX-104）
 const tabRefs = ref<HTMLButtonElement[]>([])
@@ -466,7 +479,7 @@ const setTabRef = (el: unknown, idx: number) => {
 const scrollActiveTabIntoView = () => {
   nextTick(() => {
     const nav = navRef.value
-    const idx = tabs.findIndex((tab) => tab.key === activeTab.value)
+    const idx = tabs.value.findIndex((tab) => tab.key === activeTab.value)
     const item = tabRefs.value[idx]
     if (!nav || !item) return
     const navRect = nav.getBoundingClientRect()
@@ -493,11 +506,12 @@ const handleTabKeydown = (e: KeyboardEvent, idx: number) => {
   if (!keys.includes(e.key)) return
   e.preventDefault()
   let next = idx
-  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length
-  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (idx + 1) % tabs.length
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')
+    next = (idx - 1 + tabs.value.length) % tabs.value.length
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (idx + 1) % tabs.value.length
   else if (e.key === 'Home') next = 0
-  else if (e.key === 'End') next = tabs.length - 1
-  selectTab(tabs[next].key)
+  else if (e.key === 'End') next = tabs.value.length - 1
+  selectTab(tabs.value[next].key)
   nextTick(() => tabRefs.value[next]?.focus())
 }
 
@@ -517,6 +531,8 @@ watch(visible, async (v) => {
     // 打开时让当前分类在窄屏横向 tab 中自动可见
     scrollActiveTabIntoView()
     preferences.syncRefreshInput()
+    // agent：自动运行等设置以服务端为准（本地持久化不跨设备）
+    void preferences.loadAgentSettings()
     await update.loadAppVersion()
     // 快捷入口“检查更新”：版本号就绪后再发起一次检查，先通知父组件消费标记避免重复触发
     if (props.checkUpdateOnOpen) {

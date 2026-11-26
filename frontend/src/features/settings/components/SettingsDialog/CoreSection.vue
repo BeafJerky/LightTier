@@ -8,7 +8,7 @@
     :tabindex="single ? undefined : 0"
   >
     <!-- 浏览器预览：无 Tauri 运行时，内核检测/路径/下载安装等桌面能力不可用 -->
-    <div v-if="!isDesktopRuntime && !isAndroidPlatform" class="sd-row">
+    <div v-if="!isDesktopRuntime && !isAndroidPlatform && !isAgentMode" class="sd-row">
       <div class="sd-row-info">
         <span class="sd-row-title">{{ t('newSettings.mockModeTitle') }}</span>
         <span class="sd-row-desc">{{ t('newSettings.mockModeDesc') }}</span>
@@ -36,13 +36,25 @@
           >{{ coreVersion }}</span
         >
         <LtButton
-          v-if="isDesktopRuntime"
+          v-if="isDesktopRuntime || isAgentMode"
           variant="ghost"
           @click="handleCheckCore"
           :disabled="checkingCore"
         >
           {{ checkingCore ? t('newCommon.checking') : t('newSettings.recheck') }}
         </LtButton>
+      </div>
+    </div>
+
+    <!-- TUN 状态：agent 在 TUN 不可用时给出原因，桌面/Android 不展示 -->
+    <div v-if="isAgentMode && !agentTunAvailable" class="sd-row">
+      <div class="sd-row-info">
+        <span class="sd-row-title">{{ t('newSettings.agentTunUnavailable') }}</span>
+        <span class="sd-row-desc">{{
+          agentTunReason
+            ? t('newSettings.agentTunReason', { reason: agentTunReason })
+            : t('newSettings.agentTunReasonUnknown')
+        }}</span>
       </div>
     </div>
 
@@ -78,12 +90,13 @@
       </div>
     </div>
 
-    <!-- 下载与安装（桌面换内核版本；Android 内核随应用更新） -->
-    <div v-if="isDesktopRuntime" class="sd-core-install">
+    <!-- 下载与安装（桌面换内核版本；agent 由服务端下载安装；Android 内核随应用更新） -->
+    <div v-if="isDesktopRuntime || isAgentMode" class="sd-core-install">
       <div class="sd-core-install-head">
         <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
         <!-- 加速源入口：列表/增删放在下级弹窗，避免占用内核面板纵向空间 -->
         <LtButton
+          v-if="!isAgentMode"
           type="button"
           variant="secondary"
           size="sm"
@@ -112,10 +125,16 @@
         </LtButton>
       </div>
       <div class="sd-core-install-hint">
-        {{ t('newSettings.downloadInstallHint') }}
+        {{ isAgentMode ? t('newSettings.agentInstallHint') : t('newSettings.downloadInstallHint') }}
       </div>
       <div class="sd-core-install-status" :class="{ ready: selectedCoreReady }">
-        {{ corePackageStatusText }}
+        <span>{{ corePackageStatusText }}</span>
+        <span v-if="isAgentMode && agentSelectedBuiltin" class="sd-agent-badge">{{
+          t('newSettings.agentBuiltinBadge')
+        }}</span>
+      </div>
+      <div v-if="isAgentMode && !agentInstallAllowed" class="sd-core-install-hint">
+        {{ t('newSettings.agentInstallDisabled') }}
       </div>
       <div class="sd-core-install-actions">
         <div class="sd-core-version-select">
@@ -189,6 +208,7 @@
       </div>
       <div class="sd-core-install-actions">
         <LtButton
+          v-if="!isAgentMode"
           variant="primary"
           @click="handleDownloadCore"
           :disabled="downloadingCore || mirrorProbing"
@@ -198,21 +218,74 @@
         <LtButton
           variant="success"
           @click="handleInstallCore"
-          :disabled="installingCore || downloadingCore || !selectedCoreReady"
+          :disabled="
+            isAgentMode
+              ? agentInstallBusy || !agentInstallAllowed || selectedCoreReady
+              : installingCore || downloadingCore || !selectedCoreReady
+          "
         >
-          {{ installingCore ? t('newCommon.installing') : t('newSettings.installCore') }}
+          {{
+            isAgentMode
+              ? agentInstallBusy
+                ? t('newCommon.installing')
+                : t('newSettings.installCore')
+              : installingCore
+                ? t('newCommon.installing')
+                : t('newSettings.installCore')
+          }}
         </LtButton>
         <LtButton
-          v-if="isSelectedCoreDownloaded"
+          v-if="!isAgentMode && isSelectedCoreDownloaded"
           variant="danger"
           @click="handleDeleteCorePackage"
           :disabled="deletingCore || downloadingCore || installingCore"
         >
           {{ deletingCore ? t('newSettings.deletingPackage') : t('newSettings.deleteCorePackage') }}
         </LtButton>
+        <LtButton
+          v-if="isAgentMode && selectedAgentInstalled && !agentSelectedBuiltin"
+          variant="danger"
+          @click="handleAgentRemoveCore"
+          :disabled="deletingCore || agentInstallBusy"
+        >
+          {{ deletingCore ? t('newSettings.deletingPackage') : t('newSettings.agentRemoveCore') }}
+        </LtButton>
       </div>
+      <!-- agent 安装进度（服务端任务轮询，1s 刷新）；运行中可取消 -->
+      <div v-if="isAgentMode && agentTask && agentInstallBusy" class="sd-download-progress">
+        <div
+          class="sd-download-progress-track"
+          role="progressbar"
+          :aria-label="t('newSettings.downloadProgressLabel')"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="agentProgressPercent ?? undefined"
+          :aria-valuetext="agentProgressText"
+        >
+          <div
+            class="sd-download-progress-fill"
+            :class="{ 'is-indeterminate': agentProgressPercent === null }"
+            :style="
+              agentProgressPercent === null ? undefined : { width: agentProgressPercent + '%' }
+            "
+          ></div>
+        </div>
+        <span class="sd-download-progress-text">{{ agentProgressText }}</span>
+        <LtButton
+          variant="ghost"
+          size="sm"
+          :disabled="agentCancelRequested"
+          @click="handleCancelAgentTask"
+          >{{
+            agentCancelRequested
+              ? t('newSettings.agentInstallCanceling')
+              : t('newSettings.agentInstallCancel')
+          }}</LtButton
+        >
+      </div>
+
       <!-- 下载进度：已知总大小时显示百分比进度条，缺失 Content-Length 时显示不确定态 -->
-      <div v-if="downloadActive" class="sd-download-progress">
+      <div v-if="!isAgentMode && downloadActive" class="sd-download-progress">
         <div
           class="sd-download-progress-track"
           role="progressbar"
@@ -277,6 +350,19 @@ const {
   handleDeleteCorePackage,
   handleInstallCore,
   installingCore,
+  isAgentMode,
+  agentTask,
+  agentInstallAllowed,
+  agentInstallBusy,
+  agentProgressPercent,
+  agentProgressText,
+  agentSelectedBuiltin,
+  selectedAgentInstalled,
+  agentTunAvailable,
+  agentTunReason,
+  agentCancelRequested,
+  handleCancelAgentTask,
+  handleAgentRemoveCore,
   mirrorProbing,
   currentMirrorLabel,
   downloadBtnText,
@@ -288,6 +374,16 @@ const {
 @import url('./styles/common.less');
 
 /* 核心管理 */
+
+/* agent：内置内核徽标（只提示，不提供删除入口） */
+.sd-agent-badge {
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--theme-text-secondary, #7a6e5e);
+  background: var(--theme-bg-tag, rgb(0 0 0 / 4%));
+  border-radius: var(--theme-radius-sm, 6px);
+}
+
 .sd-core-ver-row {
   display: flex;
   align-items: center;

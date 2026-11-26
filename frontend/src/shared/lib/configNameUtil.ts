@@ -14,6 +14,8 @@ const RESERVED_CONFIG_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 export const isValidConfigName = (name: string): boolean => {
   const value = name.trim()
   if (!value) return false
+  // 与 agent 后端 validate_config_id 对齐：按字符数（非字节）限制 64
+  if ([...value].length > 64) return false
   if (!VALID_CONFIG_NAME.test(value)) return false
   return !RESERVED_CONFIG_NAME.test(value)
 }

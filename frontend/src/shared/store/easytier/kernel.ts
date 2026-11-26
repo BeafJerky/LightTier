@@ -4,6 +4,7 @@
  */
 import { computed, ref } from 'vue'
 import { parseCoreVersion, resolveCoreCapabilities } from '@/entities/kernel/kernelCompatUtil'
+import { backendMode, backendPackages } from '@/shared/platform/backend'
 
 export function createKernelDomain() {
   // 已安装内核版本（规范化 vX.Y.Z）；null 表示未安装或无法识别
@@ -24,11 +25,16 @@ export function createKernelDomain() {
   /**
    * 重新探测已安装内核版本（桌面 easytier-cli -V / Android 编译期版本）。
    * 失败不抛出，返回 null，避免启动流程被内核缺失阻断。
+   * agent 模式：内核安装在服务端，版本取自内核包清单的 active 项。
    */
   const detectCoreVersion = async (): Promise<string | null> => {
     if (coreVersionDetecting.value) return detectedCoreVersion.value
     coreVersionDetecting.value = true
     try {
+      if (backendMode() === 'agent') {
+        const info = await backendPackages().list()
+        return applyCoreVersionRaw(info.active ?? '')
+      }
       const { getCoreVersion } = await import('@/shared/platform/coreApi')
       return applyCoreVersionRaw(await getCoreVersion())
     } catch {

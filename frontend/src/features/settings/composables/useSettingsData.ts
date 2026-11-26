@@ -8,6 +8,7 @@ import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { clearAppCache } from '@/shared/lib/cacheUtil'
 import { clearAllLogs } from '@/shared/platform/fileUtil'
+import { backendLogs, backendMode } from '@/shared/platform/backend'
 import type { SettingsConfirm } from './settingsTypes'
 
 export function useSettingsData(confirm: SettingsConfirm) {
@@ -41,6 +42,12 @@ export function useSettingsData(confirm: SettingsConfirm) {
     if (!(await confirm(t('newSettings.clearLogsTitle'), t('newSettings.clearLogsMsg')))) return
     clearingLogs.value = true
     try {
+      if (backendMode() === 'agent') {
+        // agent：服务端原地截断 agent.log 与内核日志（audit.log 保留）
+        await backendLogs().clear()
+        toast.success(t('newSettings.logsClearedAgent'))
+        return
+      }
       const result = await clearAllLogs()
       if (result.failed > 0) {
         toast.error(t('newSettings.logsClearPartial', { n: result.removed, m: result.failed }))

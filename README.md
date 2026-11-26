@@ -104,6 +104,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\lt-repack-all.ps1
 
 串行执行「先桌面后 Android」：任一步失败即中止并指向对应日志；全部完成后汇总输出两端产物路径、大小与时间戳。
 
+### Linux / fnOS（Web 管理端）
+
+独立服务端 `crates/agent`（自成一体的 Cargo 工程，不参与桌面构建）以 axum 托管同一套前端界面与 HTTP API，浏览器访问即可使用：配置增删改查、实例启停、运行监控、日志查看与内核包安装。Docker 部署、内置内核与完整接口说明见 [deploy/docker/README.md](deploy/docker/README.md)；镜像内置一个 EasyTier 内核版本，其余版本可在界面安装（按官方 SHA-256 校验）。主题、路由、系统服务、托盘与自动更新在 Web 版不可用；Windows 桌面与 Android 构建不受影响。
+
 ### 打包经验与注意事项
 
 1. **桌面与 Android 必须串行打包，不能并行**：两者共用前端 `frontend/dist/`（各自都会重建）与 workspace 的 `target/`（cargo 构建目录锁），并行存在资源竞态且实际会互相排队等待；建议先桌面后安卓依次执行。
@@ -125,11 +129,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\lt-repack-all.ps1
 │       └── shared/          # 通用能力：ui / lib / i18n / constants / composables / platform / store
 ├── src-tauri/               # Tauri 应用壳（命令注册、capability、gen/android）
 │   └── src/commands/        # #[tauri::command] 薄包装：process / system / update
-├── crates/                  # Cargo workspace 成员（实现层）
+├── crates/                  # Rust 实现层（core/desktop/runtime/android 为根 workspace 成员）
 │   ├── core/                # lighttier-core：日志、端口检测、外链、内核清单与执行校验
 │   ├── desktop/             # lighttier-desktop：进程/服务、更新安装（仅桌面 target）
 │   ├── runtime/            # lighttier-runtime：运行态扫描与监控订阅服务
-│   └── android/             # lighttier-android：进程内内核 instance / rpc / vpn（仅 Android target）
+│   ├── android/             # lighttier-android：进程内内核 instance / rpc / vpn（仅 Android target）
+│   └── agent/               # lighttier-agent：Linux/fnOS Web 服务端（独立 Cargo 工程，不参与根 workspace）
+├── deploy/docker/           # agent 的 Docker 镜像、compose 与冒烟脚本
 ├── android/                 # Android 打包脚本 + tauri-plugin-vpnservice 本地 vendor
 ├── scripts/                 # 双端打包与 nightly 发布脚本
 └── target/                  # Cargo workspace 构建产物（含桌面安装包 bundle/）

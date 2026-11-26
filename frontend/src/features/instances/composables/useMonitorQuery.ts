@@ -1,8 +1,12 @@
 /**
- * 监控数据查询与轮询：Tauri 订阅后端采样（lighttier-runtime），浏览器走 Mock 轮询。
+ * 监控数据查询与轮询：Tauri 订阅后端采样（lighttier-runtime），agent 走 HTTP 轮询，
+ * 浏览器走 Mock 轮询。
  *
  * Tauri：`monitor_subscribe` 立即返回该实例上一份快照（首屏无等待），
  * 后续由 `monitor:snapshot` 事件推送；失败保留上一份数据并由后端退避重试。
+ * agent：每 3 秒（沿用刷新间隔设置）GET `/instances/{id}/monitor`；服务端已把
+ * CLI 失败 / 超时封装为 `{stale,data,error}`，适配器再按“保留上一份数据 + stale”
+ * 的语义返回，页面继续复用现有过期提示，不因轮询失败弹错。
  * 浏览器：保留原有 3s 轮询与失败重试（仅 mock 数据，无真实内核）。
  * 页面可见性由调用方负责（隐藏时 stopPolling，恢复时 startPolling）。
  */
@@ -10,6 +14,7 @@ import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } fro
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { getNatType, processPeerData, routeCost } from '@/shared/lib/monitorFormat'
+import { backendMode, backendRuntime, isApiError } from '@/shared/platform/backend'
 import {
   onMonitorSnapshot,
   subscribeMonitor,
@@ -351,6 +356,42 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     options.onSnapshot(dto.configFileName, snapshot)
   }
 
+  /** agent 监控值落地：两侧都有数据才刷新详情，否则沿用上一份并计入失败次数 */
+  const applyAgentMonitor = (
+    configName: string,
+    node: { stale: boolean; data: unknown },
+    peers: { stale: boolean; data: unknown }
+  ) => {
+    const nodeInfo =
+      node.data && typeof node.data === 'object' && !Array.isArray(node.data)
+        ? (node.data as Record<string, any>)
+        : null
+    const peerList = Array.isArray(peers.data) ? peers.data : null
+    if (!nodeInfo || !peerList) {
+      consecutiveFailures.value = Math.min(MAX_FAILURES, consecutiveFailures.value + 1)
+      return
+    }
+    const stale = node.stale || peers.stale
+    const snapshot = fromRuntimeSnapshot({
+      configFileName: configName,
+      revision: 0,
+      sampledAt: Date.now(),
+      nodeInfo,
+      peerList,
+      failures: 0,
+      stale
+    })
+    if (!snapshot) {
+      consecutiveFailures.value = Math.min(MAX_FAILURES, consecutiveFailures.value + 1)
+      return
+    }
+    selectedData.value = snapshot
+    // stale 数据仍展示（服务端回填），但不写趋势/摘要，避免画出零速率假曲线
+    consecutiveFailures.value = stale ? Math.max(consecutiveFailures.value, 1) : 0
+    if (stale) return
+    options.onSnapshot(configName, snapshot)
+  }
+
   /** 监听后端采样事件（仅一次）；挂载状态与当前订阅名在回调内二次校验 */
   const ensureMonitorListener = async () => {
     if (monitorUnlisten) return
@@ -372,6 +413,36 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     if (!cfg) return
     if (!options.runningSet.value.has(cfg.configFileName)) return
     const gen = pollGeneration
+
+    if (backendMode() === 'agent') {
+      const doAgentPoll = async () => {
+        if (isFetching) return
+        isFetching = true
+        try {
+          const result = await backendRuntime().monitor(cfg.configFileName)
+          // 页面隐藏/切换配置后旧结果返回：直接丢弃
+          if (gen !== pollGeneration || !isMounted) return
+          if (options.selectedConfig.value?.configFileName !== cfg.configFileName) return
+          applyAgentMonitor(cfg.configFileName, result.node, result.peers)
+        } catch (e) {
+          if (isApiError(e) && e.status === 401) {
+            // 会话失效由全局处理器跳转；停止轮询并进入失败态，避免持续 401 风暴
+            consecutiveFailures.value = MAX_FAILURES
+            stopPolling()
+            return
+          }
+          if (gen === pollGeneration) {
+            consecutiveFailures.value = Math.min(MAX_FAILURES, consecutiveFailures.value + 1)
+          }
+        } finally {
+          isFetching = false
+        }
+      }
+      // 首次立即执行，后续按刷新间隔（默认 3 秒）定时
+      void doAgentPoll()
+      pollTimer = setInterval(doAgentPoll, (options.refreshInterval() || 3) * 1000)
+      return
+    }
 
     if (isTauriEnv()) {
       activeRuntimeName = cfg.configFileName

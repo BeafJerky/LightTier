@@ -165,7 +165,11 @@ impl Configs {
         }
         let created = current.is_none();
         if !created {
-            tokio::fs::copy(&path, self.backup_path(id)).await?;
+            // Read + atomic write instead of `fs::copy`: copy uses copy_file_range,
+            // which drvfs (WSL /mnt/* bind mounts) rejects with EPERM, failing every
+            // overwrite while creates still succeed.
+            let previous = tokio::fs::read(&path).await?;
+            storage::write_bytes_atomic(&self.backup_path(id), &previous).await?;
         }
         storage::write_text_atomic(&path, text).await?;
         Ok((hash_bytes(text.as_bytes()), created))
@@ -357,14 +361,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(entry.id, "office");
+        // 空格在 id 规则里是合法字符（与前端一致），改为用 Windows 保留设备名验证拒绝
         assert_eq!(
             store
-                .import("a b.toml", "x = 1\n")
+                .import("con.toml", "x = 1\n")
                 .await
                 .unwrap_err()
                 .code(),
             "invalid_id"
         );
+        // 空格与中文现在都是合法配置名
+        let entry = store.import("办公室 组网.toml", "x = 1\n").await.unwrap();
+        assert_eq!(entry.id, "办公室 组网");
     }
 
     #[tokio::test]

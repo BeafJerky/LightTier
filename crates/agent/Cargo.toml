@@ -11,15 +11,19 @@ license = "AGPL-3.0"
 argon2 = "0.5"
 axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
+futures-util = "0.3"
 hex = "0.4"
 libc = "0.2"
 rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 rpassword = "7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 toml = "0.9"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "time", "signal", "process", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "time", "signal", "process", "sync"] }
+tokio-util = "0.7"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -46,6 +46,7 @@ import {
 import { open } from '@tauri-apps/plugin-dialog'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
+import { backendMode } from '@/shared/platform/backend'
 import { useTomlDraft } from './useTomlDraft'
 
 export type TemplateId = 'server' | 'client' | 'custom'
@@ -678,9 +679,66 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     }
   }
 
+  // agent 模式（浏览器）无 Tauri 文件对话框：用一次性隐藏 <input type=file> 选择本地 TOML。
+  // 选中即读取文本，取消/无 DOM 环境返回 null，不改变页面既有按钮与布局。
+  const pickTomlFileInBrowser = (): Promise<{ content: string; fileName: string } | null> =>
+    new Promise((resolve) => {
+      if (typeof document === 'undefined') {
+        resolve(null)
+        return
+      }
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.toml,text/plain'
+      input.style.display = 'none'
+      const finish = (result: { content: string; fileName: string } | null) => {
+        input.remove()
+        resolve(result)
+      }
+      input.addEventListener(
+        'change',
+        () => {
+          const file = input.files?.[0]
+          if (!file) {
+            finish(null)
+            return
+          }
+          file
+            .text()
+            .then((content) => finish({ content, fileName: file.name }))
+            .catch(() => finish(null))
+        },
+        { once: true }
+      )
+      // 用户取消选择（浏览器支持 cancel 事件时）清理临时元素
+      input.addEventListener('cancel', () => finish(null), { once: true })
+      document.body.appendChild(input)
+      input.click()
+    })
+
   // 从 TOML 文件导入（校验格式后填充代码区；文件名可用时自动作为配置名）
   const handleImportToml = async () => {
     try {
+      if (backendMode() === 'agent') {
+        // agent 模式无 Tauri 对话框：走浏览器 file input
+        const picked = await pickTomlFileInBrowser()
+        if (!picked) return
+        // 校验 TOML 格式
+        toml.parse(picked.content)
+        tomlContent.value = picked.content
+        // 表单模式下同步重解析，避免表单仍显示旧值并在保存时覆盖导入内容
+        if (editMode.value === 'form') {
+          formParsedOk.value = parseFormData()
+          if (formParsedOk.value) codeIssue.value = ''
+        }
+        // 从文件名提取配置名
+        const nameWithoutExt = picked.fileName.replace(/\.toml$/i, '')
+        if (nameWithoutExt && !props.existingConfigNames?.includes(nameWithoutExt)) {
+          newConfigName.value = nameWithoutExt
+          nameError.value = ''
+        }
+        return
+      }
       const selected = await open({
         multiple: false,
         filters: [{ name: 'TOML', extensions: ['toml'] }]

@@ -271,6 +271,7 @@ import { collectQualitySamples } from '@/shared/lib/island/health'
 import { resolveMonitorTarget } from '@/features/instances/lib/monitorSelection'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as coreApi from '@/shared/platform/coreApi'
+import { agentErrorI18n, backendMode, backendRunner, isApiError } from '@/shared/platform/backend'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import { useI18n } from 'vue-i18n'
@@ -591,17 +592,32 @@ const stopSelected = async () => {
   if (!running || stopping.value) return
   stopping.value = true
   try {
-    const ok = await coreApi.stopConfig(running)
-    if (ok) {
+    if (backendMode() === 'agent') {
+      // agent：服务端按配置 id 停止；instance_not_running 视为已停止
+      try {
+        await backendRunner().stop(running.configFileName)
+      } catch (e) {
+        if (!(isApiError(e) && e.code === 'instance_not_running')) throw e
+      }
       easyTierStore.stopLoop = true
       easyTierStore.removeRunningList(running.configFileName)
       clearConfigTrend(running.configFileName)
       toast(t('newCommon.stoppedSuccess'), 'success')
     } else {
-      toast(t('newCommon.stoppedFail'), 'error')
+      const ok = await coreApi.stopConfig(running)
+      if (ok) {
+        easyTierStore.stopLoop = true
+        easyTierStore.removeRunningList(running.configFileName)
+        clearConfigTrend(running.configFileName)
+        toast(t('newCommon.stoppedSuccess'), 'success')
+      } else {
+        toast(t('newCommon.stoppedFail'), 'error')
+      }
     }
   } catch (e) {
-    toast(`${t('newCommon.stoppedFail')}（${getErrorMessage(e)}）`, 'error')
+    const mapped = agentErrorI18n(e)
+    const detail = mapped ? t(mapped.key, mapped.params ?? {}) : getErrorMessage(e)
+    toast(`${t('newCommon.stoppedFail')}（${detail}）`, 'error')
   } finally {
     stopping.value = false
   }

@@ -7,6 +7,7 @@
  * 弹窗组件只保留 v-model 同步与模板，打开/关闭与卸载清理通过本 composable 的回调衔接。
  */
 import { computed, nextTick, ref } from 'vue'
+import { backendMode } from '@/shared/platform/backend'
 import { useI18n } from 'vue-i18n'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import {
@@ -72,6 +73,11 @@ export function useBackupRestore() {
   }
 
   // ===== 创建备份 =====
+  // agent 没有 Web 配置（server 不托管 easytier-web 设置），隐藏该分类而不是统计 mock 数据
+  const isAgentMode = backendMode() === 'agent'
+  const availableCategories = computed<BackupCategory[]>(() =>
+    isAgentMode ? BACKUP_CATEGORIES.filter((key) => key !== 'web') : [...BACKUP_CATEGORIES]
+  )
   const contentCounts = ref<BackupContentCounts>({ configs: 0, web: 0 })
   const selectedCategories = ref<BackupCategory[]>([...BACKUP_CATEGORIES])
   const mode = ref<BackupMode>('full')
@@ -87,14 +93,14 @@ export function useBackupRestore() {
     if (isSelected(key)) {
       selectedCategories.value = selectedCategories.value.filter((item) => item !== key)
     } else {
-      selectedCategories.value = BACKUP_CATEGORIES.filter(
+      selectedCategories.value = availableCategories.value.filter(
         (item) => item === key || selectedCategories.value.includes(item)
       )
     }
     createMessage.value = ''
   }
   const selectAllCategories = () => {
-    selectedCategories.value = [...BACKUP_CATEGORIES]
+    selectedCategories.value = [...availableCategories.value]
     createMessage.value = ''
   }
   const clearCategories = () => {
@@ -493,6 +499,10 @@ export function useBackupRestore() {
     createMessage.value = ''
     baseError.value = ''
     restoreError.value = ''
+    // agent 隐藏 Web 配置分类后，已选分类同步剔除，避免导出空条目
+    selectedCategories.value = selectedCategories.value.filter((key) =>
+      availableCategories.value.includes(key)
+    )
     await loadContentCounts()
   }
 
@@ -511,6 +521,7 @@ export function useBackupRestore() {
     selectTab,
     handleTabKeydown,
     contentCounts,
+    availableCategories,
     selectedCategories,
     mode,
     baseManifest,

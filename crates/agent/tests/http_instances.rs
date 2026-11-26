@@ -63,6 +63,13 @@ async fn test_app(dir: &Path) -> TestApp {
         .unwrap(),
     );
     let cli = Arc::new(CliQuery::new(&cfg.data_dir, Some(dir.join("core"))));
+    // Same core root as the supervisor, so the package listing and a spawn can
+    // never disagree about the active kernel.
+    let packages = Arc::new(
+        lighttier_agent::packages::Packages::new(&cfg.data_dir)
+            .with_core_override(Some(dir.join("core"))),
+    );
+    let logs = Arc::new(lighttier_agent::logs::Logs::new(&cfg.data_dir));
     let router = build_router(Arc::new(AppState::new(
         cfg,
         auth,
@@ -71,6 +78,8 @@ async fn test_app(dir: &Path) -> TestApp {
         settings,
         supervisor.clone(),
         cli,
+        packages,
+        logs,
     )));
     TestApp { router, supervisor }
 }
@@ -225,6 +234,19 @@ async fn start_stop_restart_lifecycle() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
+    // 第二个配置保持停止：catalog 必须列出全部配置 id，而不只是运行中的实例。
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/configs/office",
+            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15917\"\nhostname = \"office\"\n" })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
 
     let res = app
         .router
@@ -294,8 +316,15 @@ async fn start_stop_restart_lifecycle() {
         .await
         .unwrap();
     let list = json_body(res).await;
+    // instances 覆盖全部配置（含已停止项，用 running 标记），按 id 排序：
+    // home 运行中、office 已停止。
     assert_eq!(list["instances"][0]["id"], "home");
     assert_eq!(list["instances"][0]["running"], true);
+    assert_eq!(list["instances"][1]["id"], "office");
+    assert_eq!(list["instances"][1]["running"], false);
+    assert_eq!(list["instances"].as_array().map(Vec::len), Some(2));
+    // catalog 列出全部合法配置 id，与实例是否运行无关。
+    assert_eq!(list["catalog"], serde_json::json!(["home", "office"]));
 
     let res = app
         .router
@@ -394,15 +423,16 @@ async fn start_stop_restart_lifecycle() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 
-    // A percent-encoded space keeps the request inside the instance route: the
-    // 400 comes from `validate_config_id`, not from the `/api/v1/{*rest}`
-    // catch-all (which would have answered 404 `not_found`).
+    // A percent-encoded backslash keeps the request inside the instance route:
+    // the 400 comes from `validate_config_id`, not from the `/api/v1/{*rest}`
+    // catch-all (which would have answered 404 `not_found`). A space would no
+    // longer do: spaces are valid in config ids, so `bad%20id` is a real id.
     let res = app
         .router
         .clone()
         .oneshot(request(
             "POST",
-            "/api/v1/instances/bad%20id/start",
+            "/api/v1/instances/bad%5Cid/start",
             Some(serde_json::json!({})),
             Some(&cookie),
         ))

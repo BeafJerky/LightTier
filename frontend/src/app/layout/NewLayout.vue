@@ -1,8 +1,8 @@
 <template>
   <div class="nl-window" :class="{ 'nl-android': isAndroidPlatform }">
-    <!-- 自定义拖拽条（桌面端窗口控制；Android 隐藏） -->
+    <!-- 自定义拖拽条（桌面端窗口控制；Android 与 agent 浏览器隐藏） -->
     <div
-      v-if="!isAndroidPlatform"
+      v-if="isDesktopShell"
       class="nl-drag-bar"
       data-tauri-drag-region
       @dblclick="toggleMaximize"
@@ -178,6 +178,26 @@
               </svg>
               <span class="nl-footer-row-label">{{ t('newSettings.settings') }}</span>
               <span v-if="appVersion" class="nl-footer-row-value">v{{ appVersion }}</span>
+            </LtButton>
+            <!-- 退出登录：仅 agent 模式（浏览器直连 agent 才有会话） -->
+            <LtButton
+              v-if="showAgentLogout"
+              variant="bare"
+              class="nl-footer-row"
+              @click="logoutAgent"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              <span class="nl-footer-row-label">{{ t('newAuth.logoutAction') }}</span>
             </LtButton>
           </div>
         </div>
@@ -420,6 +440,7 @@ import { changeLocale } from '@/shared/i18n'
 import Icon from '@/shared/ui/Icon.vue'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useIslandStore } from '@/shared/store/island'
+import { useAgentSessionStore } from '@/shared/store/agentSession'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import newLayoutRouterMap from '@/app/router/newLayout'
@@ -441,6 +462,8 @@ import { computed, ref, toRef, onMounted, onBeforeUnmount } from 'vue'
 const { toasts } = useCreamToast()
 const { t } = useI18n()
 const isAndroidPlatform = isAndroid()
+// 桌面壳（Tauri 桌面）才有可用的窗口控制 API；agent 浏览器直连时窗口按钮只会空转
+const isDesktopShell = !isAndroidPlatform && isTauriRuntime()
 const { watchSystemTheme, currentTheme, currentThemeLabel } = useThemeLoader()
 // 系统深色偏好监听的取消函数（onBeforeUnmount 释放）
 let stopSystemThemeWatch: (() => void) | null = null
@@ -454,6 +477,9 @@ const settingsDialogRef = ref<{ focusAboutAndCheck: () => void } | null>(null)
 const localeStore = useLocaleStore()
 const easyTierStore = useEasyTierStore()
 const islandStore = useIslandStore()
+// agent 模式才有会话概念：native / mock 下 isAgent 为 false，不展示登出入口
+const agentSession = useAgentSessionStore()
+const showAgentLogout = computed(() => agentSession.isAgent)
 const fabMenuOpen = ref(false)
 useOverlayExclusion(toRef(islandStore, 'expanded'), fabMenuOpen)
 
@@ -631,6 +657,17 @@ const openTheme = () => {
   sidebarOpen.value = false
   if (isAndroidPlatform) router.push('/new/settings/theme')
   else themeDialogVisible.value = true
+}
+
+// 退出登录（仅 agent 模式展示）：即使接口失败也回登录页，服务端会话随后过期
+const logoutAgent = async () => {
+  sidebarOpen.value = false
+  try {
+    await agentSession.logout()
+  } catch {
+    /* 网络异常不阻断退出：本地登录态已清空 */
+  }
+  await router.replace('/login')
 }
 
 // 返回上一页；无历史记录时按模块回到对应一级页（Android 返回键/返回按钮共用）

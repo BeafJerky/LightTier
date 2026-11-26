@@ -5,12 +5,12 @@ use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{any, get, post};
+use axum::routing::{any, delete, get, post};
 use axum::{Json, Router};
 use rand::RngCore;
 use serde::Serialize;
 use serde_json::json;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
 use crate::audit::Audit;
 use crate::auth::AuthStore;
@@ -21,6 +21,10 @@ use crate::config_routes;
 use crate::configs::Configs;
 use crate::error::ApiError;
 use crate::instance_routes;
+use crate::log_routes;
+use crate::logs::Logs;
+use crate::package_routes;
+use crate::packages::Packages;
 use crate::settings::SettingsStore;
 use crate::settings_routes;
 use crate::storage;
@@ -38,6 +42,8 @@ pub struct AppState {
     pub settings: Arc<SettingsStore>,
     pub supervisor: Arc<Supervisor>,
     pub cli: Arc<CliQuery>,
+    pub packages: Arc<Packages>,
+    pub logs: Arc<Logs>,
 }
 
 impl AppState {
@@ -49,6 +55,8 @@ impl AppState {
         settings: Arc<SettingsStore>,
         supervisor: Arc<Supervisor>,
         cli: Arc<CliQuery>,
+        packages: Arc<Packages>,
+        logs: Arc<Logs>,
     ) -> Self {
         Self {
             cfg,
@@ -58,6 +66,8 @@ impl AppState {
             settings,
             supervisor,
             cli,
+            packages,
+            logs,
         }
     }
 }
@@ -72,6 +82,9 @@ struct Meta {
     #[serde(skip_serializing_if = "Option::is_none")]
     tun_reason: Option<&'static str>,
     features: Features,
+    /// The release table the agent installs from, public so the login page can
+    /// show what will be offered before a session exists.
+    core_versions: Vec<CoreVersion>,
 }
 
 #[derive(Serialize)]
@@ -84,7 +97,18 @@ struct Features {
     themes: bool,
     update: bool,
     login: bool,
+    kernel: bool,
+    logs: bool,
     default_route_change: bool,
+}
+
+/// One selectable kernel release. `channel` is the lowercase wire name
+/// (`stable` / `prerelease`), not a display label.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CoreVersion {
+    version: &'static str,
+    channel: &'static str,
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -126,6 +150,27 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/instances/{id}/monitor",
             get(instance_routes::monitor),
         )
+        // `tasks` is a literal segment, so it wins over `{version}` for the same
+        // prefix and cannot be mistaken for a version named "tasks".
+        .route("/api/v1/packages", get(package_routes::list))
+        .route(
+            "/api/v1/packages/{version}/install",
+            post(package_routes::install),
+        )
+        .route("/api/v1/packages/tasks/{id}", get(package_routes::task))
+        .route(
+            "/api/v1/packages/tasks/{id}/cancel",
+            post(package_routes::cancel),
+        )
+        .route("/api/v1/packages/{version}", delete(package_routes::delete))
+        // The literal `/logs` route is registered in the same table as the
+        // wildcard below; axum prefers the exact match, so listing can never be
+        // swallowed by `{*name}` (the `http_logs` tests pin this).
+        .route(
+            "/api/v1/logs",
+            get(log_routes::list).delete(log_routes::clear),
+        )
+        .route("/api/v1/logs/{*name}", get(log_routes::read))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_routes::require_auth,
@@ -135,17 +180,23 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(public)
         .merge(protected)
         // Unknown API paths must return the JSON error contract, not the
-        // HTML diagnostic page (M2 endpoints will rely on this shape).
-        .route("/api/v1/{*rest}", any(api_not_found))
+        // diagnostic page or the SPA shell. The wildcard sits below every real
+        // `/api/...` route, so only unmatched paths reach it (the `http_health`
+        // tests pin this ordering). `/api/` needs its own entry: the catch-all
+        // does not match the bare prefix with a trailing slash, so without it
+        // that path would fall through to the static fallback.
+        .route("/api", any(api_not_found))
+        .route("/api/", any(api_not_found))
+        .route("/api/{*rest}", any(api_not_found))
         .route("/status", get(status_page));
 
     let index = state.cfg.web_dir.join("index.html");
     if index.exists() {
-        router = router
-            .route_service("/", ServeFile::new(index))
-            .fallback_service(
-                ServeDir::new(state.cfg.web_dir.clone()).append_index_html_on_directories(true),
-            );
+        // `ServeDir` resolves real files; `web_static` turns its 404s into the
+        // SPA shell for navigations and stamps the cache policy.
+        router = router.fallback_service(
+            ServeDir::new(state.cfg.web_dir.clone()).append_index_html_on_directories(true),
+        );
     } else {
         router = router
             .route("/", get(status_page))
@@ -158,6 +209,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(middleware::from_fn(enforce_same_origin))
         .layer(middleware::from_fn(request_id))
+        .layer(middleware::from_fn_with_state(state.clone(), web_static))
         // Outermost: extractor rejections raised inside every other layer
         // (including `DefaultBodyLimit`) are reshaped into the API error JSON.
         .layer(middleware::from_fn(jsonify_api_errors))
@@ -255,6 +307,12 @@ async fn api_not_found() -> ApiError {
 async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     let writable = storage::dir_writable(&state.cfg.data_dir).await;
     let tun = std::path::Path::new("/dev/net/tun").exists();
+    let versions: Vec<String> = state
+        .packages
+        .list_installed()
+        .into_iter()
+        .map(|package| package.version)
+        .collect();
     let status = if writable {
         StatusCode::OK
     } else {
@@ -265,7 +323,7 @@ async fn readyz(State(state): State<Arc<AppState>>) -> Response {
         Json(json!({
             "ready": writable,
             "tun": tun,
-            "coreVersions": [],
+            "coreVersions": versions,
         })),
     )
         .into_response()
@@ -277,6 +335,15 @@ async fn meta(State(state): State<Arc<AppState>>) -> Json<Meta> {
     if settings.no_tun {
         tun_reason = Some("disabled_by_settings");
     }
+    let core_versions = state
+        .packages
+        .manifest()
+        .iter()
+        .map(|item| CoreVersion {
+            version: item.version,
+            channel: item.channel.as_str(),
+        })
+        .collect();
     Json(Meta {
         api_version: "1",
         agent_version: env!("CARGO_PKG_VERSION"),
@@ -284,6 +351,8 @@ async fn meta(State(state): State<Arc<AppState>>) -> Json<Meta> {
         tun_available: tun_available && !settings.no_tun,
         tun_reason,
         features: Features {
+            // Every capability the agent implements today. The web UI keys off
+            // these flags, so they track reality instead of the roadmap.
             routes: false,
             services: false,
             metrics: false,
@@ -291,8 +360,11 @@ async fn meta(State(state): State<Arc<AppState>>) -> Json<Meta> {
             themes: false,
             update: false,
             login: true,
+            kernel: true,
+            logs: true,
             default_route_change: false,
         },
+        core_versions,
     })
 }
 
@@ -302,16 +374,159 @@ async fn status_page() -> Html<String> {
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>LightTier Agent</title></head><body style=\"font-family:system-ui;max-width:40rem;margin:4rem auto;padding:0 1rem\">\
          <h1>LightTier Agent</h1>\
-         <p>Agent 在线 / Agent is running.</p>\
+         <p>LightTier agent 运行中 / LightTier agent is running</p>\
          <p>版本 / Version: {}</p>\
-         <p>这是 M1 诊断页，管理界面将在 Web 适配完成后提供。<br>\
-         This is the M1 diagnostic page; the management UI arrives with the web adapter.</p>\
-         <ul><li><a href=\"/api/v1/healthz\">/api/v1/healthz</a></li>\
-         <li><a href=\"/api/v1/readyz\">/api/v1/readyz</a></li>\
-         <li><a href=\"/api/v1/meta\">/api/v1/meta</a></li></ul>\
+         <p>管理界面 / Management UI: <a href=\"/\">/</a><br>\
+         登录 / Sign in: <a href=\"/login\">/login</a></p>\
+         <ul><li><a href=\"/api/v1/meta\">/api/v1/meta</a></li>\
+         <li><a href=\"/api/v1/healthz\">/api/v1/healthz</a></li>\
+         <li><a href=\"/api/v1/readyz\">/api/v1/readyz</a></li></ul>\
          </body></html>",
         env!("CARGO_PKG_VERSION")
     ))
+}
+
+/// Cache policy for hashed Vite bundles, safe to keep forever.
+const ASSET_CACHE: &str = "public, max-age=31536000, immutable";
+
+/// Serves the SPA shell where the static file server found nothing and stamps
+/// the cache policy.
+///
+/// A request is a navigation when it is extension-less (`/instances`) or asks
+/// for HTML (`Accept: text/html`); only those fall back to `index.html`. Any
+/// other miss (a missing bundle, `GET /assets/missing.js`) stays a real 404,
+/// `/api/*` is never rewritten, and a path with `.`/`..` segments keeps its
+/// 404, so the JSON error contract and the web root survive.
+async fn web_static(State(state): State<Arc<AppState>>, request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let is_api = path == "/api" || path.starts_with("/api/");
+    let head_only = request.method() == Method::HEAD;
+    let method_serves_body = matches!(*request.method(), Method::GET | Method::HEAD);
+    // Decide on the path itself instead of trusting the file server to fail:
+    // `ServeDir` may reject a traversal for reasons unrelated to the rewrite
+    // (or stop rejecting it), and handing such a request the shell would make
+    // the app the entry point for probing `<web_dir>/..`.
+    let escapes_root = path_escapes_web_root(&path);
+    let navigation = !escapes_root
+        && !path.starts_with("/assets/")
+        && (no_extension(&path) || accepts_html(&request));
+    let mut response = next.run(request).await;
+
+    if method_serves_body && !is_api && response.status() == StatusCode::NOT_FOUND && navigation {
+        // Read per request instead of at router build time so a rebuilt
+        // `index.html` is served without restarting the agent. The static mode
+        // itself is chosen once at startup: `build_router` only installs this
+        // middleware when `index.html` already exists, so a web directory that
+        // appears later keeps the status page until a restart.
+        if let Ok(bytes) = tokio::fs::read(state.cfg.web_dir.join("index.html")).await {
+            response = index_response(bytes, head_only);
+        }
+    }
+
+    if response.status().is_success() {
+        let cache = if path.starts_with("/assets/") {
+            Some(HeaderValue::from_static(ASSET_CACHE))
+        } else if is_html(&response) {
+            Some(HeaderValue::from_static("no-cache"))
+        } else {
+            None
+        };
+        if let Some(value) = cache {
+            response.headers_mut().insert(header::CACHE_CONTROL, value);
+        }
+    }
+    response
+}
+
+fn no_extension(path: &str) -> bool {
+    std::path::Path::new(path).extension().is_none()
+}
+
+/// True when the request path could resolve outside the web root, in which case
+/// the SPA fallback must leave the file server's 404 untouched. Checked raw and
+/// after one round of percent-decoding: the URI carries the encoded form
+/// (`%2e%2e`, `%2f`, `%5c`) while the file server decodes before joining, so
+/// the guard has to see what the join will see.
+fn path_escapes_web_root(path: &str) -> bool {
+    has_dot_segment(path) || has_dot_segment(&percent_decode_once(path))
+}
+
+/// A segment of `.`/`..` walks the tree, and a backslash (only meaningful after
+/// decoding, as a second separator on Windows) could do the same.
+fn has_dot_segment(path: &str) -> bool {
+    path.split('/')
+        .any(|segment| segment == "." || segment == ".." || segment.contains('\\'))
+}
+
+/// Decodes `%XX` escapes exactly once; malformed or truncated escapes are kept
+/// literally, matching what a lenient decoder would do.
+fn percent_decode_once(path: &str) -> String {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+            {
+                decoded.push(high << 4 | low);
+                index += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn accepts_html(request: &Request) -> bool {
+    request
+        .headers()
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.contains("text/html"))
+        .unwrap_or(false)
+}
+
+fn is_html(response: &Response) -> bool {
+    response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.starts_with("text/html"))
+        .unwrap_or(false)
+}
+
+fn index_response(bytes: Vec<u8>, head_only: bool) -> Response {
+    let length = bytes.len();
+    let mut response = if head_only {
+        // `HEAD` carries the headers a `GET` would, but no payload.
+        let mut response = StatusCode::OK.into_response();
+        if let Ok(value) = HeaderValue::from_str(&length.to_string()) {
+            response.headers_mut().insert(header::CONTENT_LENGTH, value);
+        }
+        response
+    } else {
+        (StatusCode::OK, bytes).into_response()
+    };
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
 }
 
 pub async fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {

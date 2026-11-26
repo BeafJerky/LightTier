@@ -20,6 +20,7 @@ import { useTrendBuffer } from '@/shared/composables/useTrendBuffer'
 import { useConfigCompatCheck } from '@/shared/composables/useConfigCompatCheck'
 import { useRunningListSync } from '@/shared/composables/useRunningListSync'
 import * as coreApi from '@/shared/platform/coreApi'
+import { agentErrorI18n, backendMode, backendRunner, isApiError } from '@/shared/platform/backend'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { isTauri } from '@tauri-apps/api/core'
 import { clearExitRoute } from '@/shared/platform/routeUtil'
@@ -55,6 +56,16 @@ export function useInstanceActions(options: InstanceActionsOptions) {
   const reportIsland = !isAndroidPlatform
   const compatMessageKey = options.compatMessageKey ?? 'newConfig.compatBlockMsg'
 
+  // agent 模式下实例启停走 HTTP 适配器；其它模式保持原有 coreApi 路径
+  const isAgentMode = (): boolean => backendMode() === 'agent'
+
+  /** agent 错误码 → 现有 toast 文案；未覆盖的错误码回退原始 message */
+  const agentFailureDetail = (error: unknown): string => {
+    const mapped = agentErrorI18n(error)
+    if (mapped) return t(mapped.key, mapped.params ?? {})
+    return typeof error === 'string' ? error : ((error as any)?.message ?? '')
+  }
+
   const formatCompatIssues = (issues: { code: string; params?: Record<string, any> }[]): string =>
     issues.map((i) => t(`coreCompat.${i.code}`, i.params || {})).join('\n')
 
@@ -78,7 +89,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
     }
 
     // 启动前端口预检：监听端口与运行中配置冲突时直接跳过并提示
-    if (options.portConflictCheck) {
+    // （agent 模式没有本地端口视图，由服务端在启动时检查并返回 port_in_use）
+    if (options.portConflictCheck && !isAgentMode()) {
       const conflicts = await coreApi.checkPortConflicts(fileName)
       if (conflicts.length > 0) {
         // 定位冲突根源：正在占用端口的配置卡片描红闪烁，toast 展示被占配置名与端口
@@ -139,7 +151,12 @@ export function useInstanceActions(options: InstanceActionsOptions) {
 
     try {
       await autoMetricBeforeStart(fileName)
-      await coreApi.startConfig(fileName)
+      if (isAgentMode()) {
+        // agent：服务端按配置 id 启动，错误码原样抛出由下方映射
+        await backendRunner().start(item.configFileName)
+      } else {
+        await coreApi.startConfig(fileName)
+      }
       easyTierStore.stopLoop = false
       easyTierStore.p2pNotify = true
       easyTierStore.setLastRunConfigName(item)
@@ -156,7 +173,7 @@ export function useInstanceActions(options: InstanceActionsOptions) {
       // 失败自动回滚该配置的 AutoMetric 状态（不影响其他配置的持有计数）
       await autoMetricAfterStop(fileName)
       // 展示内核真实错误，便于定位（invoke 拒绝值可能是字符串或 Error）
-      const detail = typeof e === 'string' ? e : e?.message
+      const detail = isAgentMode() ? agentFailureDetail(e) : typeof e === 'string' ? e : e?.message
       const base = isAndroidPlatform
         ? t('newOverview.startFailAndroid')
         : t('newOverview.startFailCore')
@@ -190,10 +207,40 @@ export function useInstanceActions(options: InstanceActionsOptions) {
     // 主动停止是预期行为：先登记，运行态差集才不会误报为掉线
     island.expectStop(item.configFileName)
     // Android：停 VPN + 内核实例（无 pid）；桌面：结束子进程
-    if (isAndroidPlatform || running?.pid) {
+    if (isAndroidPlatform || running?.pid || isAgentMode()) {
       let ok: boolean
       try {
-        ok = await coreApi.stopConfig(running ?? item)
+        if (isAgentMode()) {
+          try {
+            await backendRunner().stop(item.configFileName)
+            ok = true
+          } catch (error) {
+            // 服务端已无该实例：与原生“找不到进程视为已停止”保持一致
+            if (isApiError(error) && error.code === 'instance_not_running') {
+              ok = true
+            } else {
+              island.cancelExpectedStop(item.configFileName)
+              stopped = false
+              const detail = agentFailureDetail(error)
+              toast(
+                detail ? `${t('newCommon.stoppedFail')}（${detail}）` : t('newCommon.stoppedFail'),
+                'error'
+              )
+              if (reportIsland) {
+                island.notify({
+                  type: 'error',
+                  title: t('newIsland.stopFailed', { name: item.configFileName }),
+                  detail,
+                  sourceKey: `feedback:stop:${item.configFileName}`,
+                  quiet: true
+                })
+              }
+              ok = false
+            }
+          }
+        } else {
+          ok = await coreApi.stopConfig(running ?? item)
+        }
       } catch (error) {
         island.cancelExpectedStop(item.configFileName)
         throw error
@@ -208,7 +255,8 @@ export function useInstanceActions(options: InstanceActionsOptions) {
             title: t('newIsland.stopOk', { name: item.configFileName })
           })
         if (!handledByIsland) toast(t('newCommon.stoppedSuccess'), 'success')
-      } else {
+      } else if (!isAgentMode()) {
+        // agent 的失败已在上面按错误码提示，避免重复 toast
         island.cancelExpectedStop(item.configFileName)
         stopped = false
         toast(t('newCommon.stoppedFail'), 'error')

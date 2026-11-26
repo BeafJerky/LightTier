@@ -9,7 +9,11 @@ pub mod error;
 pub mod http;
 pub mod ids;
 pub mod instance_routes;
+pub mod log_routes;
 pub mod logging;
+pub mod logs;
+pub mod package_routes;
+pub mod packages;
 pub mod settings;
 pub mod settings_routes;
 pub mod storage;
@@ -38,9 +42,22 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?,
     );
-    let cli = Arc::new(cli::CliQuery::new(&cfg.data_dir, core_override));
+    let cli = Arc::new(cli::CliQuery::new(&cfg.data_dir, core_override.clone()));
+    // `Packages` gets the same override as the supervisor, so `/packages.active`
+    // is the binary a spawn would run. An override also disables installs
+    // (`installAllowed: false`): they would publish into `<data>/core`, which
+    // such a deployment never scans. The install pipeline reports terminal
+    // failures to the audit log (its request was answered with a 202 long ago).
+    let packages = Arc::new(
+        packages::Packages::new(&cfg.data_dir)
+            .with_core_override(core_override)
+            .on_finish(package_routes::install_audit_hook(audit.clone())),
+    );
+    // Same `<data>/logs` tree the tracing appender, the audit trail and the
+    // kernels write into; the API only ever reads it (and clears it on request).
+    let logs = Arc::new(logs::Logs::new(&cfg.data_dir));
     let state = Arc::new(http::AppState::new(
-        cfg, auth, configs, audit, settings, supervisor, cli,
+        cfg, auth, configs, audit, settings, supervisor, cli, packages, logs,
     ));
     // Autostart runs detached: a slow (or failing) kernel start must never delay
     // the listener coming up.

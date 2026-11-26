@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import * as toml from 'smol-toml'
 import { CONFIG_PATH } from '@/shared/constants/easytier'
 import { migrateLightTierConfig } from '@/entities/config/lighttierConfigUtil'
+import { backendConfigs, backendMode } from '@/shared/platform/backend'
 
 export type DetailState = 'idle' | 'loading' | 'ready' | 'demo' | 'error'
 export interface DetailError {
@@ -96,6 +97,8 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
   const selectedDetail = ref<EasyTierConfig | null>(null)
   const detailState = ref<DetailState>('idle')
   const detailError = ref<DetailError | null>(null)
+  // agent 模式：记录本次读取的配置 hash，供后续乐观并发写入（PUT expectedHash）使用
+  const detailHash = ref('')
   // 5.2：路由筛选（本期仅 TOML 静态筛选；运行时 route 信息待 CLI 输出含 routes 列验证后追加）
   const routeFilter = ref('')
 
@@ -141,9 +144,17 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
 
     let content: string
     try {
-      content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
-        throwOnError: true
-      })) as string
+      if (backendMode() === 'agent') {
+        // agent 模式：配置 id 即 configFileName，读取结果同时带回基线 hash
+        const document = await backendConfigs().read(item.configFileName)
+        if (stale()) return
+        detailHash.value = document.hash
+        content = document.toml
+      } else {
+        content = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
+          throwOnError: true
+        })) as string
+      }
     } catch {
       if (stale()) return
       detailState.value = 'error'
@@ -162,7 +173,16 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
       // 旧版 LightTier 私有标记迁到 [lighttier]（仅首次命中时回写）
       if (migrateLightTierConfig(cfg)) {
         try {
-          await writeFileWithBackup(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+          if (backendMode() === 'agent') {
+            // 回写同样走乐观并发：带本次读取的 hash，避免覆盖他人并发修改
+            detailHash.value = await backendConfigs().write(
+              item.configFileName,
+              toml.stringify(cfg),
+              detailHash.value || undefined
+            )
+          } else {
+            await writeFileWithBackup(`${CONFIG_PATH}/${item.fileName}`, toml.stringify(cfg))
+          }
         } catch {
           /* 回写失败不阻断详情展示 */
         }
@@ -186,12 +206,14 @@ export function useConfigDetail(options: UseConfigDetailOptions) {
     selectedDetail.value = null
     detailState.value = 'idle'
     detailError.value = null
+    detailHash.value = ''
   }
 
   return {
     selectedDetail,
     detailState,
     detailError,
+    detailHash,
     detailErrorTitle,
     routeFilter,
     filteredRoutes,

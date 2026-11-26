@@ -4,6 +4,15 @@
     <div class="lv-toolbar">
       <span class="lv-toolbar-info">{{ t('newConfig.viewLogDesc') }}</span>
       <div class="lv-toolbar-actions">
+        <!-- agent 模式：日志文件在服务端，按清单选择文件并支持清空 -->
+        <LtSelect
+          v-if="isAgent"
+          class="lv-file-select"
+          :model-value="agentSelected"
+          :options="agentOptions"
+          :aria-label="t('newConfig.logFileLabel')"
+          @update:model-value="selectAgentFile"
+        />
         <label class="lv-auto">
           <LtSwitch v-model="autoScroll" size="sm" :aria-label="t('newConfig.logAutoScroll')" />
           <span>{{ t('newConfig.logAutoScroll') }}</span>
@@ -11,7 +20,15 @@
         <LtButton variant="secondary" size="sm" :disabled="loading" @click="refresh">{{
           t('newConfig.logRefresh')
         }}</LtButton>
-        <LtButton variant="secondary" size="sm" @click="openLogsDir">{{
+        <LtButton
+          v-if="isAgent"
+          variant="secondary"
+          size="sm"
+          :disabled="agentClearing"
+          @click="clearAgentLogs"
+          >{{ t('newConfig.logClear') }}</LtButton
+        >
+        <LtButton v-if="!isAgent" variant="secondary" size="sm" @click="openLogsDir">{{
           t('newConfig.openLogDir')
         }}</LtButton>
       </div>
@@ -19,7 +36,7 @@
 
     <!-- 面板主体 -->
     <div class="lv-panel" ref="panelRef" @scroll="onPanelScroll">
-      <div v-if="!isTauri" class="lv-empty">{{ t('newConfig.logDesktopOnly') }}</div>
+      <div v-if="!isTauri && !isAgent" class="lv-empty">{{ t('newConfig.logDesktopOnly') }}</div>
       <div v-else-if="loading && lines.length === 0" class="lv-empty">{{
         t('newCommon.loading')
       }}</div>
@@ -55,8 +72,9 @@ import {
 import { formatLogLineTime, getLogLineLevel } from '@/shared/lib/coreLogUtil'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { readTextTail } from '@/shared/lib/logText'
+import { backendLogs, backendMode } from '@/shared/platform/backend'
 import { useEasyTierStore } from '@/shared/store/easytier'
-import { LtButton, LtSwitch } from '@/shared/ui'
+import { LtButton, LtSelect, LtSwitch } from '@/shared/ui'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -77,6 +95,12 @@ const isTauri = computed(() => {
     return false
   }
 })
+
+// agent 模式：日志由服务端托管，按清单读取纯文本尾部并支持清空（无“打开目录”）
+const isAgent = backendMode() === 'agent'
+const agentOptions = ref<{ label: string; value: string }[]>([])
+const agentSelected = ref('')
+const agentClearing = ref(false)
 
 const content = ref('')
 const loading = ref(false)
@@ -122,9 +146,67 @@ const scrollToBottom = async () => {
 // 无文件与读取失败分别给出明确空态，不再静默显示为“日志为空”
 // 请求序号：快速切换配置/轮询重叠时，旧请求返回后不得覆盖新配置的内容
 let loadSeq = 0
+
+// agent：按清单拼出可选日志（agent 文件 + 各配置的内核日志），
+// 默认落在当前配置自己的内核日志 core/<configName>/easytier.log，其次 agent.log
+const refreshAgentFileList = async () => {
+  const list = await backendLogs().list()
+  const options: { label: string; value: string }[] = list.agent.map((file) => ({
+    label: file.name,
+    value: file.name
+  }))
+  for (const group of list.core) {
+    for (const file of group.files) {
+      options.push({ label: `${group.id} / ${file.name}`, value: `core/${group.id}/${file.name}` })
+    }
+  }
+  agentOptions.value = options
+  const stillThere = options.some((item) => item.value === agentSelected.value)
+  if (!stillThere) {
+    // 优先本配置的内核日志（详情页看的是这条配置的日志），再退回 agent 自身日志
+    const ownPrefix = `core/${props.configName}/`
+    agentSelected.value =
+      options.find((item) => item.value === `${ownPrefix}easytier.log`)?.value ??
+      options.find((item) => item.value.startsWith(ownPrefix))?.value ??
+      options.find((item) => item.value.startsWith('agent.log'))?.value ??
+      options[0]?.value ??
+      ''
+  }
+}
+
+const loadAgentLog = async (seq: number) => {
+  try {
+    await refreshAgentFileList()
+    if (seq !== loadSeq) return
+    if (!agentSelected.value) {
+      content.value = ''
+      loadError.value = t('newConfig.logNotReady')
+      return
+    }
+    const text = await backendLogs().read(agentSelected.value, 500)
+    if (seq !== loadSeq) return
+    content.value = text ? readTextTail(text, 500) : ''
+    loadError.value = ''
+  } catch {
+    if (seq !== loadSeq) return
+    content.value = ''
+    loadError.value = t('newConfig.logReadFailed')
+  } finally {
+    if (seq === loadSeq) {
+      loading.value = false
+      await scrollToBottom()
+    }
+  }
+}
+
 const loadLog = async () => {
   // 先自增：配置名清空时也要让在飞请求作废
   const seq = ++loadSeq
+  if (isAgent) {
+    loading.value = true
+    await loadAgentLog(seq)
+    return
+  }
   if (!props.configName || !isTauri.value) return
   const configName = props.configName
   loading.value = true
@@ -156,6 +238,27 @@ const loadLog = async () => {
 const refresh = () => {
   userScrolledUp = false
   loadLog()
+}
+
+// agent：切换日志文件后立即重读并回到跟随底部
+const selectAgentFile = (value: string | number | null) => {
+  agentSelected.value = value == null ? '' : String(value)
+  userScrolledUp = false
+  loadLog()
+}
+
+// agent：清空服务端日志（agent.log 与内核日志截断，audit.log 保留），随后重读
+const clearAgentLogs = async () => {
+  agentClearing.value = true
+  try {
+    await backendLogs().clear()
+    userScrolledUp = false
+    await loadLog()
+  } catch {
+    loadError.value = t('newConfig.logClearFail')
+  } finally {
+    agentClearing.value = false
+  }
 }
 
 // 调用系统文件管理器打开当前配置的日志目录（失败回退 logs 根目录）
@@ -205,6 +308,8 @@ watch(
     content.value = ''
     loadError.value = ''
     userScrolledUp = false
+    // agent：清空选中项，让新配置从自己的内核日志开始，而不是沿用上一个配置
+    if (isAgent) agentSelected.value = ''
     loadLog()
     startPolling()
   }
@@ -258,6 +363,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--theme-space-2);
+}
+
+/* agent：日志文件选择器（清单来自服务端，过长时省略） */
+.lv-file-select {
+  max-width: 200px;
 }
 
 .lv-auto {

@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.13.0 (2026-11-26)
+
+> 前端接入 agent 模式（M3）：同一套 Vue 界面可在浏览器中管理 Linux/fnOS 上运行的 lighttier-agent，并支持内核包在线安装；桌面与 Android 代码零改动。
+
+### 新增
+
+- 前端 agent 模式：启动时探测 `/api/v1/meta`，浏览器直连 agent 时启用会话门禁（登录 / 初始化页）以及配置、实例、监控、日志、设置、内核包适配器；`pnpm dev` 与 Tauri/Android 仍走原 mock / native 分支
+- 内核包安装（设置 → 内核）：列出 manifest 的 4 个官方版本，下载、校验、解压任务化执行，1 秒轮询进度并支持取消；镜像内置版本标记 `builtin` 且不可删除；`LT_CORE_DIR` 覆盖时安装入口只读
+- 日志页：agent 模式下列出 `agent.log`、各配置内核日志与 `audit.log`，可清空（保留审计）
+- 监控页补齐配置投影字段（实例名、网络名称、DHCP、出口节点、端口转发），与桌面运行态一致
+- Docker：镜像内置前端产物与一个内核版本，`smoke.sh` 覆盖 healthz、meta、登录、配置、实例、设置、内核包与日志；README 增加 WSL 注意事项（mirrored 网络下的 RPC 门户、DrvFs 挂载限制）
+
+### 修复
+
+- 配置名与 agent 后端 id 规则对齐：支持中文与空格（≤64 字符），拒绝 Windows 保留设备名与 `import` 保留 id；失败提示走 i18n
+- agent 模式隐藏仅桌面可用的界面（窗口控制、服务管理、内核路径等），并修正配置日志的默认文件
+- 配置覆盖保存改用原子备份，规避 WSL DrvFs 不支持 `copy_file_range` 导致的 `Operation not permitted`
+- 取消内核安装：服务端应答只表示已受理，界面继续轮询到终态并显示“正在取消”，不再卡在安装中
+- agent 模式的路由（登录 / 初始化 / 兜底）仅在探测到 agent 后注册，桌面与 mock 的路由表保持原样
+
+### 验证
+
+- 前端：`pnpm ts:check`、`pnpm lint:eslint`、`pnpm build` 通过；`pnpm test` 74 文件 / 702 项
+- agent：容器内 `cargo test` 169 项通过（122 lib + 47 集成），宿主机 `cargo fmt -- --check` 干净
+- Docker：镜像构建与 `smoke.sh` 通过；浏览器实测登录、配置、内核安装 / 取消、日志、监控与未知路由回落
+- 桌面与 Android：未改动 `src-tauri/`、`crates/core|desktop|runtime|android`，无新增 Tauri 命令与权限
+
 ## 2.12.0 (2026-11-25)
 
 ### 新增

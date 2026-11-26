@@ -45,7 +45,7 @@
     <!-- 内核版本已移至“核心管理”（随安装/切换实时变化），关于页只保留应用自身信息 -->
 
     <!-- 检查更新（5.11）：GitHub Release 已发布，入口开放 -->
-    <div v-if="UPDATE_CHECK_ENABLED" class="sd-row">
+    <div v-if="UPDATE_CHECK_ENABLED && updateSupported" class="sd-row">
       <div class="sd-row-info">
         <span class="sd-row-title">{{ t('newSettings.checkUpdate') }}</span>
         <span class="sd-row-desc">{{ updateDesc }}</span>
@@ -76,7 +76,7 @@
     </div>
 
     <!-- 应用内更新：按加速源下载安装包到应用目录（resource/update），下载完一键拉起安装器 -->
-    <div v-if="canInAppUpdate" class="sd-row">
+    <div v-if="canInAppUpdate && updateSupported" class="sd-row">
       <div class="sd-row-info">
         <span class="sd-row-title">{{ t('newSettings.inAppUpdate') }}</span>
         <span class="sd-row-desc">{{ inAppUpdateDesc }}</span>
@@ -123,7 +123,7 @@
     </div>
 
     <label
-      v-if="UPDATE_CHECK_ENABLED"
+      v-if="UPDATE_CHECK_ENABLED && updateSupported"
       class="sd-row"
       @click="handleUpdateStableOnlyToggle(!store.updateStableOnly)"
     >
@@ -147,13 +147,16 @@ import { LtButton, LtSwitch } from '@/shared/ui'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { injectRequired } from '@/shared/lib/inject'
 import { GITHUB_EASYTIER, MANAGER_REPO_HOME } from '@/shared/constants/easytier'
-import { SETTINGS_UPDATE_KEY } from './context'
+import { SETTINGS_ENV_KEY, SETTINGS_UPDATE_KEY } from './context'
 import { UPDATE_CHECK_ENABLED } from '../../composables/useSettingsUpdate'
 
 defineProps<{ single?: boolean }>()
 
 const store = useEasyTierStore()
 const { t } = useI18n()
+// agent 不提供应用内更新能力时隐藏检查更新/下载安装入口（原生/预览始终可见）
+const { capabilities } = injectRequired(SETTINGS_ENV_KEY, 'AboutSection')
+const updateSupported = !capabilities || capabilities.update
 const {
   appVersion,
   checkingUpdate,

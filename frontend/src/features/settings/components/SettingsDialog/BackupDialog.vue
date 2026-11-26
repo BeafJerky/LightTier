@@ -87,7 +87,7 @@
 
           <div class="bk-cat-grid">
             <label
-              v-for="key in BACKUP_CATEGORIES"
+              v-for="key in availableCategories"
               :key="key"
               class="bk-cat"
               :class="{ checked: isSelected(key) }"
@@ -516,7 +516,6 @@ import { useI18n } from 'vue-i18n'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import { LtButton } from '@/shared/ui'
 import { useBackupRestore } from '../../composables/useBackupRestore'
-import { BACKUP_CATEGORIES } from '../../lib/backupUtil'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -545,6 +544,7 @@ const {
   setTabRef,
   selectTab,
   handleTabKeydown,
+  availableCategories,
   selectedCategories,
   mode,
   baseManifest,

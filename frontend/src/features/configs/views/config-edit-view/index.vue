@@ -29,6 +29,7 @@ import { useMockData } from '@/shared/platform/mockData'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { CONFIG_PATH } from '@/shared/constants/easytier'
 import { getErrorMessage } from '@/shared/lib/error'
+import { backendConfigs, backendMode, isApiError } from '@/shared/platform/backend'
 import { ConfigBackupError, saveConfigToml } from './tomlSave'
 
 defineOptions({ name: 'NewConfigEditView' })
@@ -46,6 +47,8 @@ const dialogMode: 'add' | 'edit' = route.name === 'NewConfigAddView' ? 'add' : '
 
 const configName = ref('')
 const tomlContent = ref('')
+// agent 模式：读取时记录的基线 hash，保存时用于冲突检测
+const configHash = ref('')
 const visible = ref(false)
 // 配置名列表（新增模式查重，与列表页弹窗入口一致）
 const configNameList = computed(() => easyTierStore.configList.map((c) => c.configFileName))
@@ -69,9 +72,15 @@ onMounted(async () => {
       return
     }
     try {
-      tomlContent.value = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
-        throwOnError: true
-      })) as string
+      if (backendMode() === 'agent') {
+        const document = await backendConfigs().read(name)
+        configHash.value = document.hash
+        tomlContent.value = document.toml
+      } else {
+        tomlContent.value = (await readFileContent(`${CONFIG_PATH}/${item.fileName}`, {
+          throwOnError: true
+        })) as string
+      }
       configName.value = name
     } catch {
       toast(t('newConfig.readFail'), 'error')
@@ -100,7 +109,13 @@ onBeforeRouteLeave(async () => {
 const handleSaved = async (name: string, content: string, done: (ok: boolean) => void) => {
   const isAdd = dialogMode === 'add'
   try {
-    await saveConfigToml(name, content, dialogMode, { readFileContent, writeFileContent })
+    await saveConfigToml(
+      name,
+      content,
+      dialogMode,
+      { readFileContent, writeFileContent },
+      configHash.value || undefined
+    )
     // 写盘后必须等写盘前启动的在途加载结束再重读，否则新文件可能不在列表里
     await easyTierStore.reloadConfigFiles()
     if (easyTierStore.configList.some((c) => c.configFileName === name)) {
@@ -115,7 +130,17 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
     const backupFailed = !isAdd && e instanceof ConfigBackupError
     console.error('[config] save failed:', `${CONFIG_PATH}/${name}.toml`, e)
     const detail = getErrorMessage(e)
-    if (!isAdd && backupFailed) {
+    if (isApiError(e) && e.code === 'conflict_hash') {
+      // agent 模式并发修改：提示刷新后重试，并同步列表与基线 hash，
+      // 否则重试会一直撞同一个 409（用户已被明确告知内容已被他人修改）
+      toast(t('newConfig.hashConflict'), 'warning', 5000)
+      await easyTierStore.reloadConfigFiles()
+      try {
+        configHash.value = (await backendConfigs().read(name)).hash
+      } catch {
+        /* 读取失败则保留旧 hash，下次保存仍会提示冲突 */
+      }
+    } else if (!isAdd && backupFailed) {
       toast(t('newConfig.backupFailed'), 'error')
     } else if (detail) {
       toast(

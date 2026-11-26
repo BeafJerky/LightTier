@@ -41,6 +41,7 @@ async fn app(dir: &std::path::Path) -> axum::Router {
         .await
         .unwrap(),
     );
+    let logs = Arc::new(lighttier_agent::logs::Logs::new(&cfg.data_dir));
     build_router(Arc::new(AppState::new(
         cfg,
         auth,
@@ -52,6 +53,13 @@ async fn app(dir: &std::path::Path) -> axum::Router {
             dir,
             Some(dir.join("core")),
         )),
+        // Same core root as the supervisor, so the package listing and a spawn
+        // can never disagree about the active kernel.
+        Arc::new(
+            lighttier_agent::packages::Packages::new(dir)
+                .with_core_override(Some(dir.join("core"))),
+        ),
+        logs,
     )))
 }
 

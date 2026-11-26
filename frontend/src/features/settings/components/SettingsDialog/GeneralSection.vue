@@ -60,7 +60,7 @@
       </div>
     </div>
 
-    <div v-if="isDesktopRuntime" class="sd-row">
+    <div v-if="isDesktopRuntime && servicesSupported" class="sd-row">
       <div class="sd-row-info">
         <span class="sd-row-title">{{ t('newSettings.defaultServiceMethod') }}</span>
         <span class="sd-row-desc">{{ t('newSettings.defaultServiceMethodDesc') }}</span>
@@ -117,7 +117,9 @@ defineProps<{ single?: boolean }>()
 
 const store = useEasyTierStore()
 const { t } = useI18n()
-const { isDesktopRuntime } = injectRequired(SETTINGS_ENV_KEY, 'GeneralSection')
+const { isDesktopRuntime, capabilities } = injectRequired(SETTINGS_ENV_KEY, 'GeneralSection')
+// agent 下服务能力关闭时隐藏“默认服务安装方式”（原生/预览始终可见）
+const servicesSupported = !capabilities || capabilities.services
 const {
   refreshInput,
   refreshError,

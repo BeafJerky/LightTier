@@ -61,6 +61,7 @@ import {
 import { migrateLockPassword, sha256Hex } from '@/shared/platform/lockUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getAppVersion } from '@/shared/platform/sysUtil'
+import { backendConfigs, backendMode, isApiError } from '@/shared/platform/backend'
 
 const THEME_KEY = 'theme'
 const LANG_KEY = 'lang'
@@ -250,6 +251,17 @@ const collectWebValue = async (): Promise<string> =>
   runWebConfigTransaction(async ({ snapshot }) => JSON.stringify(await snapshot()))
 
 const collectConfigItems = async (): Promise<BackupItem[]> => {
+  if (backendMode() === 'agent') {
+    // agent 模式：配置由服务端托管，按 id 读取；条目名沿用 `<id>.toml` 与本机文件口径一致
+    const metas = await backendConfigs().list()
+    const items: BackupItem[] = []
+    for (const meta of metas) {
+      const { toml } = await backendConfigs().read(meta.id)
+      if (!toml.trim()) continue
+      items.push(createBackupItem('configs', `${meta.id}.toml`, toml))
+    }
+    return items
+  }
   const { listTomlFiles, readFileContent } = useMockData()
   const files = (await listTomlFiles({ throwOnError: true })).filter((name) =>
     name.endsWith('.toml')
@@ -295,6 +307,16 @@ export interface BackupContentCounts {
 
 /** 分类内容数量（仅用于创建页展示，配置与 Web 配置为动态数量） */
 export const getBackupContentCounts = async (): Promise<BackupContentCounts> => {
+  if (backendMode() === 'agent') {
+    const [metas, web] = await Promise.all([
+      backendConfigs().list(),
+      useMockData().readWebConfigList()
+    ])
+    return {
+      configs: metas.length,
+      web: Array.isArray(web) ? web.length : 0
+    }
+  }
   const { listTomlFiles, readWebConfigList } = useMockData()
   const [files, web] = await Promise.all([
     listTomlFiles({ throwOnError: true }),
@@ -401,14 +423,22 @@ export const collectLocalBackupValues = async (
   const selected = new Set(manifest.categories)
   const values: Record<string, string | null> = {}
   if (selected.has('configs')) {
-    const { listTomlFiles, readFileContent } = useMockData()
-    const files = (await listTomlFiles({ throwOnError: true })).filter((name) =>
-      name.endsWith('.toml')
-    )
-    for (const file of files) {
-      values[`config:${file}`] = (await readFileContent(`${CONFIG_PATH}/${file}`, {
-        throwOnError: true
-      })) as string
+    if (backendMode() === 'agent') {
+      const metas = await backendConfigs().list()
+      for (const meta of metas) {
+        const { toml } = await backendConfigs().read(meta.id)
+        values[`config:${meta.id}.toml`] = toml
+      }
+    } else {
+      const { listTomlFiles, readFileContent } = useMockData()
+      const files = (await listTomlFiles({ throwOnError: true })).filter((name) =>
+        name.endsWith('.toml')
+      )
+      for (const file of files) {
+        values[`config:${file}`] = (await readFileContent(`${CONFIG_PATH}/${file}`, {
+          throwOnError: true
+        })) as string
+      }
     }
   }
   if (selected.has('web')) {
@@ -584,7 +614,12 @@ const applyEntry = async (
   switch (item.category) {
     case 'configs':
       if (!isValidBackupConfigName(item.name)) throw new Error('invalid config name')
-      await useMockData().writeFileContent(`${CONFIG_PATH}/${item.name}`, item.value)
+      if (backendMode() === 'agent') {
+        // agent 模式：备份条目名 `<id>.toml`，写回时还原为服务端配置 id
+        await backendConfigs().write(item.name.replace(/\.toml$/i, ''), item.value)
+      } else {
+        await useMockData().writeFileContent(`${CONFIG_PATH}/${item.name}`, item.value)
+      }
       return
     case 'web': {
       const list = parseWebConfigValue(item.value)
@@ -637,6 +672,13 @@ const captureRestoreSnapshot = async (
 ): Promise<RestoreSnapshot> => {
   switch (item.category) {
     case 'configs': {
+      if (backendMode() === 'agent') {
+        const id = item.name.replace(/\.toml$/i, '')
+        const metas = await backendConfigs().list()
+        const existed = metas.some((meta) => meta.id === id)
+        const value = existed ? (await backendConfigs().read(id)).toml : ''
+        return { kind: 'config-file', path: id, existed, value }
+      }
       const path = `${CONFIG_PATH}/${item.name}`
       const files = await useMockData().listTomlFiles({ throwOnError: true })
       const existed = files.includes(item.name)
@@ -675,6 +717,19 @@ const rollbackRestoreEntry = async (
 ): Promise<void> => {
   const snap = snapshot as RestoreSnapshot
   if (snap.kind === 'config-file') {
+    if (backendMode() === 'agent') {
+      // agent 模式：path 为配置 id；已存在则覆盖，否则删除（已被其他会话删除视为成功）
+      if (snap.existed) {
+        await backendConfigs().write(snap.path, snap.value)
+      } else {
+        try {
+          await backendConfigs().remove(snap.path)
+        } catch (error) {
+          if (!(isApiError(error) && error.status === 404)) throw error
+        }
+      }
+      return
+    }
     if (snap.existed) await useMockData().writeFileContent(snap.path, snap.value)
     else await useMockData().deleteFileOrDir(snap.path)
     return

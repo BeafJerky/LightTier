@@ -177,8 +177,8 @@
         </div>
       </div>
 
-      <!-- 5.9：退出节点路由（配置级开关，仅 Tauri 桌面端） -->
-      <div v-if="!isAndroidPlatform" class="nw-section"
+      <!-- 5.9：退出节点路由（配置级开关，仅 Tauri 桌面端；agent 能力不支持时整段隐藏） -->
+      <div v-if="!isAndroidPlatform && routesSupported" class="nw-section"
         ><div class="nw-section-title">{{ t('newConfig.exitRoute') }}</div>
         <div class="nw-svc-bar">
           <div class="nw-svc-status">
@@ -252,8 +252,8 @@
         </LtButton>
       </div>
 
-      <!-- 服务管理（Windows 服务专属；Android 隐藏） -->
-      <div v-if="!isAndroidPlatform" class="nw-section"
+      <!-- 服务管理（Windows 服务专属；Android 与 agent 模式隐藏） -->
+      <div v-if="!isAndroidPlatform && servicesSupported" class="nw-section"
         ><div class="nw-section-title">{{ t('newConfig.serviceMgmt') }}</div>
         <div class="nw-svc-bar">
           <div class="nw-svc-status">
@@ -361,6 +361,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput } from '@/shared/ui'
+import { backendCapabilities, backendMode } from '@/shared/platform/backend'
 import { injectRequired } from '@/shared/lib/inject'
 import LogViewer from '@/features/configs/components/LogViewer.vue'
 import { CONFIG_LIST_KEY } from './context'
@@ -368,6 +369,10 @@ import { CONFIG_LIST_KEY } from './context'
 defineOptions({ name: 'ConfigDetail' })
 
 const { t } = useI18n()
+// 退出节点路由入口：仅当 agent 能力声明不支持路由时隐藏；原生与 Mock 始终显示
+const routesSupported = backendMode() !== 'agent' || backendCapabilities().routes
+// 服务管理是 Windows 服务专属：agent 能力声明 services=false 时不展示（原生桌面保持显示）
+const servicesSupported = backendMode() !== 'agent' || backendCapabilities().services
 const {
   isAndroidPlatform,
   isAndroidDetailRoute,

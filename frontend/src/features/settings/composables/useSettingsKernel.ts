@@ -21,6 +21,14 @@ import { formatBytes } from '@/shared/lib/monitorFormat'
 import { getArch, getOsType } from '@/shared/platform/sysUtil'
 import { CORE_VERSION_OPTIONS, DEFAULT_CORE_VERSION } from '@/entities/kernel/kernelCompat'
 import { CORE_PATH, getCoreDownloadUrl, getCoreFileName } from '@/shared/constants/easytier'
+import {
+  agentCodeI18n,
+  agentErrorI18n,
+  backendAuth,
+  backendMode,
+  backendPackages
+} from '@/shared/platform/backend'
+import type { PackagesInfo, TaskView } from '@/shared/platform/backend'
 import { resourceDir, join } from '@tauri-apps/api/path'
 import type { SettingsConfirm } from './settingsTypes'
 
@@ -52,8 +60,204 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   const { t } = useI18n()
   const { installing: installingCore, installCore, lastInstallError } = useCoreInstall()
 
+  // ===== agent 模式：内核包由服务端下载、校验并发布（Task 10） =====
+  const isAgentMode = backendMode() === 'agent'
+  const agentPackages = ref<PackagesInfo | null>(null)
+  const agentTask = ref<TaskView | null>(null)
+  const agentTunAvailable = ref(true)
+  const agentTunReason = ref('')
+  // 已发出取消请求但工作线程尚未写入终态：此期间禁止重复取消，轮询继续
+  const agentCancelRequested = ref(false)
+  // agent 版本选择是否已按服务端清单播种过（重复进入内核页时保留用户选择）
+  let agentVersionSeeded = false
+  let agentPollTimer: ReturnType<typeof setInterval> | null = null
+
+  const agentInstalledVersions = computed(() => agentPackages.value?.installed ?? [])
+  // installAllowed=false（LT_CORE_DIR 覆盖）时安装入口整体禁用，不让用户去撞 409
+  const agentInstallAllowed = computed(() => agentPackages.value?.installAllowed !== false)
+  const selectedAgentInstalled = computed(
+    () => agentInstalledVersions.value.find((item) => item.version === coreVerSelect.value) ?? null
+  )
+  const agentSelectedBuiltin = computed(() => selectedAgentInstalled.value?.builtin === true)
+  const agentTaskState = computed(() => agentTask.value?.state ?? '')
+  const agentInstallBusy = computed(() =>
+    ['queued', 'downloading', 'verifying', 'extracting', 'installing'].includes(
+      agentTaskState.value
+    )
+  )
+  const agentProgressPercent = computed<number | null>(() => {
+    const task = agentTask.value
+    if (!task?.total || task.total <= 0) return null
+    return Math.min(100, Math.max(0, Math.round((task.downloaded / task.total) * 100)))
+  })
+  const agentProgressText = computed(() => {
+    const state = agentTaskState.value
+    if (state === 'verifying') return t('newSettings.agentTaskVerifying')
+    if (state === 'extracting') return t('newSettings.agentTaskExtracting')
+    if (state === 'installing') return t('newSettings.agentTaskInstalling')
+    const percent = agentProgressPercent.value
+    if (percent === null) return t('newCommon.loading')
+    return t('newSettings.agentTaskDownloading', { percent })
+  })
+
+  const stopAgentPoll = () => {
+    if (agentPollTimer) {
+      clearInterval(agentPollTimer)
+      agentPollTimer = null
+    }
+  }
+
+  // 终态统一处理（轮询与取消请求共用）：done 重新拉清单，failed 用 error.code 出文案，
+  // canceled 只提示；进入终态即清掉取消标记，允许下一轮安装重新取消
+  const applyAgentTerminal = async (view: TaskView, fallbackVersion: string) => {
+    stopAgentPoll()
+    agentCancelRequested.value = false
+    if (view.state === 'done') {
+      toast.success(t('newSettings.agentInstallDone', { version: view.version || fallbackVersion }))
+      await refreshAgentPackages()
+    } else if (view.state === 'failed') {
+      const mapped = view.error?.code ? agentCodeI18n(view.error.code) : null
+      const reason = mapped ? t(mapped.key) : (view.error?.message ?? '')
+      toast.error(
+        reason
+          ? `${t('newSettings.agentInstallFailed')}：${reason}`
+          : t('newSettings.agentInstallFailed')
+      )
+    } else if (view.state === 'canceled') {
+      toast.info(t('newSettings.agentInstallCanceled'))
+    }
+  }
+
+  // 1s 轮询任务快照：终态后停止；done 重新拉清单，failed 用 error.code 出文案
+  const startAgentPoll = (taskId: string, version: string) => {
+    stopAgentPoll()
+    agentPollTimer = setInterval(async () => {
+      let view: TaskView
+      try {
+        view = await backendPackages().task(taskId)
+      } catch {
+        stopAgentPoll()
+        // 轮询已停：允许再次点“取消安装”，否则按钮会停在禁用的取消中态
+        agentCancelRequested.value = false
+        return
+      }
+      agentTask.value = view
+      if (view.state === 'done' || view.state === 'failed' || view.state === 'canceled') {
+        await applyAgentTerminal(view, version)
+      }
+    }, 1000)
+  }
+
+  const refreshAgentPackages = async () => {
+    try {
+      agentPackages.value = await backendPackages().list()
+    } catch (e) {
+      console.error('读取内核包清单失败:', e)
+    }
+  }
+
+  // 安装：POST 拿 taskId 后由轮询推进进度，不再有本地下载 / 镜像选择
+  const handleAgentInstallCore = async () => {
+    const target = coreVerSelect.value
+    if (!agentInstallAllowed.value) {
+      toast.warning(t('newSettings.agentInstallDisabled'))
+      return
+    }
+    if (agentInstallBusy.value) return
+    if (
+      !(await confirm(
+        t('newSettings.installConfirmTitle'),
+        t('newSettings.installConfirmMsg', {
+          version: target,
+          count: store.runningList.length,
+          serviceHint: ''
+        })
+      ))
+    )
+      return
+    try {
+      const taskId = await backendPackages().install(target)
+      agentTask.value = {
+        id: taskId,
+        version: target,
+        state: 'queued',
+        downloaded: 0,
+        total: null,
+        error: null
+      }
+      agentCancelRequested.value = false
+      startAgentPoll(taskId, target)
+    } catch (e) {
+      const mapped = agentErrorI18n(e)
+      const reason = mapped ? t(mapped.key, mapped.params ?? {}) : t('newSettings.installFail')
+      toast.error(`${t('newSettings.agentInstallFailed')}：${reason}`)
+    }
+  }
+
+  // 取消安装：服务端只回“已受理”快照（可能仍是 downloading），终态由安装工作线程写入，
+  // 因此应答非终态时必须继续轮询，等轮询拿到 canceled 再收尾
+  const handleCancelAgentTask = async () => {
+    const task = agentTask.value
+    if (!task || !agentInstallBusy.value || agentCancelRequested.value) return
+    try {
+      const view = await backendPackages().cancelTask(task.id)
+      // 轮询可能已在应答前落到终态：此时应答是过期快照，不能把 UI 拉回“安装中”
+      if (!agentInstallBusy.value) return
+      agentTask.value = view
+      if (view.state === 'done' || view.state === 'failed' || view.state === 'canceled') {
+        await applyAgentTerminal(view, task.version)
+        return
+      }
+      // 应答只是确认：安装工作线程持有终态，轮询必须继续到它报告终态为止
+      agentCancelRequested.value = true
+      toast.info(t('newSettings.agentInstallCanceling'))
+    } catch (e) {
+      const mapped = agentErrorI18n(e)
+      toast.error(
+        mapped
+          ? t(mapped.key, mapped.params ?? {})
+          : `${t('newSettings.agentInstallCancelFail')}：${String(e)}`
+      )
+    }
+  }
+
+  // 删除非内置版本（内置版本按钮不渲染；服务端仍会以 builtin_package 兜底拒绝）
+  const handleAgentRemoveCore = async () => {
+    const version = coreVerSelect.value
+    const installed = selectedAgentInstalled.value
+    if (!installed || installed.builtin) return
+    if (
+      !(await confirm(
+        t('newSettings.agentRemoveCoreTitle'),
+        t('newSettings.agentRemoveCoreMsg', { version })
+      ))
+    )
+      return
+    deletingCore.value = true
+    try {
+      await backendPackages().remove(version)
+      toast.success(t('newSettings.agentRemoveCoreSuccess', { version }))
+      await refreshAgentPackages()
+    } catch (e) {
+      const mapped = agentErrorI18n(e)
+      toast.error(
+        mapped
+          ? `${t('newSettings.agentRemoveCoreFail')}：${t(mapped.key, mapped.params ?? {})}`
+          : `${t('newSettings.agentRemoveCoreFail')}：${String(e)}`
+      )
+    } finally {
+      deletingCore.value = false
+    }
+  }
+
   // 内核版本展示：优先用全局探测结果（规范化前原文），探测中显示占位
   const coreVersion = computed(() => {
+    if (isAgentMode) {
+      const active = agentPackages.value?.active
+      if (active) return active
+      const installed = agentInstalledVersions.value
+      return installed[0]?.version ?? t('newSettings.notInstalled')
+    }
     if (store.coreVersionDetecting) return t('newCommon.checking')
     return store.coreVersionRaw || t('newSettings.notInstalled')
   })
@@ -61,8 +265,15 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   // 核心管理状态
   const checkingCore = ref(false)
   const corePath = ref('')
-  // 可下载版本为固定列表（constants/kernelCompat.ts），默认选中最新正式版（需自行下载）
-  const coreVerOptions = CORE_VERSION_OPTIONS
+  // 可下载版本：桌面为固定列表（constants/kernelCompat.ts）；agent 以服务端 available 为准
+  const coreVerOptions = computed<{ tag_name: string; channel: string }[]>(() =>
+    isAgentMode
+      ? (agentPackages.value?.available ?? []).map((item) => ({
+          tag_name: item.version,
+          channel: item.channel
+        }))
+      : CORE_VERSION_OPTIONS
+  )
   const coreVerSelect = ref(DEFAULT_CORE_VERSION)
   const downloadingCore = ref(false)
   const deletingCore = ref(false)
@@ -95,15 +306,24 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   // 已下载的内核安装包版本（扫描 resource/core 下的 zip；安装后仍保留）
   const downloadedCoreVersions = ref<string[]>([])
   const isSelectedCoreDownloaded = computed(() =>
-    downloadedCoreVersions.value.includes(coreVerSelect.value)
+    isAgentMode
+      ? agentInstalledVersions.value.some((item) => item.version === coreVerSelect.value)
+      : downloadedCoreVersions.value.includes(coreVerSelect.value)
   )
-  // 以本地 zip 实际存在为准：安装包不再内置，必须先下载
+  // 以本地 zip 实际存在为准：安装包不再内置，必须先下载；agent 以服务端已安装为准
   const selectedCoreReady = computed(() => isSelectedCoreDownloaded.value)
-  const corePackageStatusText = computed(() =>
-    isSelectedCoreDownloaded.value
+  const corePackageStatusText = computed(() => {
+    if (isAgentMode) {
+      const installed = selectedAgentInstalled.value
+      if (!installed) return t('newSettings.agentCoreNotInstalled')
+      return installed.builtin
+        ? t('newSettings.agentCoreBuiltin')
+        : t('newSettings.agentCoreInstalled')
+    }
+    return isSelectedCoreDownloaded.value
       ? t('newSettings.corePackageDownloaded')
       : t('newSettings.corePackageNotDownloaded')
-  )
+  })
 
   // 按当前所选版本拼出内核压缩包文件名（纯字符串拼接，避免 CSP 拦截 lodash.template 的 new Function）
   const updateCoreFileName = () => {
@@ -122,10 +342,14 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
 
   // 扫描 core 目录，按当前平台/架构的压缩包名判断各版本下载状态
   const refreshDownloadedCores = async () => {
+    if (isAgentMode) {
+      await refreshAgentPackages()
+      return
+    }
     if (!isDesktopRuntime) return
     try {
       const files = new Set(await listFiles(CORE_PATH))
-      downloadedCoreVersions.value = coreVerOptions
+      downloadedCoreVersions.value = coreVerOptions.value
         .filter((o) => files.has(getCoreFileName(getOsType(), getArch(), o.tag_name)))
         .map((o) => o.tag_name)
     } catch (e) {
@@ -151,12 +375,19 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   const coreVerMenuStyle = ref<Record<string, string>>({})
 
   const coreVerOptionLabel = (tag: string) => {
-    const item = coreVerOptions.find((o) => o.tag_name === tag)
+    const item = coreVerOptions.value.find((o) => o.tag_name === tag)
     if (!item) return tag
     const channel =
       item.channel === 'prerelease'
         ? t('newSettings.channelPrerelease')
         : t('newSettings.channelStable')
+    if (isAgentMode) {
+      const installed = agentInstalledVersions.value.find((entry) => entry.version === tag)
+      const badge = installed
+        ? ` · ${installed.builtin ? t('newSettings.agentBuiltinBadge') : t('newSettings.agentInstalledBadge')}`
+        : ''
+      return `${tag} · ${channel}${badge}`
+    }
     const downloaded = downloadedCoreVersions.value.includes(tag)
       ? ` · ${t('newSettings.downloadedBadge')}`
       : ''
@@ -170,7 +401,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     const trigger = coreVerTriggerEl()
     if (!trigger) return
     const rect = trigger.getBoundingClientRect()
-    const menuHeight = coreVerMenuRef.value?.offsetHeight || coreVerOptions.length * 32 + 10
+    const menuHeight = coreVerMenuRef.value?.offsetHeight || coreVerOptions.value.length * 32 + 10
     // WebView 在极端情况下可能报告 0 视口，回退到触发器尺寸避免负数宽度
     const viewportWidth = window.innerWidth || rect.width + 16
     const viewportHeight = window.innerHeight || rect.bottom + menuHeight + 8
@@ -198,12 +429,12 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     coreVerDropdownOpen.value = true
     const selectedIdx = Math.max(
       0,
-      coreVerOptions.findIndex((o) => o.tag_name === coreVerSelect.value)
+      coreVerOptions.value.findIndex((o) => o.tag_name === coreVerSelect.value)
     )
     coreVerHighlighted.value =
       direction === 0
         ? selectedIdx
-        : (selectedIdx + direction + coreVerOptions.length) % coreVerOptions.length
+        : (selectedIdx + direction + coreVerOptions.value.length) % coreVerOptions.value.length
     await nextTick()
     positionCoreVerMenu()
     focusCoreVerOption(coreVerHighlighted.value)
@@ -245,6 +476,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   })
 
   onBeforeUnmount(() => {
+    stopAgentPoll()
     document.removeEventListener('click', handleCoreVerOutsideClick)
     window.removeEventListener('resize', handleCoreVerViewportChange)
     window.removeEventListener('scroll', handleCoreVerViewportChange, true)
@@ -374,6 +606,10 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
   const handleCheckCore = async () => {
     checkingCore.value = true
     try {
+      if (isAgentMode) {
+        await refreshAgentPackages()
+        return
+      }
       await store.detectCoreVersion()
     } finally {
       checkingCore.value = false
@@ -402,6 +638,8 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
 
   // 下载所选版本内核安装包（优先镜像源加速，见 5.10）
   const handleDownloadCore = async () => {
+    // agent 由服务端下载与校验（入口隐藏），这里兜底忽略
+    if (isAgentMode) return
     if (!coreFileName.value) {
       toast.warning(t('newSettings.selectVersionFirst'))
       return
@@ -482,6 +720,10 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
 
   // 安装所选版本内核（切换前停止全部实例与服务，成功后重新检测版本）
   const handleInstallCore = async () => {
+    if (isAgentMode) {
+      await handleAgentInstallCore()
+      return
+    }
     const target = coreVerSelect.value
     // 只有已下载的 zip 才能安装（按钮已禁用，这里兜底提示）
     if (!selectedCoreReady.value) {
@@ -514,6 +756,35 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
 
   // 打开设置时加载核心路径，并按已安装版本选中下拉项（桌面 Tauri 专属）
   const loadCoreState = async () => {
+    if (isAgentMode) {
+      await refreshAgentPackages()
+      try {
+        const meta = await backendAuth().meta()
+        agentTunAvailable.value = meta.tunAvailable !== false
+        agentTunReason.value = meta.tunReason ?? ''
+      } catch {
+        /* 元信息不可用时按可用处理，不阻断内核管理 */
+      }
+      const preferred =
+        agentPackages.value?.active ??
+        agentInstalledVersions.value[0]?.version ??
+        agentPackages.value?.available.find((entry) => entry.channel === 'stable')?.version ??
+        DEFAULT_CORE_VERSION
+      // 设置弹窗每次显示内核页都会调用本函数：首次进入按 active / 已安装播种，
+      // 之后只在当前选择未知时才重新播种，避免把用户刚选的版本覆盖回旧值
+      // （首次必须播种：coreVerSelect 的初值 DEFAULT_CORE_VERSION 本身往往就是“已知”版本）
+      const known = (version: string) =>
+        agentInstalledVersions.value.some((entry) => entry.version === version) ||
+        (agentPackages.value?.available ?? []).some((entry) => entry.version === version)
+      if (!agentVersionSeeded || !coreVerSelect.value || !known(coreVerSelect.value)) {
+        coreVerSelect.value = preferred
+      }
+      // 清单读取失败时留待下次进入再播种，否则 active 版本这一会话内再也选不中
+      if (agentInstalledVersions.value.length || (agentPackages.value?.available.length ?? 0)) {
+        agentVersionSeeded = true
+      }
+      return
+    }
     if (!isDesktopRuntime) return
     // 加载核心路径（仅桌面 Tauri；浏览器预览避免调用 plugin-os/path）
     try {
@@ -523,7 +794,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     }
     // 固定版本列表：已安装版本在列表内则默认选中它，否则回退最新正式版
     const installed = store.detectedCoreVersion
-    const match = coreVerOptions.find((o) => o.tag_name === installed)
+    const match = coreVerOptions.value.find((o) => o.tag_name === installed)
     coreVerSelect.value = match ? match.tag_name : DEFAULT_CORE_VERSION
     updateCoreFileName()
     await refreshDownloadedCores()
@@ -569,6 +840,24 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     handleDeleteCorePackage,
     handleInstallCore,
     installingCore,
+    isAgentMode,
+    agentPackages,
+    agentTask,
+    agentTaskState,
+    agentInstallAllowed,
+    agentInstallBusy,
+    agentProgressPercent,
+    agentProgressText,
+    agentInstalledVersions,
+    agentSelectedBuiltin,
+    selectedAgentInstalled,
+    agentTunAvailable,
+    agentTunReason,
+    agentCancelRequested,
+    handleCancelAgentTask,
+    handleAgentRemoveCore,
+    // 设置弹窗关闭时只停 UI 轮询，服务端安装任务继续推进
+    stopAgentPoll,
     mirrorSources,
     mirrorProbing,
     mirrorSelected,

@@ -21,6 +21,7 @@ import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { migrateLockPassword, verifyLockPassword } from '@/shared/platform/lockUtil'
 import { registerMobileVpnListeners, syncMobileVpnStatus } from '@/shared/platform/mobileVpn'
+import { backendMode } from '@/shared/platform/backend'
 import { nextTick, onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -40,6 +41,9 @@ let unlistenFocus: (() => void) | null = null
 const isAndroidPlatform = isAndroid()
 // 浏览器 Mock 无 Tauri API：托盘/窗口/资源目录初始化全部跳过
 const isTauriPlatform = isTauriRuntime()
+// agent 模式（浏览器直连 lighttier-agent）没有托盘 / 窗口 / 资源目录 / 锁屏 / 引导：
+// 下列平台初始化整段跳过，登录门禁由路由守卫负责
+const isAgentMode = backendMode() === 'agent'
 let onVisibilityChange: (() => void) | null = null
 
 // 锁定窗口：清空输入并显示锁屏（聚焦监听 / 首次启动共用）
@@ -73,6 +77,8 @@ watch(isLocked, (v) => {
 })
 
 onBeforeMount(async () => {
+  // agent 模式：无托盘 / 窗口状态 / 资源目录 / 锁屏密码，整段跳过
+  if (isAgentMode) return
   // 桌面 Tauri：托盘与窗口状态恢复（对应插件仅在桌面注册）
   if (!isAndroidPlatform && isTauriPlatform) {
     initTray()
@@ -94,6 +100,14 @@ onBeforeMount(async () => {
 })
 
 onMounted(async () => {
+  // 探测已安装内核版本（非阻塞）：表单/CLI/服务安装按此版本适配
+  // 必须在 agent 早退之前：agent 模式没有窗口/托盘，但同样要显示内核版本适配提示
+  easytierStore.detectCoreVersion().catch(() => {
+    /* 探测失败保留 null，按宽松策略展示全部字段 */
+  })
+
+  // agent 模式：不显示桌面窗口、不恢复源码目录、不锁屏、不跑托盘驻留逻辑
+  if (isAgentMode) return
   // 桌面 Tauri：显示窗口、校正越界位置并通知后端（浏览器 Mock 无窗口 API）
   if (isTauriPlatform && !isAndroidPlatform) {
     // 显示窗口（配置文件中设置为初始不可见，现在前端已加载完成）
@@ -129,11 +143,6 @@ onMounted(async () => {
       console.error('Failed to emit frontend-ready event:', e)
     })
   }
-
-  // 探测已安装内核版本（非阻塞）：表单/CLI/服务安装按此版本适配
-  easytierStore.detectCoreVersion().catch(() => {
-    /* 探测失败保留 null，按宽松策略展示全部字段 */
-  })
 
   // 检查是否需要锁定（首次启动）
   if (easytierStore.lockPassword && isFirstLoad.value) {
@@ -228,10 +237,13 @@ onUnmounted(() => {
         </LtButton>
       </div>
     </div>
-    <!-- 首次引导屏：解锁后显示（锁屏优先级更高） -->
-    <OnboardingGuide v-if="!isLocked && showOnboarding" @finish="showOnboarding = false" />
-    <!-- 启动后台任务：出口路由残留清理反馈（需在 NotificationProvider 内） -->
-    <StartupTasks />
+    <!-- 首次引导屏：解锁后显示（锁屏优先级更高；agent 模式无引导） -->
+    <OnboardingGuide
+      v-if="!isAgentMode && !isLocked && showOnboarding"
+      @finish="showOnboarding = false"
+    />
+    <!-- 启动后台任务：出口路由残留清理反馈（需在 NotificationProvider 内；agent 模式跳过） -->
+    <StartupTasks v-if="!isAgentMode" />
   </ConfigGlobal>
 </template>
 

@@ -37,6 +37,14 @@ describe('configNameUtil', () => {
     expect(isValidConfigName('console')).toBe(true)
     expect(isValidConfigName('COM10')).toBe(true)
   })
+
+  it('超过 64 个字符的名称被拒绝（与后端 id 规则对齐）', () => {
+    expect(isValidConfigName('a'.repeat(64))).toBe(true)
+    expect(isValidConfigName('a'.repeat(65))).toBe(false)
+    // 按字符数而非字节数计算：64 个汉字仍是 192 字节但合法
+    expect(isValidConfigName('家'.repeat(64))).toBe(true)
+    expect(isValidConfigName('家'.repeat(65))).toBe(false)
+  })
 })
 
 describe('isConfigNameTaken', () => {

@@ -66,8 +66,15 @@ async fn test_app(dir: &Path) -> TestApp {
         .unwrap(),
     );
     let cli = Arc::new(CliQuery::new(&cfg.data_dir, Some(dir.join("core"))));
+    // Same core root as the supervisor, so the package listing and a spawn can
+    // never disagree about the active kernel.
+    let packages = Arc::new(
+        lighttier_agent::packages::Packages::new(&cfg.data_dir)
+            .with_core_override(Some(dir.join("core"))),
+    );
+    let logs = Arc::new(lighttier_agent::logs::Logs::new(&cfg.data_dir));
     let router = build_router(Arc::new(AppState::new(
-        cfg, auth, configs, audit, settings, supervisor, cli,
+        cfg, auth, configs, audit, settings, supervisor, cli, packages, logs,
     )));
     TestApp { router }
 }
@@ -148,7 +155,7 @@ async fn node_peers_and_monitor_roundtrip() {
         .oneshot(request(
             "PUT",
             "/api/v1/configs/home",
-            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15916\"\nhostname = \"nas\"\n" })),
+            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15916\"\nhostname = \"nas\"\ninstance_name = \"家\"\ndhcp = true\nexit_nodes = [\"0.0.0.0/0\"]\n\n[network_identity]\nnetwork_name = \"mesh-a\"\n" })),
             Some(&cookie),
         ))
         .await
@@ -166,6 +173,35 @@ async fn node_peers_and_monitor_roundtrip() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
+    // 停止的配置也要出现在 catalog 中：监控页需要区分运行中与未运行实例。
+    let res = app
+        .router
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/configs/office",
+            Some(serde_json::json!({ "toml": "rpc_portal = \"127.0.0.1:15918\"\nhostname = \"office\"\n" })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(request("GET", "/api/v1/instances", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let list = json_body(res).await;
+    // catalog 列出全部合法配置 id；instances 同样覆盖已停止配置，用 running 区分。
+    assert_eq!(list["catalog"], serde_json::json!(["home", "office"]));
+    assert_eq!(list["instances"].as_array().map(Vec::len), Some(2));
+    assert_eq!(list["instances"][0]["id"], "home");
+    assert_eq!(list["instances"][0]["running"], true);
+    assert_eq!(list["instances"][1]["id"], "office");
+    assert_eq!(list["instances"][1]["running"], false);
 
     let res = app
         .router
@@ -210,6 +246,12 @@ async fn node_peers_and_monitor_roundtrip() {
         .unwrap();
     let monitor = json_body(res).await;
     assert_eq!(monitor["node"]["data"]["hostname"], "nas");
+    // 配置派生字段由 agent 补进 node.data（与桌面 runtime 的投影口径一致），
+    // 否则监控页会把网络名称显示成 “—”、DHCP 显示成“已禁用”
+    assert_eq!(monitor["node"]["data"]["_dhcp"], true);
+    assert_eq!(monitor["node"]["data"]["_network_name"], "mesh-a");
+    assert_eq!(monitor["node"]["data"]["_instance_name"], "家");
+    assert_eq!(monitor["node"]["data"]["_exit_nodes"][0], "0.0.0.0/0");
     assert_eq!(monitor["peers"]["data"][0]["hostname"], "peer-a");
 
     let res = app
