@@ -124,6 +124,7 @@ export const createNativeBackend = (): Backend => ({
     tray: true,
     kernel: true,
     logs: true,
-    mirror: true
+    mirror: true,
+    web: true
   }
 })

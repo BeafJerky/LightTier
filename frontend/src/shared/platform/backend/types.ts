@@ -112,6 +112,8 @@ export interface Capabilities {
   kernel: boolean
   logs: boolean
   mirror: boolean
+  /** Web 配置（连接远程配置服务器）：桌面/Android 已支持，agent 待服务端声明 */
+  web: boolean
 }
 
 export interface Backend {

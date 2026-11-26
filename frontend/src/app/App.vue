@@ -22,6 +22,7 @@ import { isAndroid } from '@/shared/platform/platformUtil'
 import { migrateLockPassword, verifyLockPassword } from '@/shared/platform/lockUtil'
 import { registerMobileVpnListeners, syncMobileVpnStatus } from '@/shared/platform/mobileVpn'
 import { backendMode } from '@/shared/platform/backend'
+import { useAgentSessionStore } from '@/shared/store/agentSession'
 import { nextTick, onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -41,9 +42,11 @@ let unlistenFocus: (() => void) | null = null
 const isAndroidPlatform = isAndroid()
 // 浏览器 Mock 无 Tauri API：托盘/窗口/资源目录初始化全部跳过
 const isTauriPlatform = isTauriRuntime()
-// agent 模式（浏览器直连 lighttier-agent）没有托盘 / 窗口 / 资源目录 / 锁屏 / 引导：
-// 下列平台初始化整段跳过，登录门禁由路由守卫负责
+// agent 模式（浏览器直连 lighttier-agent）没有托盘 / 窗口 / 资源目录 / 锁屏：
+// 下列平台初始化整段跳过，登录门禁由路由守卫负责；首次引导只在会话已认证后显示
 const isAgentMode = backendMode() === 'agent'
+// agent 会话状态：引导需等登录 / 初始化完成后才出现，避免盖住登录页
+const agentSession = useAgentSessionStore()
 let onVisibilityChange: (() => void) | null = null
 
 // 锁定窗口：清空输入并显示锁屏（聚焦监听 / 首次启动共用）
@@ -237,9 +240,9 @@ onUnmounted(() => {
         </LtButton>
       </div>
     </div>
-    <!-- 首次引导屏：解锁后显示（锁屏优先级更高；agent 模式无引导） -->
+    <!-- 首次引导屏：解锁后显示（锁屏优先级更高；agent 需已认证，避免盖住登录页） -->
     <OnboardingGuide
-      v-if="!isAgentMode && !isLocked && showOnboarding"
+      v-if="(!isAgentMode || agentSession.authenticated) && !isLocked && showOnboarding"
       @finish="showOnboarding = false"
     />
     <!-- 启动后台任务：出口路由残留清理反馈（需在 NotificationProvider 内；agent 模式跳过） -->

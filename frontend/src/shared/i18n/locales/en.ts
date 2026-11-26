@@ -1043,6 +1043,11 @@ export default {
     androidThemeDesc: 'Switch between multiple color themes and light or dark mode',
     androidLockTitle: 'App Lock',
     androidLockDesc: 'Set a password to protect your configs and running state',
+    agentManagedTitle: 'Managed Server-side',
+    agentManagedDesc:
+      'Configs and runtime state are hosted on the server — sign in from any browser to manage them',
+    agentAccessTitle: 'No Client Install',
+    agentAccessDesc: 'No client needed on each device — open a browser, sign in, and take control',
     coreSetupBadge: 'On demand',
     coreSetupTitle: 'Install the Kernel on Demand',
     coreSetupDesc:
@@ -1071,6 +1076,17 @@ export default {
       'The kernel is ready. You can download or switch kernel versions anytime in Settings.',
     androidDoneDesc:
       'The kernel is built in and updates with the app — start networking right away',
+    agentBuiltinBadge: 'Bundled in server',
+    agentBuiltinTitle: 'Kernel Bundled with the Server',
+    agentBuiltinDesc:
+      'The server already ships EasyTier kernel {version} — start networking without downloading or installing',
+    agentBuiltinDescNoVersion:
+      'The EasyTier kernel is bundled with the server image — no download or installation needed',
+    agentCoreMissingDesc:
+      'No usable kernel detected. Install one in Settings → Kernel, then start networking',
+    agentCoreManageHint: 'Need another kernel version? Install and switch it in Settings → Kernel',
+    agentDoneDesc:
+      'The kernel is bundled with the server image and updates with the server — start networking right away',
     corePendingDesc:
       'The kernel is not installed yet. Download and install it anytime in Settings → Kernel',
     doneBtn: 'Finish setup',

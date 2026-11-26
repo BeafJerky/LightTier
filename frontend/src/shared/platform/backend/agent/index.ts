@@ -36,7 +36,9 @@ export const createAgentBackend = (): Backend => {
       tray: features.tray === true,
       kernel: features.kernel === true,
       logs: features.logs === true,
-      mirror: features.kernel === true
+      mirror: features.kernel === true,
+      // 服务端尚无 Web 配置能力：先恒为 false，避免前端宣传尚不可用的入口
+      web: false
     }
   }
 }

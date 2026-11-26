@@ -33,34 +33,21 @@
             </div>
           </div>
 
-          <!-- 第 3 步：内核获取方式（桌面可快捷安装，Android 编译期内置） -->
+          <!-- 第 3 步：内核获取方式（桌面可快捷安装，Android 编译期内置，agent 随服务镜像内置） -->
           <div v-else-if="step === 3" class="og-install">
-            <div class="og-badge">
-              {{
-                isAndroidPlatform
-                  ? t('newOnboarding.androidBuiltinBadge')
-                  : isCoreReady
-                    ? t('newOnboarding.coreReadyBadge')
-                    : t('newOnboarding.coreSetupBadge')
-              }}
-            </div>
-            <h2 id="og-title" class="og-title">{{
-              isAndroidPlatform
-                ? t('newOnboarding.androidBuiltinTitle')
-                : isCoreReady
-                  ? t('newOnboarding.coreReadyTitle')
-                  : t('newOnboarding.coreSetupTitle')
-            }}</h2>
-            <p class="og-desc">{{
-              isAndroidPlatform
-                ? t('newOnboarding.androidBuiltinDesc')
-                : isCoreReady
-                  ? t('newOnboarding.coreReadyDesc', { version: easyTierStore.detectedCoreVersion })
-                  : t('newOnboarding.coreSetupDesc')
-            }}</p>
+            <div class="og-badge">{{ coreBadge }}</div>
+            <h2 id="og-title" class="og-title">{{ coreTitle }}</h2>
+            <p class="og-desc">{{ coreDesc }}</p>
 
-            <!-- 桌面且内核未就绪：提供快捷安装；Android 已内置，浏览器预览无 Tauri API -->
-            <div v-if="!isAndroidPlatform && !isCoreReady" class="og-core-action">
+            <!-- agent：内核已内置，不提供下载按钮；换版本入口在设置 → 内核管理 -->
+            <div v-if="platform === 'agent'" class="og-core-action">
+              <p v-if="agentCore.status !== 'missing'" class="og-core-hint">
+                {{ t('newOnboarding.agentCoreManageHint') }}
+              </p>
+            </div>
+
+            <!-- 桌面且内核未就绪：提供快捷安装；Android/agent 已内置，浏览器预览无 Tauri API -->
+            <div v-if="platform === 'desktop' && !isCoreReady" class="og-core-action">
               <p v-if="coreChecking" class="og-core-hint">
                 {{ t('newOnboarding.coreDetecting') }}
               </p>
@@ -110,13 +97,7 @@
               </svg>
             </div>
             <h2 id="og-title" class="og-title">{{ t('newOnboarding.doneTitle') }}</h2>
-            <p class="og-desc">{{
-              isAndroidPlatform
-                ? t('newOnboarding.androidDoneDesc')
-                : isCoreReady
-                  ? t('newOnboarding.installDoneDesc')
-                  : t('newOnboarding.corePendingDesc')
-            }}</p>
+            <p class="og-desc">{{ doneDesc }}</p>
           </div>
         </div>
       </Transition>
@@ -176,8 +157,9 @@
 /**
  * OnboardingGuide — 首次启动引导（4 步流程）
  *
- * 步骤：1 欢迎 → 2 功能简介 → 3 内核获取方式（桌面可快捷安装，Android 编译期内置）
- * → 4 完成；桌面内核不再随安装包内置，第 3 步支持一键测速加速源、下载并安装默认版本。
+ * 步骤：1 欢迎 → 2 功能简介 → 3 内核获取方式（桌面可快捷安装，Android 编译期内置，
+ * agent 随服务镜像内置）→ 4 完成；桌面内核不再随安装包内置，第 3 步支持一键测速
+ * 加速源、下载并安装默认版本。
  * 结束时勾选“下次不再显示”则写入 localStorage（settings.onboardingDone）持久化，
  * finish 事件交由父组件控制显隐。
  */
@@ -187,11 +169,19 @@ import { useRouter } from 'vue-router'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { getCoreDownloadUrl, getCoreFileName } from '@/shared/constants/easytier'
 import { DEFAULT_CORE_VERSION } from '@/entities/kernel/kernelCompat'
+import {
+  resolveAgentCoreView,
+  resolveAgentFeatureKinds,
+  resolveOnboardingPlatform,
+  type AgentCoreView,
+  type AgentFeatureKind
+} from '@/app/onboarding/onboardingState'
 import { useCoreInstall } from '@/shared/composables/useCoreInstall'
 import { useMirrorProbe } from '@/shared/composables/useMirrorProbe'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { LtButton, LtSwitch } from '@/shared/ui'
 import { formatBytes } from '@/shared/lib/monitorFormat'
+import { backendCapabilities, backendMode, backendPackages } from '@/shared/platform/backend'
 import { downloadFile } from '@/shared/platform/fileUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { getArch, getOsType } from '@/shared/platform/sysUtil'
@@ -206,15 +196,27 @@ const easyTierStore = useEasyTierStore()
 const step = ref(1)
 // Android：内核编译期内置，无需下载安装
 const isAndroidPlatform = isAndroid()
+// agent（浏览器直连 lighttier-agent）：内核随服务镜像内置，没有本机 Tauri 能力
+const isAgentMode = backendMode() === 'agent'
+// 平台分支：第 2/3/4 步的文案与操作按此选择
+const platform = resolveOnboardingPlatform({ android: isAndroidPlatform, agent: isAgentMode })
+// Web 配置只在服务端声明该能力时宣传；未放开时用另一项 agent 特性补位
+const agentWebCapable = isAgentMode && backendCapabilities().web
+// agent 内核状态由 packages 接口推导：浏览器探测值在 agent 下不是安装信号
+const agentCore = ref<AgentCoreView>({ status: 'unknown', version: null })
 // 是否已有配置：决定完成页主 CTA（创建第一个配置 / 结束引导）
 const hasConfigs = computed(() => easyTierStore.configList.length > 0)
 // 浏览器 Mock 的版本探测返回默认值，不代表真实安装；仅 Tauri 桌面探测成功才算内核就绪
-const isCoreReady = computed(() => isTauriRuntime() && !!easyTierStore.detectedCoreVersion)
-// 仅桌面 Tauri 支持快捷安装（Android 内核内置，浏览器无 Tauri API）
-const canQuickInstall = computed(() => !isAndroidPlatform && isTauriRuntime())
+const isCoreReady = computed(() =>
+  platform === 'agent'
+    ? agentCore.value.status === 'ready'
+    : isTauriRuntime() && !!easyTierStore.detectedCoreVersion
+)
+// 仅桌面 Tauri 支持快捷安装（Android 与 agent 内核已内置，浏览器无 Tauri API）
+const canQuickInstall = computed(() => platform === 'desktop' && isTauriRuntime())
 // App 启动即触发内核探测，未出结果前不展示安装按钮，避免与探测结果打架
 const coreChecking = computed(
-  () => !isAndroidPlatform && !isCoreReady.value && easyTierStore.coreVersionDetecting
+  () => platform === 'desktop' && !isCoreReady.value && easyTierStore.coreVersionDetecting
 )
 // 下次不再显示（默认勾选：完成引导后不再出现，取消勾选则每次启动显示）
 const notShowAgain = ref(true)
@@ -255,6 +257,36 @@ const quickInstallButtonText = computed(() => {
     default:
       return t('newOnboarding.quickInstall')
   }
+})
+
+// 第 3 步文案：桌面按探测结果切换就绪 / 待安装，Android 与 agent 内核已内置
+const coreBadge = computed(() => {
+  if (platform === 'agent') return t('newOnboarding.agentBuiltinBadge')
+  if (platform === 'android') return t('newOnboarding.androidBuiltinBadge')
+  return isCoreReady.value ? t('newOnboarding.coreReadyBadge') : t('newOnboarding.coreSetupBadge')
+})
+const coreTitle = computed(() => {
+  if (platform === 'agent') return t('newOnboarding.agentBuiltinTitle')
+  if (platform === 'android') return t('newOnboarding.androidBuiltinTitle')
+  return isCoreReady.value ? t('newOnboarding.coreReadyTitle') : t('newOnboarding.coreSetupTitle')
+})
+const coreDesc = computed(() => {
+  if (platform === 'agent') {
+    if (agentCore.value.status === 'ready') {
+      return t('newOnboarding.agentBuiltinDesc', { version: agentCore.value.version })
+    }
+    if (agentCore.value.status === 'missing') return t('newOnboarding.agentCoreMissingDesc')
+    return t('newOnboarding.agentBuiltinDescNoVersion')
+  }
+  if (platform === 'android') return t('newOnboarding.androidBuiltinDesc')
+  return isCoreReady.value
+    ? t('newOnboarding.coreReadyDesc', { version: easyTierStore.detectedCoreVersion })
+    : t('newOnboarding.coreSetupDesc')
+})
+const doneDesc = computed(() => {
+  if (platform === 'agent') return t('newOnboarding.agentDoneDesc')
+  if (platform === 'android') return t('newOnboarding.androidDoneDesc')
+  return isCoreReady.value ? t('newOnboarding.installDoneDesc') : t('newOnboarding.corePendingDesc')
 })
 
 const quickInstallCore = async () => {
@@ -312,7 +344,31 @@ const quickInstallCore = async () => {
 const cardRef = ref<HTMLElement | null>(null)
 let prevFocus: HTMLElement | null = null
 
-// 核心功能简介（以快速上手为目标）；Web 配置与 Windows 服务仅桌面端，Android 展示主题与锁屏
+// 第 2 步的 agent 平台特性：Web 配置（能力位放开后）与两项服务端形态特性
+const agentFeature = (kind: AgentFeatureKind) => {
+  if (kind === 'web') {
+    return {
+      title: t('newOnboarding.feature3Title'),
+      desc: t('newOnboarding.feature3Desc'),
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>'
+    }
+  }
+  if (kind === 'managed') {
+    return {
+      title: t('newOnboarding.agentManagedTitle'),
+      desc: t('newOnboarding.agentManagedDesc'),
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/></svg>'
+    }
+  }
+  return {
+    title: t('newOnboarding.agentAccessTitle'),
+    desc: t('newOnboarding.agentAccessDesc'),
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9.5 6.5h.01"/></svg>'
+  }
+}
+
+// 核心功能简介（以快速上手为目标）；Web 配置与 Windows 服务仅桌面端，
+// Android 展示主题与锁屏，agent 展示 Web 配置（能力位放开后）与服务端托管
 const features = computed(() => {
   const common = [
     {
@@ -326,32 +382,36 @@ const features = computed(() => {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-6"/></svg>'
     }
   ]
-  const platform = isAndroidPlatform
-    ? [
-        {
-          title: t('newOnboarding.androidThemeTitle'),
-          desc: t('newOnboarding.androidThemeDesc'),
-          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
-        },
-        {
-          title: t('newOnboarding.androidLockTitle'),
-          desc: t('newOnboarding.androidLockDesc'),
-          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'
-        }
-      ]
-    : [
-        {
-          title: t('newOnboarding.feature3Title'),
-          desc: t('newOnboarding.feature3Desc'),
-          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>'
-        },
-        {
-          title: t('newOnboarding.feature4Title'),
-          desc: t('newOnboarding.feature4Desc'),
-          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>'
-        }
-      ]
-  return [...common, ...platform]
+  if (platform === 'agent') {
+    return [...common, ...resolveAgentFeatureKinds(agentWebCapable).map(agentFeature)]
+  }
+  const platformFeatures =
+    platform === 'android'
+      ? [
+          {
+            title: t('newOnboarding.androidThemeTitle'),
+            desc: t('newOnboarding.androidThemeDesc'),
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+          },
+          {
+            title: t('newOnboarding.androidLockTitle'),
+            desc: t('newOnboarding.androidLockDesc'),
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'
+          }
+        ]
+      : [
+          {
+            title: t('newOnboarding.feature3Title'),
+            desc: t('newOnboarding.feature3Desc'),
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"/></svg>'
+          },
+          {
+            title: t('newOnboarding.feature4Title'),
+            desc: t('newOnboarding.feature4Desc'),
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>'
+          }
+        ]
+  return [...common, ...platformFeatures]
 })
 
 // 圆点跳转：只允许 1–3 步，第 4 步通过底部“下一步”到达
@@ -424,6 +484,19 @@ onMounted(() => {
   // 完成页需要判断是否已有配置；尚未加载时补一次
   if (!easyTierStore.configListLoaded) {
     easyTierStore.loadConfigFiles()
+  }
+  // agent：内核随镜像内置，就绪状态只能由服务端 packages 推导；失败降级为通用文案
+  if (isAgentMode) {
+    backendPackages()
+      .list()
+      .then(
+        (info) => {
+          agentCore.value = resolveAgentCoreView(info, true)
+        },
+        () => {
+          agentCore.value = { status: 'unknown', version: null }
+        }
+      )
   }
   nextTick(() => cardRef.value?.focus())
 })
