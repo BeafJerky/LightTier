@@ -1,0 +1,13 @@
+#!/bin/bash
+# 安装文件应用后：落地 TUN 模式与设置，并（可选）用向导密码完成初始化。
+source "$(dirname "$0")/common.sh"
+
+ensure_data_dir || { log "无法创建数据目录 ${TRIM_PKGVAR}/data"; exit 1; }
+apply_tun_mode || exit 1
+apply_settings || exit 1
+
+if ! auto_setup "${wizard_admin_password:-}"; then
+    exit 1
+fi
+
+exit 0

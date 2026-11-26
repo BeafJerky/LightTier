@@ -291,6 +291,39 @@ impl AuthStore {
         Ok(())
     }
 
+    /// Completes first-run setup from the locally stored token, with no HTTP
+    /// session. Packaging hooks call this so the admin password can be set
+    /// before the browser is ever opened.
+    pub async fn complete_setup(&self, password: &str) -> Result<(), ApiError> {
+        if password.chars().count() < MIN_PASSWORD_LEN {
+            return Err(ApiError::AuthInvalid);
+        }
+        let hash = hash_password(password)?;
+        let _persist = self.persist.lock().await;
+        let mut inner = self.inner.write().await;
+        if inner.password_hash.is_some() {
+            return Err(ApiError::AlreadyInitialized);
+        }
+        if inner.setup_token.is_none() {
+            return Err(ApiError::SetupRequired);
+        }
+        inner.password_hash = Some(hash.clone());
+        inner.setup_token = None;
+        inner.sessions.clear();
+        drop(inner);
+        storage::write_json_atomic(
+            &self.auth_path,
+            &AuthFile {
+                password_hash: Some(hash),
+                created_at: Some(chrono::Utc::now().timestamp()),
+            },
+        )
+        .await?;
+        storage::write_json_atomic(&self.sessions_path, &SessionsFile::default()).await?;
+        let _ = tokio::fs::remove_file(&self.setup_token_path).await;
+        Ok(())
+    }
+
     pub async fn reset_password(&self, password: &str) -> Result<(), ApiError> {
         if password.chars().count() < MIN_PASSWORD_LEN {
             return Err(ApiError::AuthInvalid);
@@ -562,6 +595,52 @@ mod tests {
         ));
         assert!(store
             .login_at("2.2.2.2", "reset-password-ok", now + 3)
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn complete_setup_initializes_without_session_and_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = test_cfg(dir.path());
+        let store = AuthStore::load(&cfg).await.unwrap();
+        store.complete_setup("long-enough-pw").await.unwrap();
+
+        assert!(!store.setup_required().await);
+        assert!(tokio::fs::metadata(dir.path().join("state/setup-token"))
+            .await
+            .is_err());
+        let sessions = tokio::fs::read_to_string(dir.path().join("state/sessions.json"))
+            .await
+            .unwrap();
+        let sessions: serde_json::Value = serde_json::from_str(&sessions).unwrap();
+        assert_eq!(sessions["sessions"], serde_json::json!({}));
+        assert!(store
+            .login_at("1.2.3.4", "long-enough-pw", 1_700_000_000)
+            .await
+            .is_ok());
+
+        assert!(matches!(
+            store.complete_setup("another-long-pw").await,
+            Err(ApiError::AlreadyInitialized)
+        ));
+        let reloaded = AuthStore::load(&cfg).await.unwrap();
+        assert!(reloaded
+            .login_at("1.2.3.4", "long-enough-pw", 1_700_000_000)
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn complete_setup_rejects_short_password_and_keeps_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuthStore::load(&test_cfg(dir.path())).await.unwrap();
+        assert!(matches!(
+            store.complete_setup("short").await,
+            Err(ApiError::AuthInvalid)
+        ));
+        assert!(store.setup_required().await);
+        assert!(tokio::fs::metadata(dir.path().join("state/setup-token"))
             .await
             .is_ok());
     }

@@ -16,10 +16,11 @@ fn main() {
         }
         "healthcheck" => healthcheck(),
         "print-setup-token" => print_setup_token(),
+        "setup" => setup_from_stdin(),
         "reset-password" => reset_password(),
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: lighttier-agent [serve|version|healthcheck|print-setup-token|reset-password]");
+            eprintln!("usage: lighttier-agent [serve|version|healthcheck|print-setup-token|setup|reset-password]");
             std::process::exit(2);
         }
     };
@@ -68,6 +69,35 @@ fn print_setup_token() -> Result<(), Box<dyn std::error::Error>> {
     let token = std::fs::read_to_string(&path)?;
     println!("{}", token.trim());
     Ok(())
+}
+
+/// Non-interactive first-run setup: reads one line (the admin password) from
+/// stdin and consumes `state/setup-token`. Idempotent on an initialized store.
+fn setup_from_stdin() -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = AgentConfig::from_env()?;
+    let mut password = String::new();
+    std::io::stdin().read_line(&mut password)?;
+    let password = password.trim_end_matches(['\r', '\n']);
+    if password.is_empty() {
+        return Err(
+            "empty password on stdin (pipe the password into `lighttier-agent setup`)".into(),
+        );
+    }
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let store = rt.block_on(lighttier_agent::auth::AuthStore::load(&cfg))?;
+    match rt.block_on(store.complete_setup(password)) {
+        Ok(()) => {
+            println!("administrator initialized");
+            Ok(())
+        }
+        Err(lighttier_agent::error::ApiError::AlreadyInitialized) => {
+            println!("administrator already initialized; nothing to do");
+            Ok(())
+        }
+        Err(err) => Err(format!("{}: {}", err.code(), err.message()).into()),
+    }
 }
 
 fn reset_password() -> Result<(), Box<dyn std::error::Error>> {

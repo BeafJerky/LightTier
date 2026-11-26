@@ -1,0 +1,10 @@
+#!/bin/bash
+# 应用设置提交后：把日志级别/加速前缀写回 compose；新值在容器下次启动时生效。
+source "$(dirname "$0")/common.sh"
+
+ensure_data_dir || { log "无法创建数据目录"; exit 1; }
+apply_tun_mode || exit 1
+apply_settings || exit 1
+log "设置已写入 compose；如容器正在运行，请重启应用使新设置生效"
+
+exit 0

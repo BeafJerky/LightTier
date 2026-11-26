@@ -1,0 +1,18 @@
+[
+  {
+    "stepTitle": "卸载 LightTier",
+    "items": [
+      {
+        "type": "radio",
+        "field": "wizard_delete_data",
+        "label": "应用数据",
+        "initValue": "false",
+        "options": [
+          { "label": "保留数据（配置、日志、已安装内核）", "value": "false" },
+          { "label": "删除数据（不可恢复）", "value": "true" }
+        ],
+        "helpText": "数据位于应用数据目录的 data 子目录。"
+      }
+    ]
+  }
+]

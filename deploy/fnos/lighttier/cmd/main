@@ -1,0 +1,22 @@
+#!/bin/bash
+# start/stop 交给应用中心按 docker-project 处理；status 必须准确反映容器状态。
+source "$(dirname "$0")/common.sh"
+
+case "$1" in
+    start)
+        exit 0
+        ;;
+    stop)
+        exit 0
+        ;;
+    status)
+        if docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *)
+        echo "unknown command: $1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+        exit 1
+        ;;
+esac

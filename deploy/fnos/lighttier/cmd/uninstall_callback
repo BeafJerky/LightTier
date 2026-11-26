@@ -1,0 +1,22 @@
+#!/bin/bash
+# 卸载清理：容器移除；仅当用户在向导里勾选删除时，才按白名单删数据目录。
+source "$(dirname "$0")/common.sh"
+
+docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+if [ "${wizard_delete_data:-false}" = "true" ]; then
+    data_dir="${TRIM_PKGVAR}/data"
+    case "$data_dir" in
+        */@appdata/*/data)
+            rm -rf "$data_dir"
+            log "已删除数据目录：$data_dir"
+            ;;
+        *)
+            log "拒绝删除非常规路径：$data_dir"
+            ;;
+    esac
+else
+    log "已保留数据目录：${TRIM_PKGVAR}/data"
+fi
+
+exit 0

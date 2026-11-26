@@ -1,0 +1,32 @@
+services:
+  lighttier:
+    # 版本由 build.ps1 与 manifest.version 同步，必须逐字相等。
+    image: ghcr.io/beafjerky/lighttier-agent:2.14.0
+    container_name: lighttier
+    restart: unless-stopped
+    # VPN 的 TUN 地址必须落在宿主机网络命名空间，桥接无法承载三层互通。
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    # 无 TUN 的主机由 cmd/install_callback 把下面两行整行改小。
+    # 留着 devices 指向不存在的设备，dockerd 会直接拒绝创建容器。
+    # DAC_OVERRIDE：data 目录属主是包用户，cap_drop ALL 后容器 root 也被权限检查拦住。
+    cap_add: ["NET_ADMIN", "NET_RAW", "DAC_OVERRIDE"]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    volumes:
+      - ${TRIM_PKGVAR:?}/data:/data
+    environment:
+      # 端口与 manifest.service_port、app/ui/config 的 port 三处一致（17800）。
+      - LT_BIND=0.0.0.0:17800
+      - LT_LOG=info
+      - LT_CORE_MIRROR=
+      - TZ=Asia/Shanghai
+    tmpfs: [/tmp]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/lighttier-agent", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

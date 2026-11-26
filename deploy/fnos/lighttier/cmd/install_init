@@ -1,0 +1,10 @@
+#!/bin/bash
+# 安装文件应用前：只校验环境变量，不触碰运行态。
+source "$(dirname "$0")/common.sh"
+
+if [ -z "${TRIM_APPDEST:-}" ] || [ -z "${TRIM_PKGVAR:-}" ] || [ -z "${TRIM_TEMP_LOGFILE:-}" ]; then
+    echo "TRIM_APPDEST / TRIM_PKGVAR / TRIM_TEMP_LOGFILE 未注入，无法安装" >> "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+fi
+
+exit 0

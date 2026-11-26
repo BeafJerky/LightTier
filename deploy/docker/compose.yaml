@@ -9,7 +9,9 @@ services:
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
-    cap_add: [NET_ADMIN, NET_RAW]
+    # DAC_OVERRIDE: an existing ./data directory keeps its host uid, and root
+    # without this capability cannot write it after cap_drop ALL.
+    cap_add: [NET_ADMIN, NET_RAW, DAC_OVERRIDE]
     devices:
       - /dev/net/tun:/dev/net/tun
     volumes:

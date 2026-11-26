@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.14.0 (2026-11-26)
+
+> fnOS 应用包（M6）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发，升级保留数据。桌面与 Android 零改动。
+
+### 新增
+
+- agent CLI：`lighttier-agent setup` 从 stdin 读取密码，在无 HTTP 会话的情况下完成首次初始化（令牌文件同步删除、会话清零）；已初始化时幂等返回
+- `deploy/fnos`：`fnpack` 1.2.3 工程（manifest、compose、`cmd/` 9 个生命周期脚本、三份 wizard、图标生成脚本）
+  - 安装向导的管理员密码为可选项：填写则安装时用一次性容器执行 `setup`，留空则保留初始化令牌流程；密码只经 stdin 传递，不落盘、不进命令行
+  - 自动化适配：无 `/dev/net/tun` 时把 compose 的 `devices` 与 `cap_add` 整行改为 `[]`；日志级别与内核加速前缀经向导写回 compose
+  - 升级保留 `${TRIM_PKGVAR}/data`，卸载仅在勾选时删除该目录；容器名、端口、镜像标签在构建期断言一致
+- `build.ps1`：版本号从 `package.json` 同步到 manifest 与镜像标签，统一 LF，调用 `fnpack build`，解包后校验 checksum、三处端口、JSON 合法性、TUN 回退行、setup 入口、图标尺寸，产物输出到 `deploy/fnos/out/`
+
+### 验证
+
+- agent：容器内 `cargo test` 171 项通过，`cargo fmt -- --check` 干净
+- 桌面与 Android：仅改版本号与 agent crate；未新增 Tauri 命令、权限或平台配置
+
 ## 2.13.0 (2026-11-26)
 
 > 前端接入 agent 模式（M3）：同一套 Vue 界面可在浏览器中管理 Linux/fnOS 上运行的 lighttier-agent，并支持内核包在线安装；桌面与 Android 代码零改动。

@@ -26,6 +26,8 @@ rm -rf data
 
 容器以 root 身份写入 `./data`，在原生 Linux 主机上该目录属 root，清理时可能需要 `sudo rm -rf data`（WSL 的 drvfs 上通常普通用户即可）。
 
+`./data` 若已由普通用户预先创建，容器 root 在 `cap_drop: ALL` 后会被权限检查拦下（agent 以 `Permission denied` 反复重启）。compose 因此保留了 `DAC_OVERRIDE`；不要把它从 `cap_add` 里删掉。
+
 ### WSL 注意事项
 
 - **RPC 门户（mirrored 网络）**：WSL 2 开启 mirrored 网络模式时，容器内进程绑定 `127.0.0.1` 会得到设备作用域的 `127.0.0.1%lo`，而容器内 `easytier-cli` 通过 `127.0.0.1:<port>` 连接会被拒绝（node/peers 一直 `stale`）。配置里把 `rpc_portal` 设为 `0.0.0.0:15888`（或用 NAT 网络模式）即可。

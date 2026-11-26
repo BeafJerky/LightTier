@@ -1,0 +1,27 @@
+[
+  {
+    "stepTitle": "LightTier 设置",
+    "items": [
+      {
+        "type": "select",
+        "field": "wizard_log_level",
+        "label": "日志级别",
+        "initValue": "info",
+        "options": [
+          { "label": "info", "value": "info" },
+          { "label": "debug", "value": "debug" },
+          { "label": "warn", "value": "warn" },
+          { "label": "error", "value": "error" }
+        ],
+        "helpText": "修改后需重启应用生效。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_core_mirror",
+        "label": "内核下载加速前缀（可选）",
+        "initValue": "",
+        "helpText": "例如 https://ghfast.top；最终下载地址为 前缀 + 官方 GitHub 完整地址。留空则直连 GitHub。"
+      }
+    ]
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "stepTitle": "LightTier 初始化",
+    "items": [
+      {
+        "type": "password",
+        "field": "wizard_admin_password",
+        "label": "管理员密码（至少 10 位，可留空）",
+        "helpText": "填写后安装时自动完成初始化，直接用该密码登录 Web 界面。留空则安装完成后手动初始化：在设备终端执行 docker exec lighttier lighttier-agent print-setup-token 获取初始化令牌，再打开应用完成设置。"
+      },
+      {
+        "type": "tips",
+        "helpText": "Web 端口固定为 17800；数据保存在应用数据目录，升级不会清除，卸载时可选择是否删除。"
+      }
+    ]
+  }
+]

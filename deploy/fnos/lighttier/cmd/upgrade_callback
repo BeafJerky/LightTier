@@ -1,0 +1,9 @@
+#!/bin/bash
+# 升级后：保留 /data，重新落地 TUN 模式与设置（不重跑初始化，密码不变）。
+source "$(dirname "$0")/common.sh"
+
+ensure_data_dir || { log "无法创建数据目录"; exit 1; }
+apply_tun_mode || exit 1
+apply_settings || exit 1
+
+exit 0
