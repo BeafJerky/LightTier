@@ -13,6 +13,10 @@ RUN npm i -g pnpm@9.12.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 COPY frontend ./frontend
+# Bundled themes and the theme guide are inlined by useExternalThemes.ts
+# (`import.meta.glob('../../../../src-tauri/resource/themes/*')`), so that
+# subtree must exist at build time or the web UI ships without them.
+COPY src-tauri/resource/themes ./src-tauri/resource/themes
 # Root script: vite build --config frontend/vite.config.ts --mode pro, then the
 # release-bundle guard. It only needs the frontend tree plus that one script;
 # no Tauri or Rust crates are involved.

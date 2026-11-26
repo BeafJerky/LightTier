@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.14.2 (2026-11-26)
+
+> agent 补丁：修复 NAS 网页端缺失已适配主题与主题指南的问题，并收口 agent 下三个无效入口。桌面与 Android 运行时行为不变。
+
+### 修复
+
+- Docker 构建的 web 阶段未包含 `src-tauri/resource/themes`（`.dockerignore` 未放行，`import.meta.glob` 命中为空），agent 主题列表只剩内置奶油/深色：补齐白名单与 `COPY src-tauri/resource/themes`，13 个预置主题与主题编写指南随镜像发布
+- agent 设置页仍展示“安全 → 锁定密码”，但浏览器端没有锁屏遮罩，设置不会生效：agent 下隐藏“安全”分类（`settings/security` 直达时回退到“通用”）
+- 悬浮快捷菜单在 agent 下仍展示“检查更新”与“打开配置目录”：前者无更新入口、后者无本地文件系统，按能力位与运行环境隐藏
+
+### 验证
+
+- 镜像内 web 包检索到全部 13 个预置主题 CSS 与 `THEME_GUIDE.md`
+- 前端：`pnpm ts:check`、`pnpm test`（75 文件 / 707 项）通过
+
 ## 2.14.1 (2026-11-26)
 
 > fnOS 应用包（M6）与 agent 功能补全（M4）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发（默认走 `ghcr.1ms.run` 加速），升级保留数据。agent 补上服务端主题存储与错误码收口，正式包剔除演示数据。桌面与 Android 零改动。

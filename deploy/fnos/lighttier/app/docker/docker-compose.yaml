@@ -3,7 +3,7 @@ services:
     # 走 GHCR 镜像加速：应用中心在安装阶段就会 pull，而不少国内 NAS 到
     # ghcr.io 会 TLS 握手超时。官方地址 ghcr.io/beafjerky/lighttier-agent。
     # 版本由 build.ps1 与 manifest.version 同步，必须逐字相等。
-    image: ghcr.1ms.run/beafjerky/lighttier-agent:2.14.1
+    image: ghcr.1ms.run/beafjerky/lighttier-agent:2.14.2
     container_name: lighttier
     restart: unless-stopped
     # VPN 的 TUN 地址必须落在宿主机网络命名空间，桥接无法承载三层互通。

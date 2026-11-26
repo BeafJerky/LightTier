@@ -13,6 +13,14 @@
 !frontend/**
 !scripts
 !scripts/check-release-bundle.mjs
+# Bundled themes/guide are inlined by the frontend build (import.meta.glob);
+# the web stage needs only this subtree of src-tauri.
+!src-tauri
+src-tauri/*
+!src-tauri/resource
+src-tauri/resource/*
+!src-tauri/resource/themes
+!src-tauri/resource/themes/**
 crates/agent/target
 crates/agent/.cargo-home
 frontend/node_modules

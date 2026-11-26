@@ -25,8 +25,14 @@
           </svg>
           <span>{{ t('newCommon.refreshConfig') }}</span>
         </LtButton>
-        <!-- 检查更新：直达关于页并自动检查一次 -->
-        <LtButton variant="bare" class="fab-menu-item" role="menuitem" @click="handleCheckUpdate">
+        <!-- 检查更新：直达关于页并自动检查一次（agent 无应用内更新能力时隐藏） -->
+        <LtButton
+          v-if="showCheckUpdate"
+          variant="bare"
+          class="fab-menu-item"
+          role="menuitem"
+          @click="handleCheckUpdate"
+        >
           <svg
             class="fab-menu-icon"
             width="14"
@@ -44,8 +50,14 @@
           </svg>
           <span>{{ t('newSettings.checkUpdate') }}</span>
         </LtButton>
-        <!-- 打开配置目录：直达 resource/config，便于手动管理 TOML -->
-        <LtButton variant="bare" class="fab-menu-item" role="menuitem" @click="handleOpenConfigDir">
+        <!-- 打开配置目录：直达 resource/config，便于手动管理 TOML（agent 浏览器无本地目录） -->
+        <LtButton
+          v-if="showOpenConfigDir"
+          variant="bare"
+          class="fab-menu-item"
+          role="menuitem"
+          @click="handleOpenConfigDir"
+        >
           <svg
             class="fab-menu-icon"
             width="14"
@@ -105,6 +117,7 @@ import { useI18n } from 'vue-i18n'
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { join, resourceDir } from '@tauri-apps/api/path'
 import { useEasyTierStore } from '@/shared/store/easytier'
+import { backendCapabilities, backendMode } from '@/shared/platform/backend'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { openPath } from '@/shared/platform/fileUtil'
 import { CONFIG_PATH } from '@/shared/constants/easytier'
@@ -121,6 +134,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { show: toast } = useCreamToast()
 const easyTierStore = useEasyTierStore()
+
+// agent：服务端声明不提供应用内更新 / 本地配置目录时，对应项直接不渲染
+const isAgentMode = backendMode() === 'agent'
+const showCheckUpdate = !isAgentMode || backendCapabilities().update
+const showOpenConfigDir = !isAgentMode
 
 const menuOpen = computed({
   get: () => props.modelValue,

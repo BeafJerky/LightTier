@@ -447,6 +447,7 @@ watch(visible, (v) => {
 // Tab 导航
 const activeTab = ref('general')
 // 托盘 / 灵动岛仅桌面原生运行时存在；agent 下不展示该分类
+// 锁屏密码依赖桌面锁屏遮罩，agent 用服务端登录会话，展示该项只会得到无效设置
 const tabs = computed(() =>
   [
     { key: 'general', label: t('newSettings.general') },
@@ -455,12 +456,18 @@ const tabs = computed(() =>
     { key: 'data', label: t('newSettings.dataMgmt') },
     { key: 'security', label: t('newSettings.security') },
     { key: 'about', label: t('newSettings.about') }
-  ].filter((tab) => tab.key !== 'island' || !settingsCaps || settingsCaps.tray)
+  ].filter((tab) => {
+    if (!settingsCaps) return true
+    if (tab.key === 'island') return settingsCaps.tray
+    if (tab.key === 'security') return false
+    return true
+  })
 )
 // 单页模式（Android 设置子路由）：section 直接决定渲染的分类，忽略内部 tab 状态
 const panelTab = computed(() => {
   const requested = props.section || activeTab.value
   if (requested === 'island' && settingsCaps && !settingsCaps.tray) return 'general'
+  if (requested === 'security' && settingsCaps) return 'general'
   return requested
 })
 
