@@ -266,12 +266,6 @@ impl Supervisor {
         let parsed = parse_core_config(&document.toml)?;
         let settings = self.settings.get().await;
 
-        let mut endpoints: Vec<Endpoint> = Vec::new();
-        if let Some(endpoint) = parse_endpoint(&parsed.rpc_portal) {
-            endpoints.push(endpoint);
-        }
-        endpoints.extend(parsed.listeners.iter().cloned());
-
         // Ports claimed by the other running instances are read under the lock
         // and the guard is dropped before the async bind probes. Re-acquiring it
         // to register the pid is race-free: `start_lock` serializes every start
@@ -291,7 +285,15 @@ impl Supervisor {
                 })
                 .collect()
         };
-        for endpoint in &endpoints {
+        // Desktop parity: the RPC control portal never blocks a start. Reuse the
+        // configured endpoint when it is free, otherwise move to the first free
+        // loopback port from 15889. Listener ports still fail hard below — they
+        // carry user traffic, so silently moving them would break clients.
+        let (rpc_portal, rpc_endpoint) = resolve_rpc_portal(&parsed.rpc_portal, &claimed).await?;
+        let endpoints: Vec<Endpoint> = std::iter::once(rpc_endpoint)
+            .chain(parsed.listeners.iter().cloned())
+            .collect();
+        for endpoint in &parsed.listeners {
             // A claim only blocks when protocol, port and address overlap; a UDP
             // listener over an existing TCP one, or another address on the same
             // port, is legal and falls through to the real bind probe.
@@ -332,7 +334,7 @@ impl Supervisor {
             "--config-file".into(),
             self.configs.path(id).into_os_string(),
             "--rpc-portal".into(),
-            parsed.rpc_portal.clone().into(),
+            rpc_portal.clone().into(),
         ];
         if settings.no_tun {
             args.push("--no-tun".into());
@@ -346,7 +348,7 @@ impl Supervisor {
             Instance {
                 pid: Some(pid),
                 started_at: Some(chrono::Utc::now().timestamp()),
-                rpc_portal: Some(parsed.rpc_portal.clone()),
+                rpc_portal: Some(rpc_portal.clone()),
                 endpoints: endpoints.clone(),
                 last_exit: None,
                 generation,
@@ -525,6 +527,10 @@ pub fn resolve_core(data_dir: &Path, override_dir: Option<&Path>) -> Result<Core
 /// `frontend/src/shared/lib/coreLogUtil.ts`).
 const FILE_LOG_LEVELS: [&str; 6] = ["error", "warn", "info", "debug", "trace", "off"];
 
+/// First port scanned when the configured RPC portal is unusable; matches the
+/// desktop `findAvailableRpcPortal` range.
+const RPC_PORT_FALLBACK_START: u16 = 15889;
+
 /// Normalizes a TOML `[file_logger] level` into a value the kernel can parse:
 /// trim + lowercase, whitelist incl. `off`, then fall back to `settings.logLevel`
 /// and finally to `info`.
@@ -636,6 +642,45 @@ async fn port_free(host: &str, port: u16, mode: PortMode) -> bool {
     tokio::time::timeout(Duration::from_secs(2), probe)
         .await
         .unwrap_or(false)
+}
+
+fn claimed(endpoint: &Endpoint, claims: &[(String, Endpoint)]) -> bool {
+    claims
+        .iter()
+        .any(|(_, claimed)| claimed.conflicts_with(endpoint))
+}
+
+/// Picks the RPC portal actually passed to the kernel. The configured portal is
+/// kept only when no running instance claims it and the bind probe passes;
+/// otherwise the first free loopback TCP port from 15889 is used (desktop
+/// `findAvailableRpcPortal` semantics). Returns the portal string plus its
+/// endpoint so the instance state advertises the real portal to
+/// `lighttier-agent cli`.
+async fn resolve_rpc_portal(
+    configured: &str,
+    claims: &[(String, Endpoint)],
+) -> Result<(String, Endpoint), ApiError> {
+    if let Some(endpoint) = parse_endpoint(configured) {
+        if !claimed(&endpoint, claims)
+            && port_free(&endpoint.host, endpoint.port, endpoint.mode).await
+        {
+            return Ok((configured.to_string(), endpoint));
+        }
+    }
+    for port in RPC_PORT_FALLBACK_START..u16::MAX {
+        let endpoint = Endpoint {
+            host: "127.0.0.1".to_string(),
+            port,
+            mode: PortMode::Tcp,
+        };
+        if claimed(&endpoint, claims) || !port_free("127.0.0.1", port, PortMode::Tcp).await {
+            continue;
+        }
+        return Ok((format!("127.0.0.1:{port}"), endpoint));
+    }
+    Err(ApiError::Internal(
+        "no free RPC portal in 15889-65535".into(),
+    ))
 }
 
 /// Spawns a kernel binary in its own session with a parent-death signal, so
@@ -797,8 +842,8 @@ while true; do sleep 0.1; done
         let data = dir.path().join("data");
         let (configs, settings) = store(&data).await;
         // A dedicated portal port keeps this test isolated from
-        // `second_instance_same_port_conflicts`, which probes the default 15888
-        // from a parallel test thread.
+        // `second_instance_same_port_gets_another_rpc_portal`, which falls back
+        // to scanning 15889+ from a parallel test thread.
         configs
             .put("home", "rpc_portal = \"127.0.0.1:15901\"\n", None)
             .await
@@ -826,7 +871,7 @@ while true; do sleep 0.1; done
     }
 
     #[tokio::test]
-    async fn second_instance_same_port_conflicts() {
+    async fn second_instance_same_port_gets_another_rpc_portal() {
         let dir = tempfile::tempdir().unwrap();
         let core = fake_core(&dir.path().join("core"));
         let data = dir.path().join("data");
@@ -842,17 +887,45 @@ while true; do sleep 0.1; done
         let supervisor = Supervisor::load(&data, Some(core), configs, settings)
             .await
             .unwrap();
-        supervisor.start("a").await.unwrap();
-        let err = supervisor.start("b").await.unwrap_err();
-        assert_eq!(err.code(), "port_in_use");
-        match err {
-            ApiError::PortInUse { port, owner } => {
-                assert_eq!(port, 15888);
-                assert_eq!(owner.as_deref(), Some("instance:a"));
-            }
-            other => panic!("expected port_in_use, got {other:?}"),
-        }
+        let first = supervisor.start("a").await.unwrap();
+        // Desktop parity: a taken RPC portal is moved, not reported.
+        let second = supervisor.start("b").await.unwrap();
+        assert!(first.running && second.running);
+        assert_ne!(first.rpc_portal, second.rpc_portal);
+        let portal = second.rpc_portal.unwrap();
+        assert!(portal.starts_with("127.0.0.1:"));
+        let port: u16 = portal.rsplit(':').next().unwrap().parse().unwrap();
+        assert!(port >= RPC_PORT_FALLBACK_START);
         supervisor.stop("a").await.unwrap();
+        supervisor.stop("b").await.unwrap();
+    }
+
+    /// A portal held by a process outside the supervisor must not block the
+    /// start either: the kernel is launched on a fallback loopback port.
+    #[tokio::test]
+    async fn occupied_rpc_portal_is_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = fake_core(&dir.path().join("core"));
+        let data = dir.path().join("data");
+        let (configs, settings) = store(&data).await;
+        let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        configs
+            .put(
+                "home",
+                &format!("rpc_portal = \"127.0.0.1:{port}\"\n"),
+                None,
+            )
+            .await
+            .unwrap();
+        let supervisor = Supervisor::load(&data, Some(core), configs, settings)
+            .await
+            .unwrap();
+        let snapshot = supervisor.start("home").await.unwrap();
+        let portal = snapshot.rpc_portal.unwrap();
+        assert_ne!(portal, format!("127.0.0.1:{port}"));
+        supervisor.stop("home").await.unwrap();
+        drop(occupied);
     }
 
     /// A listener clash on the same port must be attributed to the instance that
