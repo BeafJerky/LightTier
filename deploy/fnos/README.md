@@ -63,6 +63,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 - **容器起不来（`devices` 相关）**：宿主机没有 `/dev/net/tun` 时，安装脚本应把 compose 中 `devices` 与 `cap_add` 两行改为 `[]`。若手工改过 compose 导致设备行残留，重新安装或在应用目录把两行改成 `[]`。
 - **无 TUN 的宿主机**：容器可以启动，但实例需在配置里关闭 TUN 才能组网。
 - **容器反复重启、日志只有 `Permission denied`**：`${TRIM_PKGVAR}/data` 属主是包用户，容器 root 在 `cap_drop: ALL` 下写不进去。compose 的 `cap_add` 必须保留 `DAC_OVERRIDE`，不要删。
+- **安装时报 `permission denied ... /var/run/docker.sock`**：生命周期脚本要执行 `docker pull/run/inspect`，fpk 因此以 root 运行（`config/privilege` 的 `run-as: root`）。改成包用户后，填了管理员密码的安装会直接失败，`cmd/main status` 也会始终判定为未运行。
 - **端口占用**：Web 端口固定 17800（manifest、ui/config、compose 三处必须一致）；被占用时应用无法访问。
 - **容器内 TUN 实际通网未做真机验证**：安装后请在 fnOS 上单独验证一次实例能否建立连接。
 - 日志：应用日志写入安装日志与 `docker logs lighttier`。

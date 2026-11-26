@@ -16,6 +16,7 @@
 ### 修复
 
 - 飞牛安装阶段拉取 `ghcr.io` 镜像 TLS 握手超时（应用中心在生命周期钩子之前就会 `docker compose up`）：fpk 内 compose 默认改用 `ghcr.1ms.run` 加速地址，`-Image` 可切换官方或其他镜像源；三个源实测镜像 digest 一致
+- 飞牛安装钩子以包用户运行时无权访问 `/var/run/docker.sock`，向导里填写管理员密码会直接安装失败、`status` 也始终判定未运行：生命周期脚本改为 root 运行（`run-as: root`），并在本地已有镜像时跳过重复 `docker pull`，避免慢速链路上白等一轮
 
 ### 验证
 

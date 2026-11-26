@@ -75,10 +75,15 @@ auto_setup() {
     fi
     image=$(image_ref)
     [ -n "$image" ] || { log "compose 中缺少 image 行"; return 1; }
-    log "拉取镜像：$image"
-    if ! docker pull "$image" >> "${TRIM_TEMP_LOGFILE:-/dev/null}" 2>&1; then
-        log "镜像拉取失败，请检查设备网络或镜像仓库可访问性"
-        return 1
+    # 应用中心安装时已按 compose 拉过镜像，慢速链路上再 pull 会白等一轮。
+    if docker image inspect "$image" >/dev/null 2>&1; then
+        log "镜像已存在，跳过拉取：$image"
+    else
+        log "拉取镜像：$image"
+        if ! docker pull "$image" >> "${TRIM_TEMP_LOGFILE:-/dev/null}" 2>&1; then
+            log "镜像拉取失败，请检查设备网络或镜像仓库可访问性"
+            return 1
+        fi
     fi
     log "写入管理员密码（非交互 setup）"
     if ! printf '%s\n' "$password" | docker run --rm -i --network none --read-only --tmpfs /tmp \

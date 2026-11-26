@@ -119,6 +119,8 @@ try {
     foreach ($json in @("config/privilege", "config/resource", "wizard/install", "wizard/config", "wizard/uninstall")) {
         Assert ($null -ne (Read-Text (Join-Path $temp $json) | ConvertFrom-Json)) "$json is not valid JSON"
     }
+    $privilege = Read-Text (Join-Path $temp "config/privilege") | ConvertFrom-Json
+    Assert ($privilege.defaults.'run-as' -eq "root") "config/privilege run-as must be root: lifecycle scripts call docker"
     $wizardInstall = Read-Text (Join-Path $temp "wizard/install")
     Assert ($wizardInstall -match '"field"\s*:\s*"wizard_admin_password"') "wizard/install lacks wizard_admin_password"
     Assert (-not ($wizardInstall -match '"required"\s*:\s*true')) "wizard_admin_password must stay optional"
@@ -149,7 +151,8 @@ try {
     Assert ($common -match 'CONTAINER_NAME="lighttier"') "cmd/common.sh container name drifted"
     Assert ($common -match '--entrypoint /usr/local/bin/lighttier-agent') "auto-setup must override entrypoint"
     Assert ($common -match '\$image" setup') "auto-setup command missing"
-    Assert ($common -match 'devices: \[\]') "no-TUN fallback for devices missing"
+    Assert ($common -match 'devices: \[\]')
+    Assert ($common -match 'docker image inspect "\$image"') "auto_setup must skip pull when image already exists" "no-TUN fallback for devices missing"
     Assert ($common -match 'cap_add: \["DAC_OVERRIDE"\]') "no-TUN fallback must keep DAC_OVERRIDE"
     $installCallback = Read-Text (Join-Path $temp "cmd/install_callback")
     Assert ($installCallback -match 'auto_setup') "install_callback does not run auto_setup"
