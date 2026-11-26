@@ -1,5 +1,5 @@
 appname               = lighttier
-version               = 2.14.2
+version               = 2.15.0
 display_name          = LightTier
 desc                  = EasyTier 组网内核的 Web 管理器：配置、启停、监控、日志与内核包安装。安装向导中填写管理员密码即可直接登录；留空则首次打开时用初始化令牌完成设置（令牌查看方式见向导提示）。
 source                = thirdparty

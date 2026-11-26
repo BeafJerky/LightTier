@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.15.0 (2026-11-26)
+
+> agent 功能补齐：Web 配置服务端托管、管理密码修改、内核加速源服务端持久化与代测速、服务端形态首次引导、备份与恢复跨端语义收口，以及灵动岛在 agent 下的健康采样。桌面与 Android 运行时行为不变。
+
+### 新增
+
+- Web 配置（agent）：`GET/PUT /api/v1/web-configs` 整表读写与 `POST /api/v1/web-configs/{configFileName}/start|stop` 启停；页面沿用桌面交互（运行中禁止删除、控制台新窗口打开），详情隐藏 Windows 服务安装区块，导航与路由按 `features.web` 能力位放行
+- 管理密码（agent）：设置「安全」页签恢复可见，改用服务端管理密码卡片（`POST /api/v1/auth/password`）；改密成功清空全部会话并跳转登录页提示使用新密码
+- 内核加速源（agent）：`settings.coreMirror` 服务端持久化、`LT_CORE_MIRROR` 环境变量锁定优先；新增 mirror-probe 由服务端代发 HEAD 延迟与 GET 吞吐采样（只接受归一化前缀并拼到自有 manifest 地址，防 SSRF），前端测速与选源接入 agent 分支，锁定态禁用编辑
+- 首次引导（agent）：按服务端形态展示内核包、Web 配置等能力项并在登录后显示；桌面与 Android 的触发条件保持原样
+- 备份与恢复（跨端）：偏好载荷新增可选 `server` 段（自动运行、noTun、日志级别、加速源），恢复失败按服务端完整快照回滚；锁屏密码在 agent 下标记为不支持；加速源被部署方锁定时跳过服务端写入并提示；服务端空串（官方直连）可在备份中精确表达并恢复
+- 灵动岛（agent）：新增 `GET /api/v1/instances/health` 健康采样（口径镜像桌面的 quality_from_peers），前端按 10s 轮询并做可见性门控与失败静默
+
+### 修复
+
+- 灵动岛设置页签在 agent 下被误按 tray 能力位隐藏：灵动岛是纯 DOM 浮层，页签不再受服务端 tray 能力控制
+- agent 备份遗漏服务端设置与“官方直连”加速源选择：补齐 server 段，采集时把空串落为官方地址，恢复时再归一为服务端空串
+- Web 配置页在 agent 下仍扫描本机进程与服务缓存、删除会被未定义的服务状态卡住：改为服务端状态与启停，删除保留运行态拦截并跳过本机服务判定
+
+### 验证
+
+- 前端：`pnpm ts:check`、`pnpm test`（79 文件 / 784 例）、`pnpm build`（含发布包演示数据守卫）通过
+- agent：容器内 `cargo test` 224 项通过（含新增 web-config 9 例、monitor 3 例及 settings/mirror/auth 用例）；`cargo clippy --all-targets` 无新增告警；`cargo fmt` 已统一
+- 桌面与 Android：仅版本号与共用前端改动，未新增 Tauri 命令或权限；Windows、Android、fnOS 与镜像产物按 2.15.0 重建并冒烟
+
 ## 2.14.2 (2026-11-26)
 
 > agent 补丁：修复 NAS 网页端缺失已适配主题与主题指南的问题，并收口 agent 下三个无效入口。桌面与 Android 运行时行为不变。
