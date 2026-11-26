@@ -17,7 +17,7 @@ const defaultFormData: EasyTierFormData | any = {
   listeners: [],
   mapped_listeners: [],
   routes: undefined,
-  proxy_network: [{ cidr: undefined }],
+  proxy_network: undefined, // 子网代理（[[proxy_network]]，表单建模）
   exit_nodes: [],
   rpc_portal: '0.0.0.0:15888',
   rpc_portal_whitelist: undefined, // RPC 白名单

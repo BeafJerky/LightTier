@@ -347,7 +347,15 @@ export default {
     addListen: '+ 添加监听地址',
     peerSection: '对等节点',
     addPeer: '+ 添加对等节点',
+    proxySection: '子网代理',
+    addProxy: '+ 添加子网代理',
+    proxyHint:
+      '把本机所在局域网网段代理进虚拟网络，其他节点无需配置即可访问；可写「网段->映射网段」。',
+    proxyCidrInvalid: '格式不正确：需形如 192.168.1.0/24，或 192.168.1.0/24->10.0.0.0/24',
+    proxyUnsupported:
+      '当前设备使用内置内核，暂不支持子网代理；配置会保留，但仅在内核支持的环境（桌面端、远程 agent）生效。',
     routeSection: '路由',
+    routeHint: '手动路由会覆盖内核从对等节点收集到的代理网段；需要共享本机子网时请用子网代理。',
     addRoute: '+ 添加路由',
     exitSection: '出口节点',
     addExit: '+ 添加出口节点',

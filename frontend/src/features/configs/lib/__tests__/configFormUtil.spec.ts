@@ -212,13 +212,11 @@ describe('configFormUtil', () => {
     expect(parsed.lighttier).toEqual({ exit_route_enabled: true })
   })
 
-  it('未建模的表/字段透传：vpn_portal_config / proxy_network / managed_credentials', () => {
+  it('未建模的表/字段透传：vpn_portal_config / managed_credentials', () => {
     const content = [
       'hostname = "h"',
       '[[managed_credentials]]',
       'name = "cred"',
-      '[[proxy_network]]',
-      'cidr = "10.0.0.0/24"',
       '[vpn_portal_config]',
       'enabled = true',
       'wireguard_listen = "0.0.0.0:11013"',
@@ -238,7 +236,33 @@ describe('configFormUtil', () => {
       clients: [{ name: 'phone', virtual_ip: '10.14.14.2' }]
     })
     expect(parsed.managed_credentials).toEqual([{ name: 'cred' }])
-    expect(parsed.proxy_network).toEqual([{ cidr: '10.0.0.0/24' }])
+  })
+
+  it('子网代理建模：cidr / mapped_cidr / allow 往返保留，空行与删行不落盘', () => {
+    const content = [
+      'hostname = "h"',
+      '[[proxy_network]]',
+      'cidr = "192.168.1.0/24"',
+      'allow = ["tcp", "icmp"]',
+      '[[proxy_network]]',
+      'cidr = "10.1.0.0/16"',
+      'mapped_cidr = "172.16.0.0/16"'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.proxies).toEqual(['192.168.1.0/24', '10.1.0.0/16->172.16.0.0/16'])
+    expect(m.passthrough.proxy_network).toBeUndefined()
+
+    const parsed = roundTrip(content)
+    expect(parsed.proxy_network).toEqual([
+      { cidr: '192.168.1.0/24', allow: ['tcp', 'icmp'] },
+      { cidr: '10.1.0.0/16', mapped_cidr: '172.16.0.0/16' }
+    ])
+
+    const emptied = roundTrip(content, (model) => {
+      model.proxies = []
+      model.proxyExtras = []
+    })
+    expect(emptied.proxy_network).toBeUndefined()
   })
 
   it('公网 IPv6 顶层字段（v2.6.2+）解析与写回', () => {

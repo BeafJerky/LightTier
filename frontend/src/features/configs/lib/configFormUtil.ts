@@ -2,7 +2,7 @@
  * 配置表单 ⇄ TOML 互转（EditDialog 结构化表单模式的核心，纯函数便于单测）
  *
  * 规则与 EditDialog 保持一致：
- * - 文本字段空值剔除；network_identity/listeners/peer/routes/exit_nodes/flags 按需落盘
+ * - 文本字段空值剔除；network_identity/listeners/peer/proxy_network/routes/exit_nodes/flags 按需落盘
  * - 安全模式按 EasyTier Core v2.6.4 规范映射：
  *   [secure_mode] { enabled, local_private_key, local_public_key }，credential_file 为顶层字段；
  *   旧版写在顶层/flags 的密钥在解析时迁移，保存时统一改写为 [secure_mode] 表
@@ -37,6 +37,10 @@ export interface ConfigFormModel {
   peers: string[]
   /** 与 peers 索引对齐的额外字段（如 peer_public_key，v2.6.0+），保存时原样保留 */
   peerExtras: Record<string, any>[]
+  /** 子网代理：每行为 `<cidr>` 或 `<cidr>-><mapped_cidr>` */
+  proxies: string[]
+  /** 与 proxies 索引对齐的未建模字段（allow 等），保存时原样保留 */
+  proxyExtras: Record<string, any>[]
   routes: string[]
   exitNodes: string[]
   flagsKeys: string[]
@@ -171,6 +175,7 @@ const MODELED_TOP_LEVEL_KEYS = new Set([
   'stun_servers',
   'listeners',
   'peer',
+  'proxy_network',
   'routes',
   'exit_nodes',
   'ipv6_public_addr_provider',
@@ -201,6 +206,8 @@ export const emptyFormModel = (): ConfigFormModel => ({
   listeners: [],
   peers: [],
   peerExtras: [],
+  proxies: [],
+  proxyExtras: [],
   routes: [],
   exitNodes: [],
   flagsKeys: [],
@@ -244,7 +251,7 @@ export const parseConfigFormModel = (content: string): ConfigFormModel | null =>
     model.dhcpv6Enabled = dhcpv6Raw === true || typeof dhcpv6Raw === 'string'
     model.dhcpv6Cidr = typeof dhcpv6Raw === 'string' ? dhcpv6Raw : ''
     model.dns = parseDnsForm(parsed.dns)
-    // 未建模的顶层键与表原样透传：[lighttier]、vpn_portal_config、proxy_network、
+    // 未建模的顶层键与表原样透传：[lighttier]、vpn_portal_config、
     // port_forward、source、managed_credentials 等，避免表单保存时丢数据
     Object.entries(parsed).forEach(([key, value]) => {
       if (!MODELED_TOP_LEVEL_KEYS.has(key)) model.passthrough[key] = value
@@ -288,6 +295,15 @@ export const parseConfigFormModel = (content: string): ConfigFormModel | null =>
           return rest
         })
       : []
+    const parsedProxies: any[] = Array.isArray(parsed.proxy_network) ? parsed.proxy_network : []
+    model.proxies = parsedProxies.map((n: any) =>
+      n?.mapped_cidr ? `${n.cidr}->${n.mapped_cidr}` : String(n?.cidr ?? '')
+    )
+    // 保留 allow 等表单未建模字段，避免表单保存丢数据
+    model.proxyExtras = parsedProxies.map((n: any) => {
+      const { cidr: _cidr, mapped_cidr: _mapped, ...rest } = n || {}
+      return rest
+    })
     model.routes = parsed.routes ? [...parsed.routes] : []
     model.exitNodes = parsed.exit_nodes ? [...parsed.exit_nodes] : []
     // 动态 Flags 编辑器排除固定高级字段与已迁移的 secure_mode（避免同 key 双处编辑）
@@ -419,6 +435,17 @@ export const buildConfigFormModel = (
   }
   if (model.routes.length) data.routes = model.routes.filter(Boolean)
   else delete data.routes
+  const proxies = model.proxies
+    .map((row, i) => {
+      const [cidr = '', mapped] = row.split('->').map((part) => part.trim())
+      const entry: Record<string, any> = { ...(model.proxyExtras[i] || {}), cidr }
+      if (mapped) entry.mapped_cidr = mapped
+      else delete entry.mapped_cidr
+      return entry
+    })
+    .filter((entry) => entry.cidr)
+  if (proxies.length) data.proxy_network = proxies
+  else delete data.proxy_network
   if (model.exitNodes.length) data.exit_nodes = model.exitNodes.filter(Boolean)
   else delete data.exit_nodes
   const flags: Record<string, any> = {}

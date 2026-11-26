@@ -1,9 +1,10 @@
 /**
- * DHCP / DHCPv6 网段轻校验（只做提示，不阻断保存与原值透传）。
+ * DHCP / DHCPv6 / 子网代理网段轻校验（只做提示，不阻断保存与原值透传）。
  *
  * 规则与 EasyTier v2.7.1 内核一致：
  * - dhcp：IPv4 CIDR，前缀长度 ≤30
  * - dhcpv6：IPv6 CIDR，仅 fc00::/7（ULA）或 2000::/3（全局单播），前缀 ≤126
+ * - proxy_network：IPv4 CIDR，可写 `<cidr>-><mapped_cidr>` 做网段映射
  */
 export type CidrIssue = 'format' | 'prefix' | 'range'
 
@@ -89,5 +90,28 @@ export const validateDhcpv6Cidr = (value: string): CidrIssue | null => {
   const isGlobalUnicast = (first & 0xe000) === 0x2000
   if (!isUla && !isGlobalUnicast) return 'range'
   if (parsed.prefix > 126) return 'prefix'
+  return null
+}
+
+const validateIpv4CidrPart = (value: string): CidrIssue | null => {
+  const parsed = splitCidr(value)
+  if (parsed === 'format') return 'format'
+  if (!parseIpv4(parsed.address)) return 'format'
+  if (parsed.prefix > 32) return 'prefix'
+  return null
+}
+
+/** 子网代理：空值返回 null；支持 `192.168.1.0/24` 与 `192.168.1.0/24->10.0.0.0/24` */
+export const validateProxyCidr = (value: string): CidrIssue | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parts = trimmed.split('->')
+  if (parts.length > 2) return 'format'
+  const real = validateIpv4CidrPart(parts[0])
+  if (real) return real
+  if (parts.length === 2) {
+    const mapped = validateIpv4CidrPart(parts[1])
+    if (mapped) return mapped
+  }
   return null
 }

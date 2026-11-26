@@ -356,7 +356,16 @@ export default {
     addListen: '+ Add Listen Address',
     peerSection: 'Peer Nodes',
     addPeer: '+ Add Peer Node',
+    proxySection: 'Subnet Proxy',
+    addProxy: '+ Add Subnet Proxy',
+    proxyHint:
+      'Advertise a local LAN subnet into the virtual network so other nodes can reach it without extra config; use "subnet->mapped subnet" for mapping.',
+    proxyCidrInvalid: 'Invalid format: use 192.168.1.0/24, or 192.168.1.0/24->10.0.0.0/24',
+    proxyUnsupported:
+      'This device runs the in-process kernel, which does not support subnet proxy. The config is kept and takes effect only where supported (desktop, remote agent).',
     routeSection: 'Routes',
+    routeHint:
+      'Manual routes override the proxy subnets collected from peers; use Subnet Proxy to share the LAN of this host.',
     addRoute: '+ Add Route',
     exitSection: 'Exit Nodes',
     addExit: '+ Add Exit Node',

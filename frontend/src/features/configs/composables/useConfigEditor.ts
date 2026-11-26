@@ -145,6 +145,9 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   const formPeers = ref<string[]>([])
   // 与 formPeers 索引对齐：保留 peer_public_key 等表单未建模字段
   const formPeerExtras = ref<Record<string, any>[]>([])
+  // 子网代理：每行为 `<cidr>` 或 `<cidr>-><mapped_cidr>`；extras 保留 allow 等字段
+  const formProxies = ref<string[]>([])
+  const formProxyExtras = ref<Record<string, any>[]>([])
   const formRoutes = ref<string[]>([])
   const formExitNodes = ref<string[]>([])
   const formFlagsKeys = ref<string[]>([])
@@ -168,6 +171,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       listeners: formListeners.value,
       peers: formPeers.value,
       peerExtras: formPeerExtras.value,
+      proxies: formProxies.value,
+      proxyExtras: formProxyExtras.value,
       routes: formRoutes.value,
       exitNodes: formExitNodes.value,
       flagKeys: formFlagsKeys.value,
@@ -286,6 +291,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formListeners.value = [...model.listeners]
     formPeers.value = [...model.peers]
     formPeerExtras.value = model.peerExtras.map((e) => ({ ...e }))
+    formProxies.value = [...model.proxies]
+    formProxyExtras.value = model.proxyExtras.map((e) => ({ ...e }))
     formRoutes.value = [...model.routes]
     formExitNodes.value = [...model.exitNodes]
     formFlagsKeys.value = [...model.flagsKeys]
@@ -310,6 +317,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     listeners: formListeners.value,
     peers: formPeers.value,
     peerExtras: formPeerExtras.value,
+    proxies: formProxies.value,
+    proxyExtras: formProxyExtras.value,
     routes: formRoutes.value,
     exitNodes: formExitNodes.value,
     flagsKeys: formFlagsKeys.value,
@@ -427,6 +436,14 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   const removePeer = (i: number) => {
     formPeers.value.splice(i, 1)
     formPeerExtras.value.splice(i, 1)
+  }
+  const addProxy = () => {
+    formProxies.value.push('')
+    formProxyExtras.value.push({})
+  }
+  const removeProxy = (i: number) => {
+    formProxies.value.splice(i, 1)
+    formProxyExtras.value.splice(i, 1)
   }
 
   // === 5.6 高级字段交互 ===
@@ -802,6 +819,7 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formStunServers,
     formListeners,
     formPeers,
+    formProxies,
     formRoutes,
     formExitNodes,
     formFlagsKeys,
@@ -837,6 +855,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     removeFlag,
     addPeer,
     removePeer,
+    addProxy,
+    removeProxy,
     isAdvancedFlagOn,
     toggleAdvancedFlag,
     toggleTopSwitch,

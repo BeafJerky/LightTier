@@ -180,7 +180,44 @@
   </div>
 
   <div class="ed-form-section">
+    <div class="ed-form-section-title">{{ t('newEdit.proxySection') }}</div>
+    <p class="ed-section-hint">{{ t('newEdit.proxyHint') }}</p>
+    <p v-if="proxyKernelUnsupported" class="ed-section-hint">
+      {{ t('newEdit.proxyUnsupported') }}
+    </p>
+    <div class="ed-tag-list">
+      <div class="ed-tag-row" v-for="(_, i) in formProxies" :key="'px' + i">
+        <LtInput
+          v-model="formProxies[i]"
+          class="ed-tag-input"
+          variant="outline"
+          :aria-label="`${t('newEdit.proxySection')} ${i + 1}`"
+          :aria-describedby="proxyIssues[i] ? `${fieldId('proxy')}-hint` : undefined"
+          placeholder="192.168.1.0/24 或 192.168.1.0/24->10.0.0.0/24"
+        />
+        <LtButton
+          variant="text"
+          size="md"
+          circle
+          :title="t('newEdit.removeItem', { label: t('newEdit.proxySection') })"
+          :aria-label="t('newEdit.removeItem', { label: t('newEdit.proxySection') })"
+          @click="removeProxy(i)"
+        >
+          ✕
+        </LtButton>
+      </div>
+      <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="addProxy">{{
+        t('newEdit.addProxy')
+      }}</LtButton>
+      <p v-if="hasProxyIssue" :id="`${fieldId('proxy')}-hint`" class="ed-form-hint">
+        {{ t('newEdit.proxyCidrInvalid') }}
+      </p>
+    </div>
+  </div>
+
+  <div class="ed-form-section">
     <div class="ed-form-section-title">{{ t('newEdit.routeSection') }}</div>
+    <p class="ed-section-hint">{{ t('newEdit.routeHint') }}</p>
     <div class="ed-tag-list">
       <div class="ed-tag-row" v-for="(_, i) in formRoutes" :key="'rt' + i">
         <LtInput
@@ -280,7 +317,9 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
 import { injectRequired } from '@/shared/lib/inject'
-import { validateDhcpCidr, validateDhcpv6Cidr } from '@/entities/config/cidr'
+import { validateDhcpCidr, validateDhcpv6Cidr, validateProxyCidr } from '@/entities/config/cidr'
+import { isAndroid } from '@/shared/platform/platformUtil'
+import { backendMode } from '@/shared/platform/backend'
 import { CONFIG_EDITOR_KEY } from './context'
 
 defineOptions({ name: 'ConfigBasicForm' })
@@ -302,17 +341,24 @@ const {
   unsupportedTitle,
   formListeners,
   formPeers,
+  formProxies,
   formRoutes,
   formExitNodes,
   formFlagsKeys,
   formFlagsVals,
   removePeer,
   addPeer,
+  removeProxy,
+  addProxy,
   removeFlag
 } = injectRequired(CONFIG_EDITOR_KEY, 'ConfigBasicForm')
 
 const dhcpCidrIssue = computed(() => validateDhcpCidr(formDhcpCidr.value))
 const dhcpv6CidrIssue = computed(() => validateDhcpv6Cidr(formDhcpv6Cidr.value))
+const proxyIssues = computed(() => formProxies.value.map((row) => validateProxyCidr(row)))
+const hasProxyIssue = computed(() => proxyIssues.value.some(Boolean))
+// 进程内内核（Android 本地运行）忽略 proxy_network；Android 连远程 agent 时配置仍生效
+const proxyKernelUnsupported = computed(() => isAndroid() && backendMode() !== 'agent')
 </script>
 
 <style scoped lang="less">
