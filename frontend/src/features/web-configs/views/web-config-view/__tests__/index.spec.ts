@@ -9,9 +9,25 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(),
   kill: vi.fn(),
   toast: vi.fn(),
+  checkWebService: vi.fn(),
   getRunningWebProcesses: vi.fn(),
   pageRefresh: null as null | ((forceServiceStatus?: boolean) => Promise<void>),
-  start: null as null | ((item: FormWebData) => Promise<void>)
+  start: null as null | ((item: FormWebData) => Promise<void>),
+  backendMode: 'native' as 'native' | 'agent',
+  backendList: vi.fn(),
+  backendReplace: vi.fn(),
+  backendStart: vi.fn(),
+  backendStop: vi.fn()
+}))
+
+vi.mock('@/shared/platform/backend', () => ({
+  backendMode: () => mocks.backendMode,
+  backendWeb: () => ({
+    list: mocks.backendList,
+    replace: mocks.backendReplace,
+    start: mocks.backendStart,
+    stop: mocks.backendStop
+  })
 }))
 
 vi.mock('vue', async (importOriginal) => {
@@ -48,7 +64,7 @@ vi.mock('@/shared/platform/mockData', () => ({
     getRunningWebProcesses: mocks.getRunningWebProcesses,
     runEasyTierCoreWeb: mocks.run,
     killProcess: mocks.kill,
-    checkWebService: vi.fn(async () => 'notInstalled'),
+    checkWebService: mocks.checkWebService,
     installWebService: vi.fn(),
     uninstallWebService: vi.fn(),
     startWebService: vi.fn(),
@@ -63,7 +79,8 @@ vi.mock('@/shared/store/easytier', async () => {
     webConfigListLoaded: true,
     webConfigListError: null as Error | null,
     loadWebConfigFiles: vi.fn(async () => {
-      store.configWebList = await mocks.read()
+      store.configWebList =
+        mocks.backendMode === 'agent' ? await mocks.backendList() : await mocks.read()
     }),
     registerPageRefresh: vi.fn((callback: (forceServiceStatus?: boolean) => Promise<void>) => {
       mocks.pageRefresh = callback
@@ -161,6 +178,20 @@ const mountView = async (): Promise<App> => {
   return app
 }
 
+// agent：列表与运行态直接来自服务端 list，挂载后只等首次整表读取
+const mountAgentView = async (): Promise<Record<string, any>> => {
+  // 宽屏（>900）自动选中首项，与桌面既有行为一致
+  vi.stubGlobal('window', { innerWidth: 1200 })
+  const root = createHostNode('root')
+  const app = renderer.createApp({ ...WebConfigView, render: () => h('div') })
+  apps.push(app)
+  app.mount(root)
+  const setupState = (app._instance as unknown as { setupState: Record<string, any> }).setupState
+  await vi.waitFor(() => expect(mocks.backendList).toHaveBeenCalled())
+  await vi.waitFor(() => expect(useEasyTierStore().configWebList.length).toBe(1))
+  return setupState
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.stored = [config()]
@@ -174,8 +205,13 @@ beforeEach(() => {
   })
   mocks.run.mockResolvedValue(4321)
   mocks.kill.mockResolvedValue(true)
+  mocks.checkWebService.mockResolvedValue('notInstalled')
   mocks.getRunningWebProcesses.mockResolvedValue([])
   mocks.pageRefresh = null
+  mocks.backendMode = 'native'
+  mocks.backendReplace.mockResolvedValue([])
+  mocks.backendStart.mockResolvedValue(undefined)
+  mocks.backendStop.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -298,5 +334,70 @@ describe('Web 启动串行队列读取最新配置', () => {
       expect(mocks.run.mock.calls.length + mocks.toast.mock.calls.length).toBeGreaterThan(0)
     })
     expect(mocks.run).not.toHaveBeenCalled()
+  })
+})
+
+describe('agent 模式：服务端托管运行态与启停', () => {
+  beforeEach(() => {
+    mocks.backendMode = 'agent'
+    mocks.backendList.mockImplementation(async () => [
+      { ...config(), status: 'notRunning', pid: undefined }
+    ])
+  })
+
+  const listedItem = () => useEasyTierStore().configWebList[0]
+
+  it('列表直接采用服务端 status/pid，不做进程扫描与服务检测', async () => {
+    mocks.backendList.mockImplementation(async () => [{ ...config(), status: 'running', pid: 77 }])
+
+    await mountAgentView()
+
+    expect(listedItem()).toMatchObject({ configFileName: 'home', status: 'running', pid: 77 })
+    expect(mocks.getRunningWebProcesses).not.toHaveBeenCalled()
+    expect(mocks.checkWebService).not.toHaveBeenCalled()
+  })
+
+  it('启动走门面 start(configFileName)，不再拉起本机进程', async () => {
+    const state = await mountAgentView()
+    mocks.toast.mockClear()
+
+    await state.startWeb(listedItem())
+
+    expect(mocks.backendStart).toHaveBeenCalledWith('home')
+    expect(mocks.run).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith('newCommon.startSuccess', 'success')
+  })
+
+  it('停止走门面 stop(configFileName)，不按 pid kill', async () => {
+    const state = await mountAgentView()
+    mocks.toast.mockClear()
+
+    await state.stopWeb(listedItem())
+
+    expect(mocks.backendStop).toHaveBeenCalledWith('home')
+    expect(mocks.kill).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith('newCommon.stoppedSuccess', 'success')
+  })
+
+  it('运行中的配置仍被拦截删除（不依赖服务状态判定）', async () => {
+    mocks.backendList.mockImplementation(async () => [{ ...config(), status: 'running', pid: 77 }])
+    const state = await mountAgentView()
+
+    await state.deleteConfig()
+
+    expect(mocks.toast).toHaveBeenCalledWith('newCommon.deleteBlockedRunning', 'warning', 4000)
+    expect(mocks.backendReplace).not.toHaveBeenCalled()
+  })
+
+  it('未运行配置可删除：整表回写且不调 killProcess', async () => {
+    const state = await mountAgentView()
+
+    const deleting = state.deleteConfig()
+    await vi.waitFor(() => expect(state.cfmVisible).toBe(true))
+    state.resolveConfirm(true)
+    await deleting
+
+    expect(mocks.backendReplace).toHaveBeenCalledWith([])
+    expect(mocks.kill).not.toHaveBeenCalled()
   })
 })

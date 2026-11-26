@@ -5,6 +5,7 @@
  * agent 模式返回 HTTP 适配器。字段口径以本文件为准，后续任务按此实现，
  * 不在适配器内部发明新形状。
  */
+import type { FormWebData } from '@/entities/config/formTypes'
 import type { RuntimeHealthSnapshot, RuntimeSnapshot } from '../runtimeApi'
 
 export type BackendKind = 'native' | 'agent'
@@ -28,6 +29,7 @@ export interface Meta {
     | 'login'
     | 'kernel'
     | 'logs'
+    | 'web'
     | 'defaultRouteChange',
     boolean
   >
@@ -165,6 +167,14 @@ export interface Backend {
     remove(version: string): Promise<void>
     /** 服务端代理测速（HEAD 延迟 + GET 吞吐采样）；native 无此能力 */
     probeMirrors(sources: string[], version: string): Promise<MirrorProbeResult[]>
+  }
+  web: {
+    /** 整表读取；`status` / `pid` 为服务端实时运行态 */
+    list(): Promise<FormWebData[]>
+    /** 整表替换；返回服务端写入后的整表（含新的 status/pid） */
+    replace(items: FormWebData[]): Promise<FormWebData[]>
+    start(configFileName: string): Promise<void>
+    stop(configFileName: string): Promise<void>
   }
   settings: {
     get(): Promise<{

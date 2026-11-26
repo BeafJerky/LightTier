@@ -6,7 +6,7 @@ import { ref } from 'vue'
 import { resourceDir } from '@tauri-apps/api/path'
 import type { FormWebData } from '@/entities/config/formTypes'
 import { useMockData } from '@/shared/platform/mockData'
-import { backendConfigs, backendMode } from '@/shared/platform/backend'
+import { backendConfigs, backendMode, backendWeb } from '@/shared/platform/backend'
 
 export function createConfigDomain() {
   const configPath = ref('resource')
@@ -114,20 +114,18 @@ export function createConfigDomain() {
   // 随后加载完成又用持久化旧状态覆盖扫描结果，造成状态闪变/卡错
   let webConfigLoadTask: Promise<void> | null = null
   const loadWebConfigFiles = async (): Promise<void> => {
-    // agent 没有 config-server 管理端点：保持空列表，绝不回落到浏览器 Mock 样例
-    if (backendMode() === 'agent') {
-      configWebList.value = []
-      webConfigListLoaded.value = true
-      webConfigListError.value = null
-      return
-    }
     if (webConfigLoadTask) return webConfigLoadTask
     webConfigListLoading.value = true
     webConfigListError.value = null
     webConfigLoadTask = (async () => {
       try {
-        const { readWebConfigList } = useMockData()
-        configWebList.value = await readWebConfigList()
+        if (backendMode() === 'agent') {
+          // agent：列表与运行态（status/pid）都由服务端整表返回
+          configWebList.value = await backendWeb().list()
+        } else {
+          const { readWebConfigList } = useMockData()
+          configWebList.value = await readWebConfigList()
+        }
         webConfigListLoaded.value = true
       } catch (cause) {
         webConfigListError.value = cause instanceof Error ? cause : new Error(String(cause))

@@ -61,8 +61,6 @@ export const installAgentAuthGuard = (router: Router): void => {
     // 非 agent（含初始化前的 native 默认值）不改变既有导航行为
     if (backendMode() !== 'agent') return true
     if (to.meta.public) return true
-    // Web 配置依赖桌面端本地链路，agent 无对应服务端能力：直达链接回总览
-    if (to.path.startsWith('/new/web-config')) return { path: '/new', replace: true }
     const resolved = await resolveGate()
     if (resolved === 'setup') return { name: SETUP_ROUTE_NAME, replace: true }
     if (resolved === 'login') return { name: LOGIN_ROUTE_NAME, replace: true }

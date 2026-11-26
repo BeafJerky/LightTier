@@ -1,4 +1,5 @@
 import type { FormWebData } from '@/entities/config/formTypes'
+import { backendMode, backendWeb } from '@/shared/platform/backend'
 import { useMockData } from './mockData'
 
 let writeQueue: Promise<unknown> = Promise.resolve()
@@ -32,6 +33,15 @@ export const runWebConfigTransaction = async <T>(
   transaction: (ops: WebConfigTransactionOps) => Promise<T>
 ): Promise<T> =>
   enqueue(async () => {
+    // agent：整表由服务端托管，读写都走门面；串行队列语义保持不变
+    if (backendMode() === 'agent') {
+      return transaction({
+        snapshot: () => backendWeb().list(),
+        replace: async (list) => {
+          await backendWeb().replace(list)
+        }
+      })
+    }
     const { readWebConfigList, writeWebConfigList } = useMockData()
     return transaction({
       snapshot: () => readWebConfigList(),

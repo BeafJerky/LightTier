@@ -547,6 +547,7 @@ export default {
     emptyTitle: '还没有 Web 配置',
     emptyDesc: '添加 config-server 地址，即可连接 Web 控制台',
     androidDesktopOnly: '当前仅支持管理配置；启动 Web 配置需在桌面端进行',
+    agentServiceHint: '由服务端托管运行：不支持安装为系统服务，启动与停止由服务端执行',
     consoleCopied: '控制台地址已复制',
     consoleCopyFail: '复制失败，请手动选择地址',
     stopFailNoPid: '无法停止：未找到 PID',

@@ -440,7 +440,7 @@ import { changeLocale } from '@/shared/i18n'
 import Icon from '@/shared/ui/Icon.vue'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useIslandStore } from '@/shared/store/island'
-import { backendMode } from '@/shared/platform/backend'
+import { backendCapabilities, backendMode } from '@/shared/platform/backend'
 import { useAgentSessionStore } from '@/shared/store/agentSession'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -574,9 +574,9 @@ const handleVisibilityChange = () => {
   hiddenAt = 0
 }
 
-// Web 配置依赖桌面端的本地 config-server 管理链路，agent 没有对应服务端能力：
-// 菜单与直达路由一并隐藏，避免展示由浏览器 Mock 伪造的列表。
-const webConfigSupported = backendMode() !== 'agent'
+// Web 配置在 agent 下由服务端托管：仅当服务端声明该能力时展示菜单与路由，
+// native / mock 恒定支持（不额外探测）。
+const webConfigSupported = backendMode() !== 'agent' || backendCapabilities().web
 
 // 底部导航：对应桌面侧边栏一级入口，顺序与命名保持两端一致
 const androidTabs = [

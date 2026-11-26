@@ -572,6 +572,8 @@ export default {
     emptyTitle: 'No web configurations yet',
     emptyDesc: 'Add a config-server address to connect to the web console',
     androidDesktopOnly: 'Configuration management only; start Web configs from the desktop app',
+    agentServiceHint:
+      'Managed by the server: system service installation is unavailable; start and stop run on the server',
     consoleCopied: 'Console URL copied',
     consoleCopyFail: 'Copy failed, please select the URL manually',
     stopFailNoPid: 'Cannot stop: PID not found',

@@ -14,6 +14,7 @@ import { agentRunner } from './runner'
 import { agentRuntime } from './runtime'
 import { agentSettings } from './settings'
 import { agentThemes } from './themes'
+import { agentWeb } from './web'
 
 export const createAgentBackend = (): Backend => {
   // 在装配时读取：模块导入期探测尚未发生
@@ -28,6 +29,7 @@ export const createAgentBackend = (): Backend => {
     packages: agentPackages,
     settings: agentSettings,
     themes: agentThemes,
+    web: agentWeb,
     capabilities: {
       routes: features.routes === true,
       services: features.services === true,
@@ -37,8 +39,7 @@ export const createAgentBackend = (): Backend => {
       kernel: features.kernel === true,
       logs: features.logs === true,
       mirror: features.kernel === true,
-      // 服务端尚无 Web 配置能力：先恒为 false，避免前端宣传尚不可用的入口
-      web: false
+      web: features.web === true
     }
   }
 }

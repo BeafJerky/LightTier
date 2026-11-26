@@ -38,6 +38,7 @@ const NATIVE_META: Meta = {
     login: true,
     kernel: true,
     logs: true,
+    web: true,
     defaultRouteChange: true
   },
   coreVersions: []
@@ -111,6 +112,21 @@ export const createNativeBackend = (): Backend => ({
     read: () => unsupported('themes.read'),
     save: () => unsupported('themes.save'),
     remove: () => unsupported('themes.remove')
+  },
+  web: {
+    // 整表读写委托既有本机链路（webConfigStorage → useMockData）；页面在原生模式下不经过门面
+    list: async () => {
+      const { runWebConfigTransaction } = await import('../webConfigStorage')
+      return runWebConfigTransaction(({ snapshot }) => snapshot())
+    },
+    replace: async (items) => {
+      const { replaceWebConfigList } = await import('../webConfigStorage')
+      await replaceWebConfigList(items)
+      return items
+    },
+    // 启停需要 host 校验与启动参数拼装（features 专属逻辑），原生页面继续直连 useMockData
+    start: () => unsupported('web.start'),
+    stop: () => unsupported('web.stop')
   },
   settings: {
     get: () => unsupported('settings.get'),

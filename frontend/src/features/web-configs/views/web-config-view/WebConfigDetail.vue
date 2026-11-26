@@ -76,6 +76,9 @@
     <p v-if="isAndroid" class="nwc-platform-hint">
       {{ t('newWebConfig.androidDesktopOnly') }}
     </p>
+    <p v-else-if="!serviceSupported" class="nwc-platform-hint">
+      {{ t('newWebConfig.agentServiceHint') }}
+    </p>
 
     <!-- 主要参数 -->
     <div class="nwc-section"
@@ -113,7 +116,7 @@
     </div>
 
     <!-- 服务管理：Windows 服务能力，仅桌面端提供 -->
-    <div v-if="!isAndroid" class="nwc-section"
+    <div v-if="!isAndroid && serviceSupported" class="nwc-section"
       ><div class="nwc-section-title">{{ t('newWebConfig.serviceMgmt') }}</div>
       <div class="nwc-svc-bar">
         <div class="nwc-svc-status">
@@ -179,11 +182,16 @@ import { LtButton } from '@/shared/ui'
 import type { FormWebData } from '@/entities/config/formTypes'
 import { isWebChecking, isWebRunning } from '../../lib/webConfigStatus'
 
-const props = defineProps<{
-  config: FormWebData
-  isAndroid: boolean
-  serviceStatus: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    config: FormWebData
+    isAndroid: boolean
+    serviceStatus: string
+    /** 是否具备本机 Windows 服务能力；agent 由服务端托管进程，无此能力 */
+    serviceSupported?: boolean
+  }>(),
+  { serviceSupported: true }
+)
 
 const emit = defineEmits<{
   back: []

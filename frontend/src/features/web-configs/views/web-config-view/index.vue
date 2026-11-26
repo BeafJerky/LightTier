@@ -25,6 +25,7 @@
       :config="selectedConfig"
       :is-android="isAndroidPlatform"
       :service-status="currentServiceStatus"
+      :service-supported="webServiceSupported"
       @back="closeWebDetail"
       @edit="openEdit"
       @open-console="openConsoleUrl"
@@ -153,6 +154,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useMockData } from '@/shared/platform/mockData'
+import { backendMode, backendWeb } from '@/shared/platform/backend'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { openPath } from '@/shared/platform/fileUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
@@ -176,6 +178,9 @@ const { show: toast } = useCreamToast()
 const route = useRoute()
 const router = useRouter()
 const isAndroidPlatform = isAndroid()
+// agent：整表读写、启停与运行态都由服务端托管，无本机进程扫描与 Windows 服务
+const isAgentMode = backendMode() === 'agent'
+const webServiceSupported = !isAgentMode
 // 横屏宽屏：列表与详情左右分栏，选中走本地状态而非详情路由
 const isWideLandscape = useWideLandscape()
 // Android：详情为独立路由（系统返回键回列表）
@@ -214,13 +219,14 @@ const isListEmpty = computed(
 
 // 首帧即丢弃缓存/文件中的运行态快照：status/pid 必须由本次进程与服务扫描重新判定。
 // 否则会先渲染上次会话的“运行中”，扫描完成后才跳回真实状态。
+// agent 的 status 来自服务端实时响应，不需要这一步。
 const markRuntimeChecking = () => {
   for (const item of webConfigList.value) {
     item.status = 'checking'
     item.pid = undefined
   }
 }
-markRuntimeChecking()
+if (!isAgentMode) markRuntimeChecking()
 
 // 表单
 const formVisible = ref(false)
@@ -286,7 +292,27 @@ const extractConfigServerUrl = (cmdLine: string): string | null => {
 // 刷新运行时状态：进程扫描 + 服务状态合并到列表项，并恢复/初始化选中项（FAB 已负责文件加载）
 // 服务检测不阻塞列表加载；刷新序号用于丢弃重叠刷新的过期回调
 let runtimeRefreshSeq = 0
+// agent：列表与运行态（status/pid）同源于服务端整表，刷新即重新拉表并重指选中项。
+const syncAgentWebList = async (): Promise<void> => {
+  const seq = ++runtimeRefreshSeq
+  await easyTierStore.loadWebConfigFiles()
+  if (seq !== runtimeRefreshSeq) return
+  if (easyTierStore.webConfigListError) return
+  const list = webConfigList.value
+  // 列表已替换为全新对象：选中项立即指向新对象，避免详情继续渲染旧状态
+  if (selectedConfig.value) {
+    const selectedName = selectedConfig.value.configFileName
+    selectedConfig.value = list.find((c) => c.configFileName === selectedName) || null
+  } else if (!isAndroidPlatform && window.innerWidth > 900 && list.length > 0) {
+    selectedConfig.value = list[0]
+  }
+}
 const refreshWebRuntimeState = async (forceServiceStatus = false) => {
+  // agent 不做进程扫描与服务检测：运行态直接采用服务端返回的 status/pid
+  if (isAgentMode) {
+    await syncAgentWebList()
+    return
+  }
   const seq = ++runtimeRefreshSeq
   const list = webConfigList.value
   // 记录上一轮状态：进程扫描失败时恢复，避免把“检测失败”显示成“未运行”
@@ -368,6 +394,11 @@ const refreshWebRuntimeState = async (forceServiceStatus = false) => {
 const refreshWebList = async (options: { forceServiceStatus?: boolean } = {}) => {
   loading.value = true
   try {
+    if (isAgentMode) {
+      await syncAgentWebList()
+      if (easyTierStore.webConfigListError) toast(t('newWebConfig.loadFailed'), 'error', 6000)
+      return
+    }
     await easyTierStore.loadWebConfigFiles()
     if (easyTierStore.webConfigListError) {
       toast(t('newWebConfig.loadFailed'), 'error', 6000)
@@ -504,15 +535,18 @@ const deleteConfig = async () => {
     toast(t('newCommon.deleteBlockedRunning'), 'warning', 4000)
     return
   }
-  const svcStatus = serviceStatusMap.value.get(selectedConfig.value.configFileName)
-  // 服务状态延后检测：尚无结果时不能当作“未安装服务”放行删除
-  if (isWebServiceStatusPending(isAndroidPlatform, svcStatus)) {
-    toast(t('newCommon.deleteBlockedChecking'), 'warning', 4000)
-    return
-  }
-  if (svcStatus && svcStatus !== 'notInstalled') {
-    toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
-    return
+  // agent 无本机进程与 Windows 服务：运行态判定已在上面完成，服务相关拦截不适用
+  if (!isAgentMode) {
+    const svcStatus = serviceStatusMap.value.get(selectedConfig.value.configFileName)
+    // 服务状态延后检测：尚无结果时不能当作“未安装服务”放行删除
+    if (isWebServiceStatusPending(isAndroidPlatform, svcStatus)) {
+      toast(t('newCommon.deleteBlockedChecking'), 'warning', 4000)
+      return
+    }
+    if (svcStatus && svcStatus !== 'notInstalled') {
+      toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
+      return
+    }
   }
   const ok = await showConfirm(
     t('newWebConfig.deleteTitle'),
@@ -538,6 +572,20 @@ const deleteConfig = async () => {
 // 启动 Web 服务进程：以 `--config-server <url>` 拉起内核，并把新 pid 写回配置
 const startWeb = async (item: FormWebData) => {
   if (isStarting.value) return
+  // agent：内核由服务端拉起，前端只按配置名下发启动指令
+  if (isAgentMode) {
+    isStarting.value = true
+    try {
+      await backendWeb().start(item.configFileName)
+      toast(t('newCommon.startSuccess'), 'success')
+      await refreshWebList()
+    } catch {
+      toast(t('newCommon.startFail'), 'error', 6000)
+    } finally {
+      isStarting.value = false
+    }
+    return
+  }
   const configFileName = item.configFileName
   isStarting.value = true
   let startedPid: number | null = null
@@ -575,6 +623,18 @@ const startWeb = async (item: FormWebData) => {
 // 停止 Web 服务：优先按 Windows 服务停（服务进程由 SCM 管理，kill 会被自动拉起）；
 // 普通进程则按 pid 结束
 const stopWeb = async (item: FormWebData) => {
+  // agent：停止由服务端按配置名执行，不再按 pid kill，也无服务分支
+  if (isAgentMode) {
+    try {
+      await backendWeb().stop(item.configFileName)
+      toast(t('newCommon.stoppedSuccess'), 'success')
+    } catch {
+      toast(t('newCommon.stoppedFail'), 'error')
+    } finally {
+      await refreshWebList()
+    }
+    return
+  }
   const svcStatus = serviceStatusMap.value.get(item.configFileName)
   if (svcStatus === 'running') {
     try {
@@ -626,6 +686,11 @@ const openConsoleUrl = async () => {
     } catch {
       toast(t('newWebConfig.consoleCopyFail'), 'error')
     }
+    return
+  }
+  // agent：浏览器直接开新标签（无 plugin-shell，不存在桌面端双开问题）
+  if (isAgentMode) {
+    window.open(url, '_blank', 'noopener')
     return
   }
   openPath(url)
