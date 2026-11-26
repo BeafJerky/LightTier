@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Version = "",
     [string]$Image = "",
@@ -15,7 +15,10 @@ if (-not $Version) { $Version = $pkg.version }
 if ($Version -ne $pkg.version) {
     throw "Version parameter '$Version' must equal package.json version '$($pkg.version)'"
 }
-if (-not $Image) { $Image = "ghcr.io/beafjerky/lighttier-agent:$Version" }
+# GHCR 加速前缀：国内 NAS 安装阶段拉 ghcr.io 常 TLS 握手超时。
+# 可用 -Image 覆盖为官方地址或其他镜像站。
+if (-not $Image) { $Image = "ghcr.1ms.run/beafjerky/lighttier-agent:$Version" }
+if ($Image -notmatch "/beafjerky/lighttier-agent:\S+$") { throw "Image must be <registry>/beafjerky/lighttier-agent:<tag>, got '$Image'" }
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 

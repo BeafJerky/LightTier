@@ -2,7 +2,7 @@
 
 ## 2.14.0 (2026-11-26)
 
-> fnOS 应用包（M6）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发，升级保留数据。桌面与 Android 零改动。
+> fnOS 应用包（M6）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发（默认走 `ghcr.1ms.run` 加速），升级保留数据。桌面与 Android 零改动。
 
 ### 新增
 
@@ -12,6 +12,10 @@
   - 自动化适配：无 `/dev/net/tun` 时把 compose 的 `devices` 与 `cap_add` 整行改为 `[]`；日志级别与内核加速前缀经向导写回 compose
   - 升级保留 `${TRIM_PKGVAR}/data`，卸载仅在勾选时删除该目录；容器名、端口、镜像标签在构建期断言一致
 - `build.ps1`：版本号从 `package.json` 同步到 manifest 与镜像标签，统一 LF，调用 `fnpack build`，解包后校验 checksum、三处端口、JSON 合法性、TUN 回退行、setup 入口、图标尺寸，产物输出到 `deploy/fnos/out/`
+
+### 修复
+
+- 飞牛安装阶段拉取 `ghcr.io` 镜像 TLS 握手超时（应用中心在生命周期钩子之前就会 `docker compose up`）：fpk 内 compose 默认改用 `ghcr.1ms.run` 加速地址，`-Image` 可切换官方或其他镜像源；三个源实测镜像 digest 一致
 
 ### 验证
 

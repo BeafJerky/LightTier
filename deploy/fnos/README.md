@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 - 版本号唯一来源是 `source/package.json`；脚本把版本写入 `manifest.version` 与 compose 的镜像标签，两者不一致直接报错。发版时同步把 `crates/agent/Cargo.toml`（及其 `Cargo.lock`）的版本改成同一值，`lighttier-agent version` 才会与镜像标签一致。
-- `-Image` 可覆盖镜像地址，`-Fnpack <path>` 或环境变量 `FNPACK` 可指定 fnpack。
+- 镜像默认引用 GHCR 加速地址 `ghcr.1ms.run/beafjerky/lighttier-agent:<version>`（官方地址是 `ghcr.io`）：应用中心在安装阶段就会拉镜像，国内 NAS 直连 `ghcr.io` 常 TLS 握手超时。`-Image` 可覆盖为官方或 `ghcr.nju.edu.cn` 等其他源，`-Fnpack <path>` 或环境变量 `FNPACK` 可指定 fnpack。
 - 产物：`out/lighttier_<version>_x86.fpk`。构建完成后会解包并断言 checksum、三处端口、JSON 合法性、TUN 回退行、setup 入口与图标尺寸；任一不一致即失败。
 
 ## 安装与初始化
@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 ## 故障排查
 
-- **镜像拉取失败**：安装需能访问 `ghcr.io`。可在向导/设置中填写内核加速前缀，但它只影响内核二进制下载，不影响镜像拉取。
+- **镜像拉取失败**：镜像默认从 `ghcr.1ms.run` 拉取；若该加速站也不可达，用 `-Image ghcr.nju.edu.cn/beafjerky/lighttier-agent:<version>` 重新打包，或在 NAS 上先 `docker pull` 任一可达源后 `docker tag <拉到的镜像> ghcr.1ms.run/beafjerky/lighttier-agent:<version>` 再装。向导里的内核加速前缀只影响内核二进制下载，不影响镜像拉取。
 - **容器起不来（`devices` 相关）**：宿主机没有 `/dev/net/tun` 时，安装脚本应把 compose 中 `devices` 与 `cap_add` 两行改为 `[]`。若手工改过 compose 导致设备行残留，重新安装或在应用目录把两行改成 `[]`。
 - **无 TUN 的宿主机**：容器可以启动，但实例需在配置里关闭 TUN 才能组网。
 - **容器反复重启、日志只有 `Permission denied`**：`${TRIM_PKGVAR}/data` 属主是包用户，容器 root 在 `cap_drop: ALL` 下写不进去。compose 的 `cap_add` 必须保留 `DAC_OVERRIDE`，不要删。
