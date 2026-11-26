@@ -13,14 +13,15 @@
  *   200 返回任务快照；启动前的拒绝（内置/已在装/版本不支持）才抛 ApiError。
  */
 import { request } from '../http'
-import type { Backend, PackagesInfo, TaskView } from '../types'
+import type { Backend, MirrorProbeResult, PackagesInfo, TaskView } from '../types'
 
 const packagePath = (version: string): string => `/api/v1/packages/${encodeURIComponent(version)}`
 
 const taskPath = (id: string): string => `/api/v1/packages/tasks/${encodeURIComponent(id)}`
 
-type PackagesWire = Partial<Omit<PackagesInfo, 'installAllowed'>> & {
+type PackagesWire = Partial<Omit<PackagesInfo, 'installAllowed' | 'mirrorLocked'>> & {
   installAllowed?: boolean
+  mirrorLocked?: boolean
 }
 
 const normalizeError = (error: unknown): TaskView['error'] => {
@@ -59,7 +60,9 @@ export const agentPackages: Backend['packages'] = {
       })),
       active: payload?.active ?? null,
       // 缺省视为允许：老 agent 未序列化该字段时不能被误判为只读部署
-      installAllowed: payload?.installAllowed !== false
+      installAllowed: payload?.installAllowed !== false,
+      // 缺省视为未锁定：只有新 agent 明确返回 true 才禁用镜像操作
+      mirrorLocked: payload?.mirrorLocked === true
     }
   },
 
@@ -77,5 +80,20 @@ export const agentPackages: Backend['packages'] = {
 
   remove: async (version) => {
     await request(packagePath(version), { method: 'DELETE' })
+  },
+
+  probeMirrors: async (sources, version) => {
+    // 服务端总预算 50s（HEAD + 吞吐采样、并发上限），HTTP 超时必须放宽于它
+    const payload = await request<{ results?: Partial<MirrorProbeResult>[] }>(
+      '/api/v1/packages/mirror-probe',
+      { method: 'POST', body: { sources, version }, timeoutMs: 60000 }
+    )
+    const results = Array.isArray(payload?.results) ? payload.results : []
+    return results.map((item) => ({
+      source: String(item?.source ?? ''),
+      latencyMs: typeof item?.latencyMs === 'number' ? item.latencyMs : null,
+      speedBytesPerSec: typeof item?.speedBytesPerSec === 'number' ? item.speedBytesPerSec : null,
+      ok: item?.ok === true
+    }))
   }
 }

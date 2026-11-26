@@ -66,7 +66,8 @@ describe('agentPackages', () => {
         { version: 'v2.7.0', channel: 'prerelease', installed: false }
       ],
       active: 'v2.6.4',
-      installAllowed: true
+      installAllowed: true,
+      mirrorLocked: false
     })
 
     const [url, init] = lastCall()
@@ -86,6 +87,58 @@ describe('agentPackages', () => {
     fetchMock.mockResolvedValue(jsonResponse(200, legacy))
 
     await expect(agentPackages.list()).resolves.toMatchObject({ installAllowed: true })
+  })
+
+  it('list：mirrorLocked=true（LT_CORE_MIRROR 锁定）原样保留，缺省按 false', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { ...LIST_PAYLOAD, mirrorLocked: true }))
+    await expect(agentPackages.list()).resolves.toMatchObject({ mirrorLocked: true })
+
+    fetchMock.mockResolvedValue(jsonResponse(200, LIST_PAYLOAD))
+    await expect(agentPackages.list()).resolves.toMatchObject({ mirrorLocked: false })
+  })
+
+  it('probeMirrors：POST mirror-probe，body 为 {sources, version}，结果归一', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        results: [
+          { source: 'https://ghfast.top/', latencyMs: 42, speedBytesPerSec: 1024, ok: true },
+          { source: 'ftp://bad/', latencyMs: null, speedBytesPerSec: null, ok: false },
+          { source: 'https://x.example/' }
+        ]
+      })
+    )
+
+    const results = await agentPackages.probeMirrors(
+      ['https://ghfast.top/', 'ftp://bad/', 'https://x.example/'],
+      'v2.6.4'
+    )
+
+    expect(results).toEqual([
+      { source: 'https://ghfast.top/', latencyMs: 42, speedBytesPerSec: 1024, ok: true },
+      { source: 'ftp://bad/', latencyMs: null, speedBytesPerSec: null, ok: false },
+      { source: 'https://x.example/', latencyMs: null, speedBytesPerSec: null, ok: false }
+    ])
+
+    const [url, init] = lastCall()
+    expect(url).toBe('/api/v1/packages/mirror-probe')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      sources: ['https://ghfast.top/', 'ftp://bad/', 'https://x.example/'],
+      version: 'v2.6.4'
+    })
+  })
+
+  it('probeMirrors：422 invalid_settings（超过 10 源）原样抛出', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(422, {
+        error: { code: 'invalid_settings', message: 'at most 10 mirror sources per probe' }
+      })
+    )
+
+    await expect(agentPackages.probeMirrors([], 'v2.6.4')).rejects.toMatchObject({
+      code: 'invalid_settings',
+      status: 422
+    })
   })
 
   it('install：POST 202 {taskId} 返回任务 id（版本做 URL 编码）', async () => {

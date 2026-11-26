@@ -733,6 +733,10 @@ export default {
     mirrorRestoreDefaults: 'Restore built-ins',
     mirrorApplyHint: 'Changes apply immediately; downloads use the selected mirror',
     mirrorDone: 'Done',
+    mirrorLockedHint:
+      'The mirror is locked by the deployer via the LT_CORE_MIRROR environment variable; selecting, editing and probing are disabled. Change the server deployment configuration to adjust it',
+    mirrorSaveFail:
+      'Failed to save the mirror selection to the server; reverted to the previous choice',
     channelStable: 'Stable',
     channelPrerelease: 'Preview',
     downloadedBadge: 'Downloaded',

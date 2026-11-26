@@ -60,6 +60,7 @@ async fn package_routes_require_login() {
             format!("/api/v1/packages/{}/install", common::VERSION),
         ),
         ("POST", "/api/v1/packages/tasks/9.9.9-1/cancel".to_string()),
+        ("POST", "/api/v1/packages/mirror-probe".to_string()),
         ("DELETE", format!("/api/v1/packages/{}", common::VERSION)),
     ];
     for (method, uri) in cases {
@@ -97,6 +98,7 @@ async fn list_reports_available_releases_and_no_installed_versions() {
         body["installAllowed"], true,
         "a default layout installs into the root it scans: {body}"
     );
+    assert_eq!(body["mirrorLocked"], false, "no env lock by default: {body}");
 
     let available = body["available"].as_array().unwrap();
     let versions: Vec<&str> = available
@@ -762,4 +764,171 @@ async fn cancel_stops_a_stalled_install_without_auditing_a_failure() {
         .await;
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
     assert_eq!(common::json_body(res).await["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn mirror_probe_rejects_too_many_sources_and_unknown_versions() {
+    let archive = common::kernel_zip();
+    let dir = tempfile::tempdir().unwrap();
+    let app = TestApp::new(
+        dir.path(),
+        empty_root(dir.path()),
+        dir.path().join("builtin"),
+        common::manifest_for(&archive),
+        None,
+    )
+    .await;
+    let cookie = app.session().await;
+
+    let sources: Vec<String> = (0..11).map(|i| format!("https://m{i}.example/")).collect();
+    let res = app
+        .send(
+            "POST",
+            "/api/v1/packages/mirror-probe",
+            Some(json!({ "sources": sources, "version": common::VERSION })),
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        common::json_body(res).await["error"]["code"],
+        "invalid_settings"
+    );
+
+    let res = app
+        .send(
+            "POST",
+            "/api/v1/packages/mirror-probe",
+            Some(json!({ "sources": [], "version": "v8.8.8" })),
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        common::json_body(res).await["error"]["code"],
+        "core_version_unsupported"
+    );
+
+    // A rejected probe is not an administrator change to audit.
+    assert!(app.audit_now().is_empty());
+}
+
+#[tokio::test]
+async fn mirror_probe_samples_a_live_mirror_and_isolates_bad_prefixes() {
+    let archive = common::kernel_zip();
+    let mirror = common::mirror_serving(archive.clone()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let app = TestApp::new(
+        dir.path(),
+        empty_root(dir.path()),
+        dir.path().join("builtin"),
+        common::manifest_for(&archive),
+        None,
+    )
+    .await;
+    let cookie = app.session().await;
+
+    let res = app
+        .send(
+            "POST",
+            "/api/v1/packages/mirror-probe",
+            Some(json!({
+                "sources": [mirror.base(), "ftp://bad.example/", "https://user:pass@x.example/"],
+                "version": common::VERSION,
+            })),
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = common::json_body(res).await;
+    let results = body["results"].as_array().unwrap();
+    assert_eq!(results.len(), 3, "results come back in input order: {body}");
+    assert_eq!(results[0]["source"], format!("{}/", mirror.base()));
+    assert_eq!(results[0]["ok"], true);
+    assert!(results[0]["latencyMs"].is_number());
+    assert!(results[0]["speedBytesPerSec"].as_u64().unwrap() > 0);
+    assert_eq!(results[1]["ok"], false, "bad scheme fails per source");
+    assert!(results[1]["latencyMs"].is_null());
+    assert_eq!(results[2]["ok"], false, "credentials fail per source");
+
+    // The server fetched `<prefix>/<official url>`, never a client-supplied URL.
+    let hits = mirror.hits();
+    assert!(
+        hits.iter().all(|path| path
+            .starts_with("/https://github.com/EasyTier/EasyTier/releases/download/v9.9.9/")),
+        "unexpected probe paths: {hits:?}"
+    );
+
+    // The probe is audited with counts only — no prefixes, no credentials.
+    let entries = app.audit_entries(1).await;
+    let probes: Vec<&serde_json::Value> = entries
+        .iter()
+        .filter(|entry| entry["event"] == "packages.mirror_probe")
+        .collect();
+    assert_eq!(probes.len(), 1, "{entries:?}");
+    assert_eq!(probes[0]["details"]["version"], common::VERSION);
+    assert_eq!(probes[0]["details"]["sources"], 3);
+}
+
+#[tokio::test]
+async fn settings_mirror_drives_downloads_and_the_env_lock_is_reported() {
+    let archive = common::kernel_zip();
+    let mirror = common::mirror_serving(archive.clone()).await;
+    let dir = tempfile::tempdir().unwrap();
+    // No env mirror: the user setting must reach the download pipeline.
+    let app = TestApp::new(
+        dir.path(),
+        dir.path().join("data/core"),
+        dir.path().join("builtin"),
+        common::manifest_for(&archive),
+        None,
+    )
+    .await;
+    let cookie = app.session().await;
+
+    let res = app
+        .send(
+            "PUT",
+            "/api/v1/settings",
+            Some(json!({ "coreMirror": mirror.base() })),
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let res = app
+        .send(
+            "POST",
+            &format!("/api/v1/packages/{}/install", common::VERSION),
+            Some(json!({})),
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    let task_id = common::json_body(res).await["taskId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        common::wait_finished(&app, &cookie, &task_id).await["state"],
+        "done"
+    );
+    let hits = mirror.hits();
+    assert_eq!(hits.len(), 1, "the download used the settings mirror: {hits:?}");
+
+    // With `LT_CORE_MIRROR` set the listing reports the lock.
+    let locked_dir = tempfile::tempdir().unwrap();
+    let locked = TestApp::new(
+        locked_dir.path(),
+        empty_root(locked_dir.path()),
+        locked_dir.path().join("builtin"),
+        common::manifest_for(&archive),
+        Some(mirror.base()),
+    )
+    .await;
+    let locked_cookie = locked.session().await;
+    let res = locked
+        .send("GET", "/api/v1/packages", None, Some(&locked_cookie))
+        .await;
+    assert_eq!(common::json_body(res).await["mirrorLocked"], true);
 }

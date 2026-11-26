@@ -2,7 +2,7 @@
  * agent 适配器装配。
  *
  * capabilities 来自启动期探测到的 `/api/v1/meta.features`：能力位由服务端声明，
- * 前端不再维护第二份常量表。镜像测速在 agent 下始终不可用。
+ * 前端不再维护第二份常量表。镜像入口跟随内核能力（测速由服务端代理执行）。
  */
 import { agentFeatures } from '../mode'
 import type { Backend } from '../types'
@@ -36,7 +36,7 @@ export const createAgentBackend = (): Backend => {
       tray: features.tray === true,
       kernel: features.kernel === true,
       logs: features.logs === true,
-      mirror: false
+      mirror: features.kernel === true
     }
   }
 }

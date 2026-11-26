@@ -45,6 +45,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     sources: mirrorSources,
     probing: mirrorProbing,
     selected: mirrorSelected,
+    mirrorLocked,
     probeAll,
     probeSource,
     downloadFromMirrors,
@@ -528,9 +529,10 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     mirrorAddError.value = ''
     mirrorDialogVisible.value = true
     // 未指定加速源时，打开弹窗即自动测速并选用最快源；已显式选择则保留原选择
+    // agent 下文件名由服务端清单决定，浏览器里 coreFileName 为空也允许测速
     if (
       !localStorage.getItem(MIRROR_SOURCE_KEY) &&
-      coreFileName.value &&
+      (isAgentMode || coreFileName.value) &&
       !autoMirrorProbeAttempted
     ) {
       autoMirrorProbeAttempted = true
@@ -540,7 +542,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
 
   // 测速全部镜像源（目标为所选版本的真实内核包），全部失败时给出提示
   const handleProbeMirrors = async () => {
-    if (!coreFileName.value) {
+    if (!isAgentMode && !coreFileName.value) {
       toast.warning(t('newSettings.selectVersionFirst'))
       return
     }
@@ -563,8 +565,8 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     }
     mirrorInput.value = ''
     mirrorAddError.value = ''
-    // 无版本目标或已有测速任务时跳过即时测速（未测不视为不可达）
-    if (!coreFileName.value || mirrorProbing.value) return
+    // 无版本目标或已有测速任务时跳过即时测速（未测不视为不可达）；agent 无需文件名
+    if (mirrorProbing.value || (!isAgentMode && !coreFileName.value)) return
     const latency = await probeSource(result.value, coreVerSelect.value, coreFileName.value)
     if (latency === null) {
       mirrorSelect(previous)
@@ -861,6 +863,7 @@ export function useSettingsKernel(options: SettingsKernelOptions) {
     mirrorSources,
     mirrorProbing,
     mirrorSelected,
+    mirrorLocked,
     mirrorSelect,
     mirrorDialogVisible,
     mirrorInput,

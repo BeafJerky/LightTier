@@ -141,6 +141,7 @@
             v-if="canRestoreDefaults"
             type="button"
             variant="ghost"
+            :disabled="mirrorLocked"
             @click="handleRestoreMirrors"
           >
             {{ t('newSettings.mirrorRestoreDefaults') }}
@@ -148,12 +149,17 @@
           <LtButton
             type="button"
             variant="ghost"
-            :disabled="mirrorProbing"
+            :disabled="mirrorProbing || mirrorLocked"
             @click="handleProbeMirrors"
           >
             {{ mirrorProbing ? t('newSettings.mirrorProbing') : t('newSettings.mirrorProbe') }}
           </LtButton>
         </div>
+      </div>
+
+      <!-- 部署方通过 LT_CORE_MIRROR 锁定：只读展示，禁用全部编辑与测速 -->
+      <div v-if="mirrorLocked" class="sd-mirror-lock-hint" role="note">
+        {{ t('newSettings.mirrorLockedHint') }}
       </div>
 
       <div class="sd-mirror-list" role="radiogroup" :aria-label="t('newSettings.mirrorSource')">
@@ -171,6 +177,7 @@
               name="sd-mirror"
               :value="s.value"
               :checked="mirrorSelected === s.value"
+              :disabled="mirrorLocked"
               @change="mirrorSelect(s.value)"
             />
             <span class="sd-mirror-radio" aria-hidden="true"></span>
@@ -193,6 +200,7 @@
             variant="danger"
             size="xs"
             circle
+            :disabled="mirrorLocked"
             :aria-label="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
             :title="t('newSettings.mirrorRemoveSource', { source: s.label || s.value })"
             @click="handleRemoveMirror(s.value)"
@@ -220,6 +228,7 @@
           variant="filled"
           inputmode="url"
           autocomplete="off"
+          :disabled="mirrorLocked"
           :spellcheck="false"
           :placeholder="t('newSettings.mirrorAddPlaceholder')"
           :aria-label="t('newSettings.mirrorAddLabel')"
@@ -227,7 +236,7 @@
           :aria-describedby="mirrorAddError ? 'sd-mirror-add-error' : 'sd-mirror-add-hint'"
           @input="mirrorAddError = ''"
         />
-        <LtButton type="submit" variant="primary" :disabled="!mirrorInput.trim()">
+        <LtButton type="submit" variant="primary" :disabled="!mirrorInput.trim() || mirrorLocked">
           {{ t('newSettings.mirrorAdd') }}
         </LtButton>
       </form>
@@ -410,6 +419,7 @@ const {
   mirrorSelected,
   mirrorSelect,
   mirrorProbing,
+  mirrorLocked,
   canRestoreDefaults,
   handleProbeMirrors,
   handleAddMirror,
@@ -831,6 +841,16 @@ defineExpose({ focusAboutAndCheck })
   font-size: 12px;
   line-height: 1.4;
   color: var(--theme-color-danger, #e8a0a0);
+}
+
+.sd-mirror-lock-hint {
+  padding: var(--theme-space-2) var(--theme-space-3);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-color-warning, #c4852b);
+  background: rgb(var(--theme-color-warning-rgb, 196, 133, 43), 0.08);
+  border: 1px solid rgb(var(--theme-color-warning-rgb, 196, 133, 43), 0.25);
+  border-radius: var(--theme-radius-sm, 8px);
 }
 
 .sd-mirror-add-hint,

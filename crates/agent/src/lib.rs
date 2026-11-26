@@ -50,14 +50,19 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     // (`installAllowed: false`): they would publish into `<data>/core`, which
     // such a deployment never scans. The install pipeline reports terminal
     // failures to the audit log (its request was answered with a 202 long ago).
-    let packages = Arc::new(
-        packages::Packages::new(&cfg.data_dir)
-            .with_core_override(core_override)
-            .on_finish(package_routes::install_audit_hook(audit.clone())),
-    );
     // Same `<data>/logs` tree the tracing appender, the audit trail and the
     // kernels write into; the API only ever reads it (and clears it on request).
     let logs = Arc::new(logs::Logs::new(&cfg.data_dir));
+    // Downloads must see the *current* mirror setting, not the value at boot:
+    // the closure reads the store at download time (env lock still wins inside
+    // `download_url`).
+    let mirror_settings = settings.clone();
+    let packages = Arc::new(
+        packages::Packages::new(&cfg.data_dir)
+            .with_core_override(core_override)
+            .with_settings_mirror(move || mirror_settings.core_mirror())
+            .on_finish(package_routes::install_audit_hook(audit.clone())),
+    );
     let state = Arc::new(http::AppState::new(
         cfg, auth, configs, audit, settings, supervisor, cli, packages, logs,
     ));

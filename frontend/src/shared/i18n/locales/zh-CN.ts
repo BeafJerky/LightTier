@@ -705,6 +705,9 @@ export default {
     mirrorRestoreDefaults: '恢复内置源',
     mirrorApplyHint: '选择或增删后即时生效，下载使用当前选中的加速源',
     mirrorDone: '完成',
+    mirrorLockedHint:
+      '加速源已由部署方通过环境变量 LT_CORE_MIRROR 锁定，选择、增删与测速均已禁用；如需调整请修改服务端部署配置',
+    mirrorSaveFail: '加速源选择保存到服务端失败，已恢复原选择',
     channelStable: '正式版',
     channelPrerelease: '预览版',
     downloadedBadge: '已下载',

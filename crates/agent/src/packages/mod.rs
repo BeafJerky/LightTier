@@ -13,10 +13,14 @@
 
 mod install;
 mod manifest;
+mod mirror;
 mod tasks;
 
 pub use manifest::{
     asset_name, lookup, official_url, Channel, LinuxPackage, DEFAULT_VERSION, LINUX_PACKAGES,
+};
+pub use mirror::{
+    normalize_mirror_prefix, probe_mirrors, MirrorProbeResult, MAX_PROBE_SOURCES, OFFICIAL_SOURCE,
 };
 pub use tasks::{TaskView, Tasks};
 
@@ -90,7 +94,11 @@ struct Inner {
     /// Release table the installer and the `/packages` listing read.
     manifest: &'static [LinuxPackage],
     /// `<mirror>/<official_url>` prefix, from [`MIRROR_ENV`] or a test fixture.
+    /// When set it locks the mirror: the user setting is ignored.
     mirror: Option<String>,
+    /// Current user-selected mirror from the settings store, read at download
+    /// time so a settings change applies without rebuilding this handle.
+    settings_mirror: Arc<dyn Fn() -> Option<String> + Send + Sync>,
     /// Free-bytes probe for the data volume. Injectable so the disk-full path is
     /// testable without filling a real filesystem.
     free_bytes: Arc<dyn Fn(&Path) -> u64 + Send + Sync>,
@@ -150,6 +158,7 @@ impl Packages {
                 roots,
                 manifest,
                 mirror: mirror_from_env(),
+                settings_mirror: Arc::new(|| None),
                 free_bytes: Arc::new(free_bytes),
                 install_allowed: true,
                 http: http_client(),
@@ -189,6 +198,21 @@ impl Packages {
                 .map(|value| value.trim().trim_end_matches('/').to_owned())
                 .filter(|value| !value.is_empty());
         })
+    }
+
+    /// Reads the user-selected mirror at download time (settings store handle
+    /// injected as a closure, so this module never depends on the HTTP layer).
+    pub fn with_settings_mirror(
+        self,
+        f: impl Fn() -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.map_inner(|inner| inner.settings_mirror = Arc::new(f))
+    }
+
+    /// True when [`MIRROR_ENV`] (or a fixture) pins the mirror: the UI must
+    /// disable mirror selection, editing and probing.
+    pub fn mirror_locked(&self) -> bool {
+        self.inner.mirror.is_some()
     }
 
     /// Overrides the free-space probe; `f` receives the data directory and
@@ -332,11 +356,13 @@ impl Inner {
         self.builtin_dir.join(version).exists() || self.target_dir(version).exists()
     }
 
-    /// Download URL for a version, prefixed with [`MIRROR_ENV`] when configured.
+    /// Download URL for a version: the [`MIRROR_ENV`] lock wins over the user
+    /// setting, which wins over the official GitHub direct link.
     fn download_url(&self, version: &str) -> String {
         let official = official_url(version);
-        match &self.mirror {
-            Some(mirror) => format!("{mirror}/{official}"),
+        let mirror = self.mirror.clone().or_else(|| (self.settings_mirror)());
+        match mirror {
+            Some(mirror) => format!("{}/{official}", mirror.trim_end_matches('/')),
             None => official,
         }
     }
@@ -704,6 +730,33 @@ mod tests {
             packages.inner.download_url("v2.6.4"),
             official_url("v2.6.4")
         );
+    }
+
+    #[test]
+    fn settings_mirror_applies_when_unlocked_and_env_lock_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        let packages = Packages::new(dir.path())
+            .with_mirror(None)
+            .with_settings_mirror(|| Some("https://ghfast.top/".into()));
+        assert!(!packages.mirror_locked());
+        assert_eq!(
+            packages.inner.download_url("v2.6.4"),
+            format!("https://ghfast.top/{}", official_url("v2.6.4"))
+        );
+
+        // The env lock ignores the user setting entirely.
+        let locked = packages.with_mirror(Some("https://wget.la/".into()));
+        assert!(locked.mirror_locked());
+        assert_eq!(
+            locked.inner.download_url("v2.6.4"),
+            format!("https://wget.la/{}", official_url("v2.6.4"))
+        );
+
+        // An empty user setting means official direct.
+        let official = Packages::new(dir.path())
+            .with_mirror(None)
+            .with_settings_mirror(|| None);
+        assert_eq!(official.inner.download_url("v2.6.4"), official_url("v2.6.4"));
     }
 
     #[test]

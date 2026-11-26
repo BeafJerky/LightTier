@@ -13,13 +13,13 @@ use axum::extract::{Extension, Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::audit::Audit;
 use crate::error::ApiError;
 use crate::http::{AppState, RequestId};
-use crate::packages::{InstalledPackage, TaskView};
+use crate::packages::{probe_mirrors, InstalledPackage, TaskView, MAX_PROBE_SOURCES};
 
 /// One kernel version on disk, camelCase for the web UI.
 #[derive(Serialize)]
@@ -56,9 +56,10 @@ struct AvailableView {
 }
 
 /// `GET /api/v1/packages` — installed versions, installable releases, the version
-/// the supervisor would start right now (`null` when none resolves), and whether
+/// the supervisor would start right now (`null` when none resolves), whether
 /// this deployment may install at all (`installAllowed` is false under an
-/// `LT_CORE_DIR` override, where installs would land in an unscanned root).
+/// `LT_CORE_DIR` override, where installs would land in an unscanned root), and
+/// whether the mirror is deployer-locked (`mirrorLocked` under `LT_CORE_MIRROR`).
 pub async fn list(State(state): State<Arc<AppState>>) -> Json<Value> {
     let installed = state.packages.list_installed();
     let present: Vec<&str> = installed.iter().map(|item| item.version.as_str()).collect();
@@ -77,7 +78,51 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Json<Value> {
         "available": available,
         "active": state.packages.active_version(),
         "installAllowed": state.packages.install_allowed(),
+        "mirrorLocked": state.packages.mirror_locked(),
     }))
+}
+
+/// Body of `POST /api/v1/packages/mirror-probe`. `sources` are mirror *prefixes*
+/// (or `""`/the official base for the direct source) — never full download URLs;
+/// the server only ever joins a normalized prefix onto its own manifest URL.
+#[derive(Deserialize)]
+pub struct MirrorProbeRequest {
+    pub sources: Vec<String>,
+    pub version: String,
+}
+
+/// `POST /api/v1/packages/mirror-probe` — HEAD latency + a bounded GET
+/// throughput sample per source. Validation errors (too many sources, unknown
+/// version) fail the request; a bad prefix or an unreachable mirror only marks
+/// that entry `ok=false`.
+pub async fn mirror_probe(
+    State(state): State<Arc<AppState>>,
+    Extension(request_id): Extension<RequestId>,
+    Json(body): Json<MirrorProbeRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if body.sources.len() > MAX_PROBE_SOURCES {
+        return Err(ApiError::InvalidSettings {
+            detail: format!("at most {MAX_PROBE_SOURCES} mirror sources per probe"),
+        });
+    }
+    if !state
+        .packages
+        .manifest()
+        .iter()
+        .any(|pkg| pkg.version == body.version)
+    {
+        return Err(ApiError::CoreVersionUnsupported);
+    }
+    let results = probe_mirrors(&body.sources, &body.version).await;
+    state
+        .audit
+        .record(
+            "packages.mirror_probe",
+            Some(&request_id.0),
+            json!({ "version": body.version, "sources": results.len() }),
+        )
+        .await;
+    Ok(Json(json!({ "results": results })))
 }
 
 /// `POST /api/v1/packages/{version}/install` — starts the download/verify task

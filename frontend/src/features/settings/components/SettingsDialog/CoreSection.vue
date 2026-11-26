@@ -96,7 +96,6 @@
         <div class="sd-core-install-title">{{ t('newSettings.downloadInstall') }}</div>
         <!-- 加速源入口：列表/增删放在下级弹窗，避免占用内核面板纵向空间 -->
         <LtButton
-          v-if="!isAgentMode"
           type="button"
           variant="secondary"
           size="sm"

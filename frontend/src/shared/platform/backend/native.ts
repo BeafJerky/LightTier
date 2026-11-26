@@ -102,7 +102,8 @@ export const createNativeBackend = (): Backend => ({
     install: () => unsupported('packages.install'),
     task: () => unsupported('packages.task'),
     cancelTask: () => unsupported('packages.cancelTask'),
-    remove: () => unsupported('packages.remove')
+    remove: () => unsupported('packages.remove'),
+    probeMirrors: () => unsupported('packages.probeMirrors')
   },
   themes: {
     // 桌面 / Android 的外部主题走 Tauri 文件系统（useExternalThemes），门面不转接

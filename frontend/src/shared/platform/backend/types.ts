@@ -65,6 +65,19 @@ export interface PackagesInfo {
    * native 适配器无此概念，默认 true；页面必须先消费该位再提供安装入口。
    */
   installAllowed: boolean
+  /**
+   * 加速源是否被部署方通过 `LT_CORE_MIRROR` 锁定（native 恒为 false）。
+   * 锁定时选择、增删与测速入口必须禁用。
+   */
+  mirrorLocked: boolean
+}
+
+/** `POST /api/v1/packages/mirror-probe` 的单源结果（source 为归一化前缀回显） */
+export interface MirrorProbeResult {
+  source: string
+  latencyMs: number | null
+  speedBytesPerSec: number | null
+  ok: boolean
 }
 
 /** 日志文件元信息（`GET /api/v1/logs` 的条目） */
@@ -148,11 +161,23 @@ export interface Backend {
     task(id: string): Promise<TaskView>
     cancelTask(id: string): Promise<TaskView>
     remove(version: string): Promise<void>
+    /** 服务端代理测速（HEAD 延迟 + GET 吞吐采样）；native 无此能力 */
+    probeMirrors(sources: string[], version: string): Promise<MirrorProbeResult[]>
   }
   settings: {
-    get(): Promise<{ autoStartLastRunning: boolean; noTun: boolean; logLevel: string }>
+    get(): Promise<{
+      autoStartLastRunning: boolean
+      noTun: boolean
+      logLevel: string
+      coreMirror: string
+    }>
     put(
-      patch: Partial<{ autoStartLastRunning: boolean; noTun: boolean; logLevel: string }>
+      patch: Partial<{
+        autoStartLastRunning: boolean
+        noTun: boolean
+        logLevel: string
+        coreMirror: string
+      }>
     ): Promise<void>
   }
   capabilities: Capabilities

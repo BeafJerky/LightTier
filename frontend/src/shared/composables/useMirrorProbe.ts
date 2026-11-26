@@ -16,10 +16,16 @@
  * - 官方源固定保留，不可删除；
  * - 内置镜像可删除（记录到 MIRROR_HIDDEN_KEY，可一键恢复）；
  * - 自定义源持久化到 MIRROR_CUSTOM_KEY，可随时删除。
+ *
+ * agent 模式：浏览器无法直接 HEAD/GET 镜像（CORS），测速改由服务端代理
+ * （packages.probeMirrors）；选择结果持久化到服务端 settings.coreMirror，
+ * localStorage 仅作首屏占位与“显式选择”标记。部署方通过 LT_CORE_MIRROR
+ * 锁定时（mirrorLocked）选择、增删与测速全部禁用。桌面/Android/Mock 路径不变。
  */
 import { isTauri as isTauriRuntime } from '@tauri-apps/api/core'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   GITHUB_EASYTIER,
   GITHUB_MIRROR_URL,
@@ -28,6 +34,9 @@ import {
 } from '@/shared/constants/easytier'
 import { measureDownloadSpeed } from '@/shared/platform/fileUtil'
 import { normalizeMirrorPrefix, orderMirrorCandidates } from '@/shared/lib/mirrorUtil'
+import { backendMode, backendPackages, backendSettings } from '@/shared/platform/backend'
+import type { MirrorProbeResult } from '@/shared/platform/backend'
+import { useCreamToast } from '@/shared/ui/useCreamToast'
 
 /** 镜像源条目（latency 为测速结果，null 表示未测/失败） */
 export interface MirrorSourceItem {
@@ -180,7 +189,41 @@ const probeUrl = async (url: string): Promise<number | null> => {
 const probeOne = (base: string, version: string, filename: string): Promise<number | null> =>
   probeUrl(getCoreDownloadUrl(base, version, filename))
 
+/** 服务端单次测速上限（镜像模块 MAX_PROBE_SOURCES），超出会被整单拒绝 */
+const AGENT_PROBE_BATCH = 10
+
+/** agent 分批测速：某批失败按该批全部不可达处理，不影响其他批次 */
+const probeMirrorsChunked = async (
+  values: string[],
+  version: string
+): Promise<MirrorProbeResult[]> => {
+  const results: MirrorProbeResult[] = []
+  for (let i = 0; i < values.length; i += AGENT_PROBE_BATCH) {
+    const chunk = values.slice(i, i + AGENT_PROBE_BATCH)
+    try {
+      results.push(...(await backendPackages().probeMirrors(chunk, version)))
+    } catch {
+      results.push(
+        ...chunk.map((source) => ({
+          source,
+          latencyMs: null,
+          speedBytesPerSec: null,
+          ok: false
+        }))
+      )
+    }
+  }
+  return results
+}
+
 export const useMirrorProbe = () => {
+  const { t } = useI18n()
+  const toast = useCreamToast()
+  const isAgentMode = backendMode() === 'agent'
+  /** 部署方通过 LT_CORE_MIRROR 锁定加速源（仅 agent 会变为 true） */
+  const mirrorLocked = ref(false)
+  // 选择请求竞态标记：只有最后一次选择允许落盘/回滚
+  let selectTicket = 0
   const custom = ref<string[]>(loadCustomSources())
   const hidden = ref<string[]>(loadHiddenSources())
   const sources = ref<MirrorSourceItem[]>(buildSources(custom.value, hidden.value))
@@ -198,6 +241,27 @@ export const useMirrorProbe = () => {
 
   /** 显式选择镜像源并持久化（后续下载优先使用该源） */
   const selectSource = (value: string): void => {
+    if (isAgentMode) {
+      if (mirrorLocked.value) return
+      const ticket = ++selectTicket
+      const previous = selected.value
+      // 乐观更新 UI；服务端保存成功后才落 localStorage，失败回滚并提示
+      selected.value = value
+      const coreMirror = value === GITHUB_EASYTIER ? '' : value
+      backendSettings()
+        .put({ coreMirror })
+        .then(
+          () => {
+            if (ticket === selectTicket) localStorage.setItem(MIRROR_SOURCE_KEY, value)
+          },
+          () => {
+            if (ticket !== selectTicket) return
+            selected.value = previous
+            toast.error(t('newSettings.mirrorSaveFail'))
+          }
+        )
+      return
+    }
     selected.value = value
     localStorage.setItem(MIRROR_SOURCE_KEY, value)
   }
@@ -216,6 +280,7 @@ export const useMirrorProbe = () => {
    * 成功后自动选中新源，便于立即用于下载；调用方可再测速校验。
    */
   const addSource = (raw: string): AddMirrorResult => {
+    if (mirrorLocked.value) return { ok: false, reason: 'invalid' }
     const value = normalizeMirrorPrefix(raw)
     if (!value) return { ok: false, reason: 'invalid' }
     if (value === OFFICIAL_PREFIX || sources.value.some((s) => s.value === value)) {
@@ -236,6 +301,7 @@ export const useMirrorProbe = () => {
 
   /** 删除加速源：官方源不可删除；内置源记入隐藏列表，自定义源直接移除 */
   const removeSource = (value: string): boolean => {
+    if (mirrorLocked.value) return false
     if (value === GITHUB_EASYTIER) return false
     if (!sources.value.some((s) => s.value === value)) return false
 
@@ -256,25 +322,36 @@ export const useMirrorProbe = () => {
 
   /** 恢复全部内置镜像（保留自定义源与已有测速结果） */
   const restoreDefaults = (): void => {
+    if (mirrorLocked.value) return
     if (!canRestoreDefaults.value) return
     hidden.value = []
     writeStringList(MIRROR_HIDDEN_KEY, hidden.value)
     rebuildSources()
   }
 
-  /** 单源测速（新增后即时反馈），不改变当前选择 */
+  /** 单源测速（新增后即时反馈），不改变当前选择；agent 下文件名由服务端清单决定 */
   const probeSource = async (
     value: string,
     version: string,
     filename: string
   ): Promise<number | null> => {
-    if (probing.value || !version || !filename) return null
+    if (probing.value || mirrorLocked.value || !version || (!isAgentMode && !filename)) return null
     const item = sources.value.find((s) => s.value === value)
     if (!item) return null
     probing.value = true
     const task = (async () => {
       try {
-        const latency = await probeOne(value, version, filename)
+        const latency = isAgentMode
+          ? await backendPackages()
+              .probeMirrors([value], version)
+              .then(
+                (results) => {
+                  const hit = results.find((r) => r.source === value)
+                  return hit?.ok ? hit.latencyMs : null
+                },
+                () => null
+              )
+          : await probeOne(value, version, filename)
         item.latency = latency
         return latency
       } finally {
@@ -289,19 +366,34 @@ export const useMirrorProbe = () => {
   /**
    * 并发测速全部源；未显式选择、或当前源不可达时自动选用最快可用源。
    * 目标资源由 buildUrl 按源生成，内核包与应用更新包共用同一选源规则。
+   * agent 模式忽略 buildUrl（服务端只把归一化前缀拼到自己的清单地址），需要 version。
    */
-  const probeAllWith = async (buildUrl: (base: string) => string): Promise<void> => {
-    if (probing.value) return
+  const probeAllWith = async (
+    buildUrl: (base: string) => string,
+    version?: string
+  ): Promise<void> => {
+    if (probing.value || mirrorLocked.value) return
+    if (isAgentMode && !version) return
     probing.value = true
     const task = (async () => {
       try {
         const snapshot = [...sources.value]
-        const results = await Promise.all(
-          snapshot.map(async (s) => ({
-            value: s.value,
-            latency: await probeUrl(buildUrl(s.value))
-          }))
-        )
+        const results = isAgentMode
+          ? (
+              await probeMirrorsChunked(
+                snapshot.map((s) => s.value),
+                version ?? ''
+              )
+            ).map((r) => ({
+              value: r.source,
+              latency: r.ok ? r.latencyMs : null
+            }))
+          : await Promise.all(
+              snapshot.map(async (s) => ({
+                value: s.value,
+                latency: await probeUrl(buildUrl(s.value))
+              }))
+            )
         // 逐项回写，避免测速期间新增/删除的源被旧快照覆盖
         const latencyMap = new Map(results.map((r) => [r.value, r.latency]))
         sources.value.forEach((s) => {
@@ -327,10 +419,10 @@ export const useMirrorProbe = () => {
     await task
   }
 
-  /** 内核包全量测速（保留原签名，设置页与引导页按版本号调用） */
+  /** 内核包全量测速（保留原签名，设置页与引导页按版本号调用）；agent 无需文件名 */
   const probeAll = (version: string, filename: string): Promise<void> =>
-    version && filename
-      ? probeAllWith((base) => getCoreDownloadUrl(base, version, filename))
+    version && (isAgentMode || filename)
+      ? probeAllWith((base) => getCoreDownloadUrl(base, version, filename), version)
       : Promise.resolve()
 
   /** 等待进行中的测速结束（含单源测速）；无任务时立即返回 */
@@ -347,11 +439,34 @@ export const useMirrorProbe = () => {
    * 结果同时用于展示（延迟徽标仍为 HEAD 结果，此处只决定下载顺序）。
    */
   const rankByThroughput = async (
-    buildUrl: (base: string) => string
+    buildUrl: (base: string) => string,
+    version?: string
   ): Promise<Array<{ item: MirrorSourceItem; speed: number }>> => {
     const snapshot = [...sources.value]
     probing.value = true
     const task = (async () => {
+      if (isAgentMode) {
+        // 服务端在同一次探测里给出 HEAD 延迟与 GET 吞吐；锁定/无版本时不测速
+        const speeds = new Map<string, number>()
+        if (!mirrorLocked.value && version) {
+          const results = await probeMirrorsChunked(
+            snapshot.map((s) => s.value),
+            version
+          )
+          const latencyMap = new Map(results.map((r) => [r.source, r.ok ? r.latencyMs : null]))
+          sources.value.forEach((s) => {
+            const next = latencyMap.get(s.value)
+            if (next !== undefined) s.latency = next
+          })
+          results.forEach((r) => speeds.set(r.source, r.ok ? (r.speedBytesPerSec ?? 0) : 0))
+        }
+        const ordered = orderMirrorCandidates(
+          snapshot,
+          speeds,
+          localStorage.getItem(MIRROR_SOURCE_KEY)
+        )
+        return ordered.map((item) => ({ item, speed: speeds.get(item.value) ?? 0 }))
+      }
       const measured = await Promise.all(
         snapshot.map(async (item) => ({
           item,
@@ -404,11 +519,36 @@ export const useMirrorProbe = () => {
     return false
   }
 
+  // agent 首屏：localStorage 只是占位，以服务端 settings.coreMirror 为准。
+  // coreMirror 为空时清除本地显式选择标记，保持“打开弹窗自动测速”的桌面同款语义。
+  if (isAgentMode) {
+    void Promise.all([backendSettings().get(), backendPackages().list()]).then(
+      ([settings, info]) => {
+        mirrorLocked.value = info.mirrorLocked
+        // 异步返回前用户已手动选择：不覆盖
+        if (selectTicket !== 0) return
+        const value = settings.coreMirror || GITHUB_EASYTIER
+        if (settings.coreMirror && !sources.value.some((s) => s.value === settings.coreMirror)) {
+          custom.value = [...custom.value, settings.coreMirror]
+          writeStringList(MIRROR_CUSTOM_KEY, custom.value)
+          rebuildSources()
+        }
+        selected.value = value
+        if (settings.coreMirror) localStorage.setItem(MIRROR_SOURCE_KEY, settings.coreMirror)
+        else localStorage.removeItem(MIRROR_SOURCE_KEY)
+      },
+      () => {
+        /* 服务端不可达时保留 localStorage 占位选择 */
+      }
+    )
+  }
+
   return {
     sources,
     probing,
     selected,
     selectedSource,
+    mirrorLocked,
     probeAll,
     probeAllWith,
     probeSource,

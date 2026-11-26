@@ -314,3 +314,87 @@ async fn meta_reports_tun_disabled_by_settings() {
     assert_eq!(meta["tunAvailable"], false);
     assert_eq!(meta["tunReason"], "disabled_by_settings");
 }
+
+#[tokio::test]
+async fn core_mirror_defaults_to_direct_and_round_trips_normalized() {
+    let dir = tempfile::tempdir().unwrap();
+    let (app, session) = app_with_session(dir.path()).await;
+
+    let res = app
+        .clone()
+        .oneshot(request("GET", "/api/v1/settings", None, Some(&session)))
+        .await
+        .unwrap();
+    assert_eq!(json_body(res).await["coreMirror"], "");
+
+    let res = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/settings",
+            Some(serde_json::json!({ "coreMirror": " ghfast.top " })),
+            Some(&session),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_body(res).await["coreMirror"], "https://ghfast.top/");
+
+    let saved: serde_json::Value = serde_json::from_str(
+        &tokio::fs::read_to_string(dir.path().join("state/settings.json"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(saved["coreMirror"], "https://ghfast.top/");
+
+    // Empty is legal and clears back to official direct.
+    let res = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/settings",
+            Some(serde_json::json!({ "coreMirror": "" })),
+            Some(&session),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_body(res).await["coreMirror"], "");
+}
+
+#[tokio::test]
+async fn invalid_core_mirror_returns_422_and_keeps_the_old_value() {
+    let dir = tempfile::tempdir().unwrap();
+    let (app, session) = app_with_session(dir.path()).await;
+    let res = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/settings",
+            Some(serde_json::json!({ "coreMirror": "https://ghfast.top/" })),
+            Some(&session),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let res = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/v1/settings",
+            Some(serde_json::json!({ "coreMirror": "ftp://example.com/" })),
+            Some(&session),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json_body(res).await["error"]["code"], "invalid_settings");
+
+    let res = app
+        .oneshot(request("GET", "/api/v1/settings", None, Some(&session)))
+        .await
+        .unwrap();
+    assert_eq!(json_body(res).await["coreMirror"], "https://ghfast.top/");
+}

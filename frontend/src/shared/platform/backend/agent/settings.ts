@@ -12,6 +12,7 @@ type SettingsWire = {
   autoStartLastRunning?: unknown
   noTun?: unknown
   logLevel?: unknown
+  coreMirror?: unknown
 }
 
 export type AgentSettings = Awaited<ReturnType<Backend['settings']['get']>>
@@ -19,7 +20,9 @@ export type AgentSettings = Awaited<ReturnType<Backend['settings']['get']>>
 const normalize = (payload: SettingsWire | undefined): AgentSettings => ({
   autoStartLastRunning: payload?.autoStartLastRunning === true,
   noTun: payload?.noTun === true,
-  logLevel: typeof payload?.logLevel === 'string' && payload.logLevel ? payload.logLevel : 'info'
+  logLevel: typeof payload?.logLevel === 'string' && payload.logLevel ? payload.logLevel : 'info',
+  // 空串 = 官方直连；老 agent 未返回该字段时同样按直连处理
+  coreMirror: typeof payload?.coreMirror === 'string' ? payload.coreMirror : ''
 })
 
 export const agentSettings: Backend['settings'] = {
@@ -32,6 +35,7 @@ export const agentSettings: Backend['settings'] = {
     }
     if (patch.noTun !== undefined) body.noTun = patch.noTun
     if (patch.logLevel !== undefined) body.logLevel = patch.logLevel
+    if (patch.coreMirror !== undefined) body.coreMirror = patch.coreMirror
     await request('/api/v1/settings', { method: 'PUT', body })
   }
 }

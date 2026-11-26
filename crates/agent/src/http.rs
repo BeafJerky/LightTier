@@ -159,6 +159,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // prefix and cannot be mistaken for a version named "tasks".
         .route("/api/v1/packages", get(package_routes::list))
         .route(
+            "/api/v1/packages/mirror-probe",
+            post(package_routes::mirror_probe),
+        )
+        .route(
             "/api/v1/packages/{version}/install",
             post(package_routes::install),
         )

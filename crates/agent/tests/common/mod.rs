@@ -240,10 +240,13 @@ impl TestApp {
         };
         // Wiring the audit hook here mirrors `lib.rs`: a background install
         // failure has no request left to report to, so it is audited by the
-        // pipeline's terminal notification.
+        // pipeline's terminal notification. The settings closure mirrors it too:
+        // downloads read the *current* mirror setting, the env lock still wins.
+        let mirror_settings = settings.clone();
         let packages = Arc::new(
             scanner
                 .with_mirror(mirror)
+                .with_settings_mirror(move || mirror_settings.core_mirror())
                 .on_finish(package_routes::install_audit_hook(audit.clone())),
         );
         Self {
