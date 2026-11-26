@@ -502,7 +502,10 @@ pub fn is_valid_host(host: &str) -> bool {
     {
         return false;
     }
-    if value.chars().any(|c| matches!(c, '"' | '\'' | '/' | '\\' | '?' | '#' | '@' | '%')) {
+    if value
+        .chars()
+        .any(|c| matches!(c, '"' | '\'' | '/' | '\\' | '?' | '#' | '@' | '%'))
+    {
         return false;
     }
     if value.contains(':') {
@@ -522,9 +525,7 @@ pub fn is_valid_host(host: &str) -> bool {
 fn is_valid_host_label(label: &str) -> bool {
     let count = label.chars().count();
     (1..=63).contains(&count)
-        && label
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
         && !label.starts_with('-')
         && !label.ends_with('-')
 }
@@ -607,10 +608,7 @@ while true; do sleep 0.1; done
         args.get(index + 1).map(String::as_str)
     }
 
-    async fn app(
-        data: &Path,
-        core_root: Option<PathBuf>,
-    ) -> (WebConfigs, Arc<SettingsStore>) {
+    async fn app(data: &Path, core_root: Option<PathBuf>) -> (WebConfigs, Arc<SettingsStore>) {
         let settings = Arc::new(SettingsStore::load(data).await.unwrap());
         let roots = core_root.into_iter().collect();
         (WebConfigs::new(data, roots, settings.clone()), settings)
@@ -687,7 +685,13 @@ while true; do sleep 0.1; done
                 },
                 "invalid_settings",
             ),
-            (WebConfigInput { port: 0, ..input("web") }, "invalid_settings"),
+            (
+                WebConfigInput {
+                    port: 0,
+                    ..input("web")
+                },
+                "invalid_settings",
+            ),
             (
                 WebConfigInput {
                     port: 70_000,
@@ -818,7 +822,9 @@ while true; do sleep 0.1; done
         store.replace(vec![input("web")]).await.unwrap();
 
         store.start("web").await.unwrap();
-        let pid = store.list().await.unwrap()[0].pid.expect("start registers a pid");
+        let pid = store.list().await.unwrap()[0]
+            .pid
+            .expect("start registers a pid");
         // A second start must not spawn a second kernel.
         store.start("web").await.unwrap();
         assert_eq!(store.list().await.unwrap()[0].pid, Some(pid));
@@ -830,7 +836,10 @@ while true; do sleep 0.1; done
         store.stop("web").await.unwrap();
         assert_eq!(unsafe { libc::kill(pid as i32, 0) }, -1);
 
-        assert_eq!(store.start("missing").await.unwrap_err().code(), "not_found");
+        assert_eq!(
+            store.start("missing").await.unwrap_err().code(),
+            "not_found"
+        );
         assert_eq!(store.stop("missing").await.unwrap_err().code(), "not_found");
     }
 
@@ -890,7 +899,10 @@ while true; do sleep 0.1; done
         let core = install_core(&dir.path().join("core"), ARG_RECORDING_CORE);
         let data = dir.path().join("data");
         let (store, _settings) = app(&data, Some(core)).await;
-        store.replace(vec![input("web"), input("keep")]).await.unwrap();
+        store
+            .replace(vec![input("web"), input("keep")])
+            .await
+            .unwrap();
         store.start("web").await.unwrap();
         store.start("keep").await.unwrap();
         let removed_pid = store.list().await.unwrap()[0].pid.unwrap();

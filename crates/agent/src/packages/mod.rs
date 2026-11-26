@@ -756,7 +756,10 @@ mod tests {
         let official = Packages::new(dir.path())
             .with_mirror(None)
             .with_settings_mirror(|| None);
-        assert_eq!(official.inner.download_url("v2.6.4"), official_url("v2.6.4"));
+        assert_eq!(
+            official.inner.download_url("v2.6.4"),
+            official_url("v2.6.4")
+        );
     }
 
     #[test]

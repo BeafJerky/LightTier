@@ -98,7 +98,10 @@ async fn list_reports_available_releases_and_no_installed_versions() {
         body["installAllowed"], true,
         "a default layout installs into the root it scans: {body}"
     );
-    assert_eq!(body["mirrorLocked"], false, "no env lock by default: {body}");
+    assert_eq!(
+        body["mirrorLocked"], false,
+        "no env lock by default: {body}"
+    );
 
     let available = body["available"].as_array().unwrap();
     let versions: Vec<&str> = available
@@ -914,7 +917,11 @@ async fn settings_mirror_drives_downloads_and_the_env_lock_is_reported() {
         "done"
     );
     let hits = mirror.hits();
-    assert_eq!(hits.len(), 1, "the download used the settings mirror: {hits:?}");
+    assert_eq!(
+        hits.len(),
+        1,
+        "the download used the settings mirror: {hits:?}"
+    );
 
     // With `LT_CORE_MIRROR` set the listing reports the lock.
     let locked_dir = tempfile::tempdir().unwrap();

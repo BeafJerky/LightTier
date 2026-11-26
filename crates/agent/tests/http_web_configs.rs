@@ -57,12 +57,19 @@ async fn test_app(dir: &Path, core_body: &str) -> TestApp {
 }
 
 async fn put(app: &TestApp, cookie: &str, items: Vec<Value>) -> axum::response::Response {
-    app.send("PUT", "/api/v1/web-configs", Some(json!({ "items": items })), Some(cookie))
-        .await
+    app.send(
+        "PUT",
+        "/api/v1/web-configs",
+        Some(json!({ "items": items })),
+        Some(cookie),
+    )
+    .await
 }
 
 async fn list(app: &TestApp, cookie: &str) -> Value {
-    let res = app.send("GET", "/api/v1/web-configs", None, Some(cookie)).await;
+    let res = app
+        .send("GET", "/api/v1/web-configs", None, Some(cookie))
+        .await;
     assert_eq!(res.status(), StatusCode::OK);
     common::json_body(res).await
 }
@@ -110,7 +117,10 @@ async fn web_config_routes_require_login() {
         let body = (method == "PUT").then(|| json!({ "items": [] }));
         let res = app.send(method, &uri, body, None).await;
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{method} {uri}");
-        assert_eq!(common::json_body(res).await["error"]["code"], "auth_required");
+        assert_eq!(
+            common::json_body(res).await["error"]["code"],
+            "auth_required"
+        );
     }
 }
 
@@ -157,7 +167,12 @@ async fn table_and_process_lifecycle() {
     assert_eq!(instances["catalog"], json!([]));
     // ...and the instance endpoint cannot address them either.
     let res = app
-        .send("POST", "/api/v1/instances/office%20web/stop", None, Some(&cookie))
+        .send(
+            "POST",
+            "/api/v1/instances/office%20web/stop",
+            None,
+            Some(&cookie),
+        )
         .await;
     assert_eq!(res.status(), StatusCode::CONFLICT);
 
@@ -172,7 +187,10 @@ async fn table_and_process_lifecycle() {
     let stopped = list(&app, &cookie).await;
     assert_eq!(stopped["items"][0]["status"], "notRunning");
     assert_eq!(stopped["items"][0]["pid"], Value::Null);
-    assert!(!Path::new(&format!("/proc/{pid}")).exists(), "kernel must be gone");
+    assert!(
+        !Path::new(&format!("/proc/{pid}")).exists(),
+        "kernel must be gone"
+    );
 
     // Stopping an already stopped record is a success.
     let res = app.send("POST", stop, None, Some(&cookie)).await;
@@ -258,10 +276,19 @@ async fn put_validates_every_field() {
     ];
     for (body, status, code) in cases {
         let res = app
-            .send("PUT", "/api/v1/web-configs", Some(body.clone()), Some(&cookie))
+            .send(
+                "PUT",
+                "/api/v1/web-configs",
+                Some(body.clone()),
+                Some(&cookie),
+            )
             .await;
         assert_eq!(res.status(), status, "{body}");
-        assert_eq!(common::json_body(res).await["error"]["code"], code, "{body}");
+        assert_eq!(
+            common::json_body(res).await["error"]["code"],
+            code,
+            "{body}"
+        );
     }
     // Nothing was written by the rejected requests.
     assert_eq!(list(&app, &cookie).await["items"], json!([]));
@@ -292,7 +319,10 @@ async fn put_validates_every_field() {
     entry.as_object_mut().unwrap().remove("webStartMethod");
     let res = put(&app, &cookie, vec![entry]).await;
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(common::json_body(res).await["items"][0]["webStartMethod"], 2);
+    assert_eq!(
+        common::json_body(res).await["items"][0]["webStartMethod"],
+        2
+    );
 }
 
 #[tokio::test]
@@ -307,7 +337,10 @@ async fn persisted_file_holds_user_fields_only_and_survives_corruption() {
     with_runtime["pid"] = json!(4242);
     let res = put(&app, &cookie, vec![with_runtime]).await;
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(common::json_body(res).await["items"][0]["status"], "notRunning");
+    assert_eq!(
+        common::json_body(res).await["items"][0]["status"],
+        "notRunning"
+    );
 
     let raw = tokio::fs::read_to_string(app.data_dir().join("state/web-configs.json"))
         .await
@@ -325,12 +358,9 @@ async fn persisted_file_holds_user_fields_only_and_survives_corruption() {
     tokio::fs::create_dir_all(app2.data_dir().join("state"))
         .await
         .unwrap();
-    tokio::fs::write(
-        app2.data_dir().join("state/web-configs.json"),
-        b"{not json",
-    )
-    .await
-    .unwrap();
+    tokio::fs::write(app2.data_dir().join("state/web-configs.json"), b"{not json")
+        .await
+        .unwrap();
     assert_eq!(list(&app2, &cookie2).await["items"], json!([]));
 }
 
@@ -392,7 +422,12 @@ async fn exited_process_returns_to_not_running() {
     let res = put(&app, &cookie, vec![item("crashy")]).await;
     assert_eq!(res.status(), StatusCode::OK);
     let res = app
-        .send("POST", "/api/v1/web-configs/crashy/start", None, Some(&cookie))
+        .send(
+            "POST",
+            "/api/v1/web-configs/crashy/start",
+            None,
+            Some(&cookie),
+        )
         .await;
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
 
@@ -408,8 +443,13 @@ async fn web_config_logs_are_a_listed_core_group() {
     let cookie = app.session().await;
     let res = put(&app, &cookie, vec![item("home")]).await;
     assert_eq!(res.status(), StatusCode::OK);
-    app.send("POST", "/api/v1/web-configs/home/start", None, Some(&cookie))
-        .await;
+    app.send(
+        "POST",
+        "/api/v1/web-configs/home/start",
+        None,
+        Some(&cookie),
+    )
+    .await;
     // The kernel writes its own files; stand in for one so the listing has a row.
     let log_dir = app.data_dir().join("logs/core/web-config");
     tokio::fs::create_dir_all(&log_dir).await.unwrap();
@@ -462,14 +502,24 @@ async fn audit_records_table_and_process_changes() {
     let mut edited = item("home");
     // A console-link edit must not restart the kernel (no stop/start pair here).
     edited["webUrl"] = json!("http://web.example.com:19999");
-    app.send("POST", "/api/v1/web-configs/home/start", None, Some(&cookie))
-        .await;
+    app.send(
+        "POST",
+        "/api/v1/web-configs/home/start",
+        None,
+        Some(&cookie),
+    )
+    .await;
     let res = put(&app, &cookie, vec![edited]).await;
     assert_eq!(res.status(), StatusCode::OK);
     app.send("POST", "/api/v1/web-configs/home/stop", None, Some(&cookie))
         .await;
-    app.send("POST", "/api/v1/web-configs/home/start", None, Some(&cookie))
-        .await;
+    app.send(
+        "POST",
+        "/api/v1/web-configs/home/start",
+        None,
+        Some(&cookie),
+    )
+    .await;
     // Removing a running record deletes it (and stops its kernel).
     let res = put(&app, &cookie, vec![]).await;
     assert_eq!(res.status(), StatusCode::OK);
@@ -477,9 +527,17 @@ async fn audit_records_table_and_process_changes() {
     let entries = app.audit_entries(6).await;
     let web: Vec<&Value> = entries
         .iter()
-        .filter(|entry| entry["event"].as_str().unwrap_or_default().starts_with("web."))
+        .filter(|entry| {
+            entry["event"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("web.")
+        })
         .collect();
-    let events: Vec<&str> = web.iter().map(|entry| entry["event"].as_str().unwrap()).collect();
+    let events: Vec<&str> = web
+        .iter()
+        .map(|entry| entry["event"].as_str().unwrap())
+        .collect();
     assert_eq!(
         events,
         vec![

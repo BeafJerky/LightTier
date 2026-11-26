@@ -29,31 +29,19 @@ pub async fn put(
     for item in &summary.created {
         state
             .audit
-            .record(
-                "web.create",
-                Some(&request_id.0),
-                item_details(item),
-            )
+            .record("web.create", Some(&request_id.0), item_details(item))
             .await;
     }
     for item in &summary.updated {
         state
             .audit
-            .record(
-                "web.update",
-                Some(&request_id.0),
-                item_details(item),
-            )
+            .record("web.update", Some(&request_id.0), item_details(item))
             .await;
     }
     for item in &summary.deleted {
         state
             .audit
-            .record(
-                "web.delete",
-                Some(&request_id.0),
-                item_details(item),
-            )
+            .record("web.delete", Some(&request_id.0), item_details(item))
             .await;
     }
     Ok(Json(json!({ "items": items })))

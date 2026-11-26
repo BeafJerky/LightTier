@@ -83,7 +83,10 @@ impl SettingsStore {
     }
 
     pub async fn get(&self) -> Settings {
-        self.value.read().unwrap_or_else(|err| err.into_inner()).clone()
+        self.value
+            .read()
+            .unwrap_or_else(|err| err.into_inner())
+            .clone()
     }
 
     /// Synchronous read for the download pipeline's mirror provider closure.
@@ -99,7 +102,11 @@ impl SettingsStore {
 
     pub async fn update(&self, patch: SettingsPatch) -> Result<Settings, ApiError> {
         let _guard = self.write.lock().await;
-        let mut next = self.value.read().unwrap_or_else(|err| err.into_inner()).clone();
+        let mut next = self
+            .value
+            .read()
+            .unwrap_or_else(|err| err.into_inner())
+            .clone();
         if let Some(value) = patch.auto_start_last_running {
             next.auto_start_last_running = value;
         }

@@ -159,12 +159,16 @@ pub async fn probe_mirrors(sources: &[String], version: &str) -> Vec<MirrorProbe
                 }
                 None => MirrorProbeResult::failed(raw.trim().to_owned()),
             };
-            done.lock().unwrap_or_else(|err| err.into_inner()).push(result);
+            done.lock()
+                .unwrap_or_else(|err| err.into_inner())
+                .push(result);
         }
     });
     let _ = tokio::time::timeout(
         TOTAL_TIMEOUT,
-        stream::iter(jobs).buffer_unordered(CONCURRENCY).collect::<()>(),
+        stream::iter(jobs)
+            .buffer_unordered(CONCURRENCY)
+            .collect::<()>(),
     )
     .await;
     let done = done.lock().unwrap_or_else(|err| err.into_inner());
@@ -286,7 +290,12 @@ mod tests {
 
     #[test]
     fn official_direct_join_is_the_manifest_url() {
-        for raw in ["", "   ", OFFICIAL_SOURCE, "https://github.com/EasyTier/EasyTier/"] {
+        for raw in [
+            "",
+            "   ",
+            OFFICIAL_SOURCE,
+            "https://github.com/EasyTier/EasyTier/",
+        ] {
             let target = resolve_probe_source(raw, "v2.6.4").unwrap();
             assert_eq!(target.echo, OFFICIAL_SOURCE);
             assert_eq!(target.url, official_url("v2.6.4"));
@@ -390,7 +399,10 @@ mod tests {
         assert_eq!(results.len(), 3);
         assert!(!results[0].ok, "invalid prefix stays a per-source failure");
         assert!(results[1].ok);
-        assert!(!results[2].ok, "unreachable mirror stays a per-source failure");
+        assert!(
+            !results[2].ok,
+            "unreachable mirror stays a per-source failure"
+        );
         assert_eq!(results[1].source, format!("{base}/"));
     }
 
