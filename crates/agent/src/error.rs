@@ -13,6 +13,7 @@ pub enum ApiError {
     AlreadyInitialized,
     InvalidId,
     InvalidToml { detail: String },
+    InvalidTheme { detail: String },
     ConflictHash { expected: String, actual: String },
     ConfigExists,
     InvalidSettings { detail: String },
@@ -43,6 +44,7 @@ impl ApiError {
             Self::AlreadyInitialized => "already_initialized",
             Self::InvalidId => "invalid_id",
             Self::InvalidToml { .. } => "invalid_toml",
+            Self::InvalidTheme { .. } => "invalid_theme",
             Self::ConflictHash { .. } => "conflict_hash",
             Self::ConfigExists => "config_exists",
             Self::InvalidSettings { .. } => "invalid_settings",
@@ -73,6 +75,7 @@ impl ApiError {
             Self::AlreadyInitialized => "administrator already initialized".into(),
             Self::InvalidId => "invalid identifier".into(),
             Self::InvalidToml { detail } => format!("invalid TOML: {detail}"),
+            Self::InvalidTheme { detail } => format!("invalid theme: {detail}"),
             Self::ConflictHash { expected, actual } => {
                 format!("config changed: expected {expected}, actual {actual}")
             }
@@ -102,9 +105,9 @@ impl ApiError {
 
     pub fn params(&self) -> Option<Value> {
         match self {
-            Self::InvalidToml { detail } | Self::InvalidSettings { detail } => {
-                Some(json!({ "detail": detail }))
-            }
+            Self::InvalidToml { detail }
+            | Self::InvalidTheme { detail }
+            | Self::InvalidSettings { detail } => Some(json!({ "detail": detail })),
             Self::BadPackage { detail } => Some(json!({ "detail": detail })),
             Self::ConflictHash { expected, actual } => {
                 Some(json!({ "expected": expected, "actual": actual }))
@@ -132,7 +135,7 @@ impl ApiError {
             Self::ForbiddenOrigin => StatusCode::FORBIDDEN,
             Self::AlreadyInitialized => StatusCode::CONFLICT,
             Self::InvalidId => StatusCode::BAD_REQUEST,
-            Self::InvalidToml { .. } | Self::InvalidSettings { .. } => {
+            Self::InvalidToml { .. } | Self::InvalidTheme { .. } | Self::InvalidSettings { .. } => {
                 StatusCode::UNPROCESSABLE_ENTITY
             }
             Self::ConflictHash { .. }

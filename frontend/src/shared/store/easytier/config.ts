@@ -114,6 +114,13 @@ export function createConfigDomain() {
   // 随后加载完成又用持久化旧状态覆盖扫描结果，造成状态闪变/卡错
   let webConfigLoadTask: Promise<void> | null = null
   const loadWebConfigFiles = async (): Promise<void> => {
+    // agent 没有 config-server 管理端点：保持空列表，绝不回落到浏览器 Mock 样例
+    if (backendMode() === 'agent') {
+      configWebList.value = []
+      webConfigListLoaded.value = true
+      webConfigListError.value = null
+      return
+    }
     if (webConfigLoadTask) return webConfigLoadTask
     webConfigListLoading.value = true
     webConfigListError.value = null

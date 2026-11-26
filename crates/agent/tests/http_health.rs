@@ -361,6 +361,8 @@ async fn meta_reports_kernel_features_and_manifest_versions() {
     assert_eq!(value["features"]["kernel"], true);
     assert_eq!(value["features"]["logs"], true);
     assert_eq!(value["features"]["login"], true);
+    assert_eq!(value["features"]["themes"], true);
+    // Default-gateway rewriting is forbidden on a NAS, so no route capability.
     assert_eq!(value["features"]["routes"], false);
     // Derived from the manifest itself: a version/channel bump must not require
     // editing this test.

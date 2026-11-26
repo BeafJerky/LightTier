@@ -15,6 +15,7 @@ import { BaseDirectory } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { isAndroid } from '@/shared/platform/platformUtil'
+import { backendMode, backendThemes, isApiError } from '@/shared/platform/backend'
 import {
   extractThemeCategory,
   extractThemeLabel,
@@ -111,8 +112,18 @@ const writeMockImportedThemes = (themes: Map<string, string>) => {
   }
 }
 
-/** 读取全部已导入主题（AppData 目录 / 浏览器 localStorage） */
+/** 读取全部已导入主题（agent 服务端 / AppData 目录 / 浏览器 localStorage） */
 const readImportedThemes = async (): Promise<Map<string, string>> => {
+  if (backendMode() === 'agent') {
+    try {
+      const list = await backendThemes().list()
+      return new Map(list.map((item) => [item.name, item.cssText]))
+    } catch (error) {
+      // 会话失效等失败不应清空已有列表；按“无导入主题”处理，下次发现时重试
+      console.warn('[Theme] agent 主题列表读取失败:', error)
+      return new Map()
+    }
+  }
   if (!isTauriRuntime()) return readMockImportedThemes()
   const themes = new Map<string, string>()
   try {
@@ -139,6 +150,13 @@ const readImportedThemes = async (): Promise<Map<string, string>> => {
 
 /** 读取单个已导入主题，供应用/恢复时优先命中 */
 const readImportedTheme = async (name: string): Promise<string | null> => {
+  if (backendMode() === 'agent') {
+    try {
+      return await backendThemes().read(name)
+    } catch {
+      return null
+    }
+  }
   if (!isTauriRuntime()) return readMockImportedThemes().get(name) ?? null
   try {
     const cssText = (await readTextFile(`${IMPORTED_THEME_DIR}/${name}.css`, {
@@ -245,7 +263,12 @@ export const restoreTheme = async () => {
 /** 导入结果：失败原因由界面映射为 i18n 文案 */
 export type ImportThemeResult =
   | { ok: true; theme: ExternalThemeInfo }
-  | { ok: false; reason: 'invalid-name' | 'reserved-name' | 'invalid-css' | 'write-failed' }
+  | {
+      ok: false
+      reason: 'invalid-name' | 'reserved-name' | 'invalid-css' | 'write-failed'
+      /** 服务端拒绝时的稳定错误码（agent 模式），供界面映射为精确文案 */
+      code?: string
+    }
 
 /** 校验并保存导入的主题文件（文件名即主题 ID，同名覆盖） */
 export const importThemeFile = async (
@@ -258,7 +281,9 @@ export const importThemeFile = async (
   if (!isValidThemeCss(cssText)) return { ok: false, reason: 'invalid-css' }
 
   try {
-    if (isTauriRuntime()) {
+    if (backendMode() === 'agent') {
+      await backendThemes().save(name, cssText)
+    } else if (isTauriRuntime()) {
       await mkdir(IMPORTED_THEME_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
       await writeTextFile(`${IMPORTED_THEME_DIR}/${name}.css`, cssText, {
         baseDir: BaseDirectory.AppData
@@ -270,7 +295,11 @@ export const importThemeFile = async (
     }
   } catch (error) {
     console.error('导入主题失败:', error)
-    return { ok: false, reason: 'write-failed' }
+    return {
+      ok: false,
+      reason: 'write-failed',
+      code: isApiError(error) ? error.code : undefined
+    }
   }
 
   const theme = toThemeInfo(name, cssText)

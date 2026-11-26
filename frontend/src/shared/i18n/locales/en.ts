@@ -1110,6 +1110,16 @@ export default {
     internal: 'Internal agent error',
     invalidId:
       'Invalid name: use letters, digits, spaces, and . _ - only; do not start with a symbol',
+    invalidToml: 'The configuration file is not valid',
+    invalidSettings: 'The settings are not valid',
+    invalidTheme:
+      'Invalid theme: it needs at least 3 --theme- variables and must not exceed 256 KiB',
+    conflictHash: 'The configuration was changed by another session; refresh and retry',
+    configExists: 'A configuration with this name already exists',
+    alreadyInitialized: 'The administrator is already initialized; sign in instead',
+    permissionDenied: 'The request origin was rejected; refresh the page and retry',
+    payloadTooLarge: 'The request body is too large',
+    badRequest: 'The request format is invalid',
     coreOverrideReadOnly:
       'The core directory is overridden; installs are disabled on this deployment',
     taskInProgress: 'An install task for this version is already running',

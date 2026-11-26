@@ -61,6 +61,7 @@ export const backendRuntime = (): Backend['runtime'] => backend().runtime
 export const backendLogs = (): Backend['logs'] => backend().logs
 export const backendPackages = (): Backend['packages'] => backend().packages
 export const backendSettings = (): Backend['settings'] => backend().settings
+export const backendThemes = (): Backend['themes'] => backend().themes
 export const backendCapabilities = (): Backend['capabilities'] => backend().capabilities
 
 export * from './types'

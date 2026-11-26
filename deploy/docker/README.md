@@ -1,4 +1,4 @@
-# LightTier Agent（M3：浏览器界面 + 内置内核）
+# LightTier Agent（M4：浏览器界面 + 内置内核 + 主题）
 
 镜像分三段构建：`web`（node:22 构建 `frontend/dist`）、`agent`（rust:1.90 编译 `crates/agent`）、`runtime`（debian:bookworm-slim，复制两者并内置一个 EasyTier 内核版本）。运行期只保留 `ca-certificates`，`curl`/`unzip` 仅用于构建期下载内核，用完即在同一层清除。
 
@@ -33,13 +33,16 @@ rm -rf data
 - **RPC 门户（mirrored 网络）**：WSL 2 开启 mirrored 网络模式时，容器内进程绑定 `127.0.0.1` 会得到设备作用域的 `127.0.0.1%lo`，而容器内 `easytier-cli` 通过 `127.0.0.1:<port>` 连接会被拒绝（node/peers 一直 `stale`）。配置里把 `rpc_portal` 设为 `0.0.0.0:15888`（或用 NAT 网络模式）即可。
 - **文件系统权限**：DrvFs（`/mnt/d/...`）上的 bind mount 不支持 `chmod`（`Operation not permitted`），需要可执行位或属主的构建缓存应放在 ext4 命名卷中（例如 `-v lt-m3-target:/app/target`），不要把 `target/`、`node_modules/` 直接挂到 `/mnt/*`。
 
-## 浏览器界面（M3）
+## 浏览器界面（M3 / M4）
 
 镜像内置前端产物（`/opt/lighttier/web`，即 `LT_WEB_DIR`），agent 直接托管，无需额外的 nginx：
 
 - 打开 <http://localhost:17800>。未初始化时是初始化页：输入管理员密码，并填入设置令牌。
 - 设置令牌路径：容器内 `/data/state/setup-token`，宿主机即 `deploy/docker/data/state/setup-token`（`docker compose exec -T lighttier cat /data/state/setup-token`）。
 - 启动日志（含令牌生成与监听地址）：`data/logs/agent/agent.log`；内核日志：`data/logs/core/<config-id>/`；审计：`data/logs/agent/audit.log`。界面“日志”页对应 `GET /api/v1/logs`。
+- 主题（M4）：设置 → 主题中导入的 CSS 存到 `data/themes/<name>.css`，所有浏览器一致；内置主题仍在前端包内。导入大小上限 256 KiB、至少 3 个 `--theme-` 变量，`cream` / `dark` 为保留名。
+- 发布包不含演示数据：正式构建（`--mode pro`）会摇掉样例配置，`pnpm build` 末尾由 `scripts/check-release-bundle.mjs` 再校验一次，命中即构建失败。
+- 系统路由改写和默认网关修改不开放：NAS 上改错默认网关会断网；配置详情只展示 TOML 内声明的静态路由。
 - 前端按相对路径构建（`VITE_BASE_PATH=./`），直接访问 `http://<host>:17800/` 即可；路径以 `/api` 开头的请求走 API，其余 GET 在命中文件时返回静态资源，`Accept: text/html` 的未命中路径回落到 `index.html`。
 - 浏览器直连时若前端显示“无法连接”，先确认 `curl http://localhost:17800/api/v1/healthz` 正常，再检查浏览器是否被代理接管了 localhost。
 
@@ -138,6 +141,10 @@ chmod +x data/core/v2.6.4/easytier-core data/core/v2.6.4/easytier-cli
 | GET | `/api/v1/logs` | 日志文件清单（按写入方分组） |
 | GET | `/api/v1/logs/<name>?tail=N` | 日志尾部，`text/plain`（默认 tail 行数见 `DEFAULT_TAIL_LINES`） |
 | DELETE | `/api/v1/logs` | 就地清空 agent 与内核日志（`audit.log` 保留） |
+| GET | `/api/v1/themes` | 服务端主题清单（`name`/`size`/`modifiedAt`） |
+| GET | `/api/v1/themes/<name>` | 读取单个主题的完整 CSS |
+| POST | `/api/v1/themes` | 导入/覆盖主题 `{"name":"ocean","cssText":"..."}` |
+| DELETE | `/api/v1/themes/<name>` | 删除主题 |
 
 所有非 GET 请求需带匹配 Host 的 `Origin`（同源校验），例如：
 

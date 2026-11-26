@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\lt-repack-all.ps1
 
 ### Linux / fnOS（Web 管理端）
 
-独立服务端 `crates/agent`（自成一体的 Cargo 工程，不参与桌面构建）以 axum 托管同一套前端界面与 HTTP API，浏览器访问即可使用：配置增删改查、实例启停、运行监控、日志查看与内核包安装。Docker 部署、内置内核与完整接口说明见 [deploy/docker/README.md](deploy/docker/README.md)；镜像内置一个 EasyTier 内核版本，其余版本可在界面安装（按官方 SHA-256 校验）。主题、路由、系统服务、托盘与自动更新在 Web 版不可用；Windows 桌面与 Android 构建不受影响。
+独立服务端 `crates/agent`（自成一体的 Cargo 工程，不参与桌面构建）以 axum 托管同一套前端界面与 HTTP API，浏览器访问即可使用：配置增删改查、实例启停、运行监控、日志查看与内核包安装。Docker 部署、内置内核与完整接口说明见 [deploy/docker/README.md](deploy/docker/README.md)；镜像内置一个 EasyTier 内核版本，其余版本可在界面安装（按官方 SHA-256 校验）。主题（服务端存储，跨浏览器一致）、配置、监控、日志与内核包安装在 Web 版可用；系统路由改写、服务安装、托盘与自动更新不可用（NAS 上修改默认网关会断网）。Windows 桌面与 Android 构建不受影响。
 
 ### 打包经验与注意事项
 

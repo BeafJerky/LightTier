@@ -33,7 +33,7 @@ const metaResponse = (): Response =>
       agentVersion: '1.2.3',
       setupRequired: false,
       tunAvailable: true,
-      features: { routes: true, login: true },
+      features: { routes: false, themes: true, kernel: true, logs: true, login: true },
       coreVersions: []
     }),
     { status: 200, headers: { 'content-type': 'application/json' } }
@@ -95,7 +95,13 @@ describe('backend facade', () => {
 
     await expect(facade.initBackend()).resolves.toBe('agent')
     expect(facade.backend().kind).toBe('agent')
-    expect(facade.backendCapabilities()).toMatchObject({ kernel: true, logs: true, routes: false })
+    // 能力位来自 /meta：themes 曾硬编码为 false，现在随服务端声明为 true
+    expect(facade.backendCapabilities()).toMatchObject({
+      kernel: true,
+      logs: true,
+      themes: true,
+      routes: false
+    })
   })
 
   it('initBackend / resolveBackendMode 共用 memoized 探测，只打一次 /meta', async () => {

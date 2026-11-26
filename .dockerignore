@@ -11,6 +11,8 @@
 !.npmrc
 !frontend
 !frontend/**
+!scripts
+!scripts/check-release-bundle.mjs
 crates/agent/target
 crates/agent/.cargo-home
 frontend/node_modules

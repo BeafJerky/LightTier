@@ -1,8 +1,8 @@
 # Changelog
 
-## 2.14.0 (2026-11-26)
+## 2.14.1 (2026-11-26)
 
-> fnOS 应用包（M6）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发（默认走 `ghcr.1ms.run` 加速），升级保留数据。桌面与 Android 零改动。
+> fnOS 应用包（M6）与 agent 功能补全（M4）：lighttier-agent 以 fpk 形式安装到飞牛 NAS，向导里填管理员密码即可自动完成初始化；镜像经 GHCR 分发（默认走 `ghcr.1ms.run` 加速），升级保留数据。agent 补上服务端主题存储与错误码收口，正式包剔除演示数据。桌面与 Android 零改动。
 
 ### 新增
 
@@ -13,15 +13,22 @@
   - 升级保留 `${TRIM_PKGVAR}/data`，卸载仅在勾选时删除该目录；容器名、端口、镜像标签在构建期断言一致
 - `build.ps1`：版本号从 `package.json` 同步到 manifest 与镜像标签，统一 LF，调用 `fnpack build`，解包后校验 checksum、三处端口、JSON 合法性、TUN 回退行、setup 入口、图标尺寸，产物输出到 `deploy/fnos/out/`
 
+- agent 主题（M4）：`GET/POST /api/v1/themes`、`GET/DELETE /api/v1/themes/<name>`，CSS 存到 `data/themes/<name>.css`，跨浏览器一致；名称/大小/变量数在服务端校验，导入与删除写入审计（不含 CSS 内容）
+- 前端能力位改由 `/meta.features` 驱动，agent 不再维护第二份硬编码能力表；主题导入失败按服务端错误码显示精确文案（`invalid_theme` / `invalid_id` 等）
+- 正式包剔除演示数据：`--mode pro` 构建摇掉“东京中继节点”等样例配置，`pnpm build` 追加 `scripts/check-release-bundle.mjs` 守卫，命中即失败
+- agent 模式隐藏“Web 配置”入口与直达路由，配置列表不再回落到浏览器 Mock；错误码映射补齐 `invalid_toml`、`invalid_theme`、`conflict_hash`、`permission_denied` 等
+
 ### 修复
 
 - 飞牛安装阶段拉取 `ghcr.io` 镜像 TLS 握手超时（应用中心在生命周期钩子之前就会 `docker compose up`）：fpk 内 compose 默认改用 `ghcr.1ms.run` 加速地址，`-Image` 可切换官方或其他镜像源；三个源实测镜像 digest 一致
 - 飞牛安装钩子以包用户运行时无权访问 `/var/run/docker.sock`，向导里填写管理员密码会直接安装失败、`status` 也始终判定未运行：生命周期脚本改为 root 运行（`run-as: root`），并在本地已有镜像时跳过重复 `docker pull`，避免慢速链路上白等一轮
+- Docker 构建的 web 阶段缺少发布守卫脚本（`.dockerignore` 未放行、Dockerfile 未复制），`pnpm build` 直接报 `MODULE_NOT_FOUND`：补齐白名单与 `COPY scripts/check-release-bundle.mjs`，镜像内已确认不含演示数据
 
 ### 验证
 
-- agent：容器内 `cargo test` 171 项通过，`cargo fmt -- --check` 干净
-- 桌面与 Android：仅改版本号与 agent crate；未新增 Tauri 命令、权限或平台配置
+- agent：容器内 `cargo test` 177 项通过（含新增主题单元与 HTTP 用例），`cargo fmt -- --check` 干净
+- 前端：`pnpm ts:check`、`pnpm build`（含发布包演示数据守卫）与 `pnpm test`（75 文件 / 707 项）通过
+- 桌面与 Android：仅改版本号与共用前端；未新增 Tauri 命令、权限或平台配置，本机 release 构建产物已确认不含演示数据
 
 ## 2.13.0 (2026-11-26)
 

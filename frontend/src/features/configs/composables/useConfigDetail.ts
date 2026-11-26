@@ -24,8 +24,12 @@ interface UseConfigDetailOptions {
   t: (key: string) => string
 }
 
+// 演示数据只进开发 / 测试包；正式构建时整段样例被摇掉，仅保留最小占位
+const DEMO_DATA = import.meta.env.MODE !== 'pro'
+
 // 内置演示配置：浏览器 Mock 环境无 fileName 时展示，保证界面完整可用（按名称匹配，缺省回退首个）
 function getDemoConfig(name: string): EasyTierConfig {
+  if (!DEMO_DATA) return { instance_name: name } as EasyTierConfig
   const demos: Record<string, any> = {
     东京中继节点: {
       hostname: 'tokyo-relay-01',

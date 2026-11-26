@@ -101,6 +101,13 @@ export const createNativeBackend = (): Backend => ({
     cancelTask: () => unsupported('packages.cancelTask'),
     remove: () => unsupported('packages.remove')
   },
+  themes: {
+    // 桌面 / Android 的外部主题走 Tauri 文件系统（useExternalThemes），门面不转接
+    list: () => unsupported('themes.list'),
+    read: () => unsupported('themes.read'),
+    save: () => unsupported('themes.save'),
+    remove: () => unsupported('themes.remove')
+  },
   settings: {
     get: () => unsupported('settings.get'),
     put: () => unsupported('settings.put')

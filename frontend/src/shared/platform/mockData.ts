@@ -20,6 +20,12 @@ const MOCK_TOML_FILES_KEY = 'lighttier.mock.tomlFiles'
 const MOCK_TOML_CONTENT_KEY = 'lighttier.mock.tomlContent'
 const MOCK_WEB_CONFIGS_KEY = 'lighttier.mock.webConfigs'
 
+/**
+ * 演示数据只进开发 / 测试包。正式构建（`--mode pro`）由 Vite 静态替换后
+ * 整段样例被摇掉，发布产物里不再出现“东京中继节点”等测试配置。
+ */
+const DEMO_DATA = import.meta.env.MODE !== 'pro'
+
 const loadMockJson = <T>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key)
@@ -65,28 +71,31 @@ let mockPidCounter = 1000
 // 记录 pid 与启动参数：进程扫描需按 --config-server 的真实 URL 精确匹配
 const mockWebRunningMap = ref<Map<string, { pid: number; url: string }>>(new Map())
 let mockWebPidCounter = 2000
-const DEFAULT_MOCK_WEB_CONFIGS: FormWebData[] = [
-  {
-    configFileName: '自建中继',
-    host: '192.168.1.100',
-    port: 22020,
-    protocol: 'udp',
-    userName: 'relay-admin',
-    webStartMethod: 2,
-    webUrl: 'http://192.168.1.100:8080',
-    status: 'notRunning'
-  },
-  {
-    configFileName: '测试服务器',
-    host: '10.0.0.50',
-    port: 22020,
-    protocol: 'udp',
-    userName: 'test-user',
-    webStartMethod: 2,
-    webUrl: '',
-    status: 'notRunning'
-  }
-]
+const DEFAULT_MOCK_WEB_CONFIGS: FormWebData[] = DEMO_DATA
+  ? [
+      {
+        configFileName: '自建中继',
+        host: '192.168.1.100',
+        port: 22020,
+        protocol: 'udp',
+        userName: 'relay-admin',
+        webStartMethod: 2,
+        webUrl: 'http://192.168.1.100:8080',
+        status: 'notRunning'
+      },
+      {
+        configFileName: '测试服务器',
+        host: '10.0.0.50',
+        port: 22020,
+        protocol: 'udp',
+        userName: 'test-user',
+        webStartMethod: 2,
+        webUrl: '',
+        status: 'notRunning'
+      }
+    ]
+  : []
+
 const loadMockWebConfigs = (): FormWebData[] => {
   const loaded = loadMockJson<unknown>(MOCK_WEB_CONFIGS_KEY, null)
   return Array.isArray(loaded) ? (loaded as FormWebData[]) : [...DEFAULT_MOCK_WEB_CONFIGS]
@@ -111,16 +120,13 @@ const isTauriEnv = (): boolean => {
 }
 
 // ===== Mock 配置样例（浏览器预览用演示数据） =====
-const DEFAULT_MOCK_TOML_FILES: string[] = [
-  '东京中继节点.toml',
-  '新加坡出口.toml',
-  '家庭局域网.toml',
-  '办公室组网.toml',
-  '移动设备.toml'
-]
+const DEFAULT_MOCK_TOML_FILES: string[] = DEMO_DATA
+  ? ['东京中继节点.toml', '新加坡出口.toml', '家庭局域网.toml', '办公室组网.toml', '移动设备.toml']
+  : []
 
-const DEFAULT_MOCK_TOML_CONTENT: Record<string, string> = {
-  东京中继节点: `[network]
+const DEFAULT_MOCK_TOML_CONTENT: Record<string, string> = DEMO_DATA
+  ? {
+      东京中继节点: `[network]
 instance_name = "tokyo-relay"
 hostname = "tokyo-node-01"
 
@@ -135,7 +141,7 @@ routes = ["10.144.0.0/24"]
 [[peer]]
 uri = "tcp://sgp-relay.example.com:11000"
 `,
-  新加坡出口: `[network]
+      新加坡出口: `[network]
 instance_name = "sgp-exit"
 hostname = "sgp-gateway"
 
@@ -154,7 +160,7 @@ uri = "tcp://tokyo-relay.example.com:11000"
 [[peer]]
 uri = "tcp://home-node.example.com:11000"
 `,
-  家庭局域网: `[network]
+      家庭局域网: `[network]
 instance_name = "home-intranet"
 hostname = "home-server"
 
@@ -173,7 +179,7 @@ uri = "tcp://sgp-relay.example.com:11001"
 no_proxy = true
 no_drop_private = true
 `,
-  办公室组网: `[network]
+      办公室组网: `[network]
 instance_name = "office-net"
 hostname = "office-gateway"
 
@@ -194,7 +200,7 @@ uri = "tcp://mobile-dev.example.com:11005"
 [flags]
 latency_first = true
 `,
-  移动设备: `[network]
+      移动设备: `[network]
 instance_name = "mobile-dev"
 hostname = "iphone-14"
 
@@ -208,7 +214,8 @@ routes = ["10.0.0.0/8"]
 [[peer]]
 uri = "tcp://office-gateway.example.com:11003"
 `
-}
+    }
+  : {}
 
 // 优先使用上次会话持久化的数据（含恢复写入的新配置），无记录时回退演示数据
 const mockTomlFiles: string[] = loadMockTomlFiles()

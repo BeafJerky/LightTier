@@ -440,6 +440,7 @@ import { changeLocale } from '@/shared/i18n'
 import Icon from '@/shared/ui/Icon.vue'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useIslandStore } from '@/shared/store/island'
+import { backendMode } from '@/shared/platform/backend'
 import { useAgentSessionStore } from '@/shared/store/agentSession'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -573,6 +574,10 @@ const handleVisibilityChange = () => {
   hiddenAt = 0
 }
 
+// Web 配置依赖桌面端的本地 config-server 管理链路，agent 没有对应服务端能力：
+// 菜单与直达路由一并隐藏，避免展示由浏览器 Mock 伪造的列表。
+const webConfigSupported = backendMode() !== 'agent'
+
 // 底部导航：对应桌面侧边栏一级入口，顺序与命名保持两端一致
 const androidTabs = [
   { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
@@ -580,7 +585,7 @@ const androidTabs = [
   { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
   { path: '/new/web-config', labelKey: 'newLayout.webConfig', icon: 'web' },
   { path: '/new/settings', labelKey: 'newSettings.settings', icon: 'settings' }
-]
+].filter((tab) => webConfigSupported || tab.path !== '/new/web-config')
 const isTabActive = (path: string) =>
   path === '/new' ? route.path === '/new' : route.path === path || route.path.startsWith(path + '/')
 // 再次点击当前标签：回到页面顶部（Android 列表页惯用交互）
@@ -686,6 +691,7 @@ const goBack = () => {
 // 主菜单项从路由表派生：仅带 title 的项进菜单（subPage 二级页面自动排除）
 const menuItems = (newLayoutRouterMap[0]?.children || [])
   .filter((r) => r.meta?.title)
+  .filter((r) => webConfigSupported || r.path !== 'web-config')
   .map((r) => ({
     fullPath: r.path ? '/new/' + r.path : '/new',
     label: (r.meta!.titleKey as string) || (r.meta!.title as string),

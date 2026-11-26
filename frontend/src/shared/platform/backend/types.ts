@@ -133,6 +133,13 @@ export interface Backend {
     read(name: string, tail?: number): Promise<string>
     clear(): Promise<void>
   }
+  themes: {
+    /** 服务端存储的全部外部主题（名称 + 完整 CSS），用于列表与预览 */
+    list(): Promise<{ name: string; cssText: string }[]>
+    read(name: string): Promise<string>
+    save(name: string, cssText: string): Promise<void>
+    remove(name: string): Promise<void>
+  }
   packages: {
     list(): Promise<PackagesInfo>
     install(version: string): Promise<string>

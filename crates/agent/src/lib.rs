@@ -18,6 +18,8 @@ pub mod settings;
 pub mod settings_routes;
 pub mod storage;
 pub mod supervisor;
+pub mod theme_routes;
+pub mod themes;
 pub mod tun;
 
 use std::sync::Arc;

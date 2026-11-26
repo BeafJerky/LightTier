@@ -17,6 +17,14 @@ export const META_PROBE_PATH = '/api/v1/meta'
 /** 探测超时（毫秒）；导出以便单测锁定 3s 契约 */
 export const META_PROBE_TIMEOUT_MS = 3000
 
+/**
+ * 探测成功时保留的 `features` 快照：能力位只来自服务端一次真实响应，
+ * 前端不另写一份会在版本漂移后说谎的常量表。
+ */
+let probedFeatures: Record<string, unknown> | null = null
+
+export const agentFeatures = (): Record<string, unknown> | null => probedFeatures
+
 const isTauriRuntime = (): boolean => {
   try {
     return isTauri()
@@ -67,7 +75,10 @@ const probeAgent = async (): Promise<boolean> => {
       signal: AbortSignal.timeout(META_PROBE_TIMEOUT_MS)
     })
     if (!response.ok) return false
-    return isMetaPayload(await response.json())
+    const payload: unknown = await response.json()
+    if (!isMetaPayload(payload)) return false
+    probedFeatures = (payload as { features: Record<string, unknown> }).features
+    return true
   } catch {
     return false
   }

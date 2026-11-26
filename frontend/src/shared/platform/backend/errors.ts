@@ -18,8 +18,20 @@ const ERROR_KEYS: Record<string, string> = {
   core_missing: 'agentError.coreMissing',
   not_found: 'agentError.instanceNotFound',
   internal: 'agentError.internal',
-  // 配置 id 校验失败（名称含非法字符 / 保留名 / 过长）
+  // 配置 / 主题名称校验失败（含非法字符 / 保留名 / 过长）
   invalid_id: 'agentError.invalidId',
+  // 配置与设置校验（422）
+  invalid_toml: 'agentError.invalidToml',
+  invalid_settings: 'agentError.invalidSettings',
+  invalid_theme: 'agentError.invalidTheme',
+  // 冲突类（409）
+  conflict_hash: 'agentError.conflictHash',
+  config_exists: 'agentError.configExists',
+  already_initialized: 'agentError.alreadyInitialized',
+  // 同源校验与请求体形状（安全边界）
+  permission_denied: 'agentError.permissionDenied',
+  payload_too_large: 'agentError.payloadTooLarge',
+  bad_request: 'agentError.badRequest',
   // 内核包（Task 10）
   core_override_read_only: 'agentError.coreOverrideReadOnly',
   task_in_progress: 'agentError.taskInProgress',

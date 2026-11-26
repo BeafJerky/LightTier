@@ -29,6 +29,8 @@ use crate::settings::SettingsStore;
 use crate::settings_routes;
 use crate::storage;
 use crate::supervisor::Supervisor;
+use crate::theme_routes;
+use crate::themes::Themes;
 use crate::tun;
 
 #[derive(Clone)]
@@ -44,6 +46,7 @@ pub struct AppState {
     pub cli: Arc<CliQuery>,
     pub packages: Arc<Packages>,
     pub logs: Arc<Logs>,
+    pub themes: Arc<Themes>,
 }
 
 impl AppState {
@@ -59,6 +62,7 @@ impl AppState {
         logs: Arc<Logs>,
     ) -> Self {
         Self {
+            themes: Arc::new(Themes::new(&cfg.data_dir)),
             cfg,
             auth,
             configs,
@@ -166,6 +170,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // The literal `/logs` route is registered in the same table as the
         // wildcard below; axum prefers the exact match, so listing can never be
         // swallowed by `{*name}` (the `http_logs` tests pin this).
+        .route(
+            "/api/v1/themes",
+            get(theme_routes::list).post(theme_routes::save),
+        )
+        .route(
+            "/api/v1/themes/{name}",
+            get(theme_routes::get).delete(theme_routes::delete),
+        )
         .route(
             "/api/v1/logs",
             get(log_routes::list).delete(log_routes::clear),
@@ -353,11 +365,14 @@ async fn meta(State(state): State<Arc<AppState>>) -> Json<Meta> {
         features: Features {
             // Every capability the agent implements today. The web UI keys off
             // these flags, so they track reality instead of the roadmap.
+            // Route mutation stays off: the only desktop consumer is the
+            // exit-node flow, which rewrites the default gateway — explicitly
+            // forbidden on a NAS (a wrong gateway takes the box off the LAN).
             routes: false,
             services: false,
             metrics: false,
             tray: false,
-            themes: false,
+            themes: true,
             update: false,
             login: true,
             kernel: true,

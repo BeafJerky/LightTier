@@ -13,8 +13,10 @@ RUN npm i -g pnpm@9.12.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN pnpm install --frozen-lockfile
 COPY frontend ./frontend
-# Root script: vite build --config frontend/vite.config.ts --mode pro.
-# It only needs the frontend tree; no Tauri or Rust crates are involved.
+# Root script: vite build --config frontend/vite.config.ts --mode pro, then the
+# release-bundle guard. It only needs the frontend tree plus that one script;
+# no Tauri or Rust crates are involved.
+COPY scripts/check-release-bundle.mjs ./scripts/
 RUN pnpm build
 
 # ---- agent: build the Rust server -----------------------------------------

@@ -76,202 +76,209 @@ export function useMonitorQuery(options: UseMonitorQueryOptions) {
     }
   }
 
-  // --- Mock 同伴数据 ---
-  const mockPeers: Record<string, PeerInfo[]> = {
-    东京中继节点: [
-      {
-        cost: 'p2p',
-        hostname: 'sgp-relay',
-        id: 'node-001',
-        ipv4: '10.144.0.2/24',
-        lat_ms: '12',
-        loss_rate: '0',
-        nat_type: 'FullCone',
-        rx_bytes: '104857600',
-        tunnel_proto: 'tcp',
-        tx_bytes: '52428800',
-        version: '2.6.0',
-        delayColor: 'green'
-      },
-      {
-        cost: 'p2p',
-        hostname: 'home-router',
-        id: 'node-002',
-        ipv4: '10.144.0.10/24',
-        lat_ms: '45',
-        loss_rate: '0.5',
-        nat_type: 'Restricted',
-        rx_bytes: '20971520',
-        tunnel_proto: 'udp',
-        tx_bytes: '10485760',
-        version: '2.6.0',
-        delayColor: '#45b458'
-      },
-      {
-        cost: 'relay',
-        hostname: 'PublicServer_东京公网',
-        id: 'node-003',
-        ipv4: '172.16.0.1/24',
-        lat_ms: '3',
-        loss_rate: '0',
-        nat_type: 'OpenInternet',
-        rx_bytes: '524288000',
-        tunnel_proto: 'tcp',
-        tx_bytes: '262144000',
-        version: '2.6.0',
-        delayColor: 'green'
-      }
-    ],
-    新加坡出口: [
-      {
-        cost: 'p2p',
-        hostname: 'tokyo-relay',
-        id: 'node-101',
-        ipv4: '10.144.0.1/24',
-        lat_ms: '78',
-        loss_rate: '1.2',
-        nat_type: 'FullCone',
-        rx_bytes: '31457280',
-        tunnel_proto: 'tcp',
-        tx_bytes: '15728640',
-        version: '2.6.0',
-        delayColor: '#45b458'
-      },
-      {
-        cost: 'p2p',
-        hostname: 'mobile-dev',
-        id: 'node-102',
-        ipv4: '10.144.0.100/24',
-        lat_ms: '156',
-        loss_rate: '3.0',
-        nat_type: 'Symmetric',
-        rx_bytes: '5242880',
-        tunnel_proto: 'udp',
-        tx_bytes: '2621440',
-        version: '2.6.0',
-        delayColor: '#fdc44d'
-      }
-    ],
-    家庭局域网: [
-      {
-        cost: 'p2p',
-        hostname: 'tokyo-relay',
-        id: 'node-201',
-        ipv4: '10.144.0.1/24',
-        lat_ms: '35',
-        loss_rate: '0.1',
-        nat_type: 'Restricted',
-        rx_bytes: '83886080',
-        tunnel_proto: 'tcp',
-        tx_bytes: '41943040',
-        version: '2.6.0',
-        delayColor: '#45b458'
-      },
-      {
-        cost: 'Local',
-        hostname: 'localhost',
-        id: 'node-202',
-        ipv4: '127.0.0.1',
-        lat_ms: '0',
-        loss_rate: '0',
-        nat_type: 'Unknown',
-        rx_bytes: '0',
-        tunnel_proto: 'tcp',
-        tx_bytes: '0',
-        version: '2.6.0',
-        delayColor: 'green'
-      }
-    ],
-    办公室组网: [
-      {
-        cost: 'p2p',
-        hostname: 'home-router',
-        id: 'node-301',
-        ipv4: '10.144.0.10/24',
-        lat_ms: '22',
-        loss_rate: '0',
-        nat_type: 'FullCone',
-        rx_bytes: '167772160',
-        tunnel_proto: 'tcp',
-        tx_bytes: '83886080',
-        version: '2.6.0',
-        delayColor: 'green'
-      },
-      {
-        cost: 'relay',
-        hostname: 'PublicServer_办公室中继',
-        id: 'node-302',
-        ipv4: '192.168.1.1/24',
-        lat_ms: '8',
-        loss_rate: '0',
-        nat_type: 'OpenInternet',
-        rx_bytes: '1073741824',
-        tunnel_proto: 'tcp',
-        tx_bytes: '536870912',
-        version: '2.6.0',
-        delayColor: 'green'
-      }
-    ],
-    移动设备: [
-      {
-        cost: 'relay',
-        hostname: 'office-gw',
-        id: 'node-401',
-        ipv4: '10.10.0.1/16',
-        lat_ms: '89',
-        loss_rate: '2.5',
-        nat_type: 'PortRestricted',
-        rx_bytes: '1048576',
-        tunnel_proto: 'udp',
-        tx_bytes: '524288',
-        version: '2.6.0',
-        delayColor: '#45b458'
-      }
-    ]
-  }
+  // 演示数据只进开发 / 测试包；正式构建时整段样例被摇掉
+  const DEMO_DATA = import.meta.env.MODE !== 'pro'
 
-  const mockNodeInfo: Record<string, any> = {
-    东京中继节点: {
-      hostname: 'tokyo-node-01',
-      instance_name: '东京中继',
-      ipv4_addr: '10.144.0.1',
-      version: '2.6.0',
-      network_name: 'global-mesh',
-      stun_info: { udp_nat_type: 'FullCone' }
-    },
-    新加坡出口: {
-      hostname: 'sgp-gateway',
-      instance_name: '新加坡出口',
-      ipv4_addr: '10.144.0.2',
-      version: '2.6.0',
-      network_name: 'asia-backbone',
-      stun_info: { udp_nat_type: 'OpenInternet' }
-    },
-    家庭局域网: {
-      hostname: 'home-server',
-      instance_name: '家庭网络',
-      ipv4_addr: '10.144.0.10',
-      version: '2.6.0',
-      network_name: 'home-mesh',
-      stun_info: { udp_nat_type: 'Restricted' }
-    },
-    办公室组网: {
-      hostname: 'office-gateway',
-      instance_name: '办公室网关',
-      ipv4_addr: '10.144.0.20',
-      version: '2.6.0',
-      network_name: 'office-mesh',
-      stun_info: { udp_nat_type: 'FullCone' }
-    },
-    移动设备: {
-      hostname: 'iphone-14',
-      instance_name: '移动设备',
-      ipv4_addr: '10.144.0.100',
-      version: '2.6.0',
-      network_name: 'mobile-mesh',
-      stun_info: { udp_nat_type: 'PortRestricted' }
-    }
-  }
+  // --- Mock 同伴数据 ---
+  const mockPeers: Record<string, PeerInfo[]> = DEMO_DATA
+    ? {
+        东京中继节点: [
+          {
+            cost: 'p2p',
+            hostname: 'sgp-relay',
+            id: 'node-001',
+            ipv4: '10.144.0.2/24',
+            lat_ms: '12',
+            loss_rate: '0',
+            nat_type: 'FullCone',
+            rx_bytes: '104857600',
+            tunnel_proto: 'tcp',
+            tx_bytes: '52428800',
+            version: '2.6.0',
+            delayColor: 'green'
+          },
+          {
+            cost: 'p2p',
+            hostname: 'home-router',
+            id: 'node-002',
+            ipv4: '10.144.0.10/24',
+            lat_ms: '45',
+            loss_rate: '0.5',
+            nat_type: 'Restricted',
+            rx_bytes: '20971520',
+            tunnel_proto: 'udp',
+            tx_bytes: '10485760',
+            version: '2.6.0',
+            delayColor: '#45b458'
+          },
+          {
+            cost: 'relay',
+            hostname: 'PublicServer_东京公网',
+            id: 'node-003',
+            ipv4: '172.16.0.1/24',
+            lat_ms: '3',
+            loss_rate: '0',
+            nat_type: 'OpenInternet',
+            rx_bytes: '524288000',
+            tunnel_proto: 'tcp',
+            tx_bytes: '262144000',
+            version: '2.6.0',
+            delayColor: 'green'
+          }
+        ],
+        新加坡出口: [
+          {
+            cost: 'p2p',
+            hostname: 'tokyo-relay',
+            id: 'node-101',
+            ipv4: '10.144.0.1/24',
+            lat_ms: '78',
+            loss_rate: '1.2',
+            nat_type: 'FullCone',
+            rx_bytes: '31457280',
+            tunnel_proto: 'tcp',
+            tx_bytes: '15728640',
+            version: '2.6.0',
+            delayColor: '#45b458'
+          },
+          {
+            cost: 'p2p',
+            hostname: 'mobile-dev',
+            id: 'node-102',
+            ipv4: '10.144.0.100/24',
+            lat_ms: '156',
+            loss_rate: '3.0',
+            nat_type: 'Symmetric',
+            rx_bytes: '5242880',
+            tunnel_proto: 'udp',
+            tx_bytes: '2621440',
+            version: '2.6.0',
+            delayColor: '#fdc44d'
+          }
+        ],
+        家庭局域网: [
+          {
+            cost: 'p2p',
+            hostname: 'tokyo-relay',
+            id: 'node-201',
+            ipv4: '10.144.0.1/24',
+            lat_ms: '35',
+            loss_rate: '0.1',
+            nat_type: 'Restricted',
+            rx_bytes: '83886080',
+            tunnel_proto: 'tcp',
+            tx_bytes: '41943040',
+            version: '2.6.0',
+            delayColor: '#45b458'
+          },
+          {
+            cost: 'Local',
+            hostname: 'localhost',
+            id: 'node-202',
+            ipv4: '127.0.0.1',
+            lat_ms: '0',
+            loss_rate: '0',
+            nat_type: 'Unknown',
+            rx_bytes: '0',
+            tunnel_proto: 'tcp',
+            tx_bytes: '0',
+            version: '2.6.0',
+            delayColor: 'green'
+          }
+        ],
+        办公室组网: [
+          {
+            cost: 'p2p',
+            hostname: 'home-router',
+            id: 'node-301',
+            ipv4: '10.144.0.10/24',
+            lat_ms: '22',
+            loss_rate: '0',
+            nat_type: 'FullCone',
+            rx_bytes: '167772160',
+            tunnel_proto: 'tcp',
+            tx_bytes: '83886080',
+            version: '2.6.0',
+            delayColor: 'green'
+          },
+          {
+            cost: 'relay',
+            hostname: 'PublicServer_办公室中继',
+            id: 'node-302',
+            ipv4: '192.168.1.1/24',
+            lat_ms: '8',
+            loss_rate: '0',
+            nat_type: 'OpenInternet',
+            rx_bytes: '1073741824',
+            tunnel_proto: 'tcp',
+            tx_bytes: '536870912',
+            version: '2.6.0',
+            delayColor: 'green'
+          }
+        ],
+        移动设备: [
+          {
+            cost: 'relay',
+            hostname: 'office-gw',
+            id: 'node-401',
+            ipv4: '10.10.0.1/16',
+            lat_ms: '89',
+            loss_rate: '2.5',
+            nat_type: 'PortRestricted',
+            rx_bytes: '1048576',
+            tunnel_proto: 'udp',
+            tx_bytes: '524288',
+            version: '2.6.0',
+            delayColor: '#45b458'
+          }
+        ]
+      }
+    : {}
+
+  const mockNodeInfo: Record<string, any> = DEMO_DATA
+    ? {
+        东京中继节点: {
+          hostname: 'tokyo-node-01',
+          instance_name: '东京中继',
+          ipv4_addr: '10.144.0.1',
+          version: '2.6.0',
+          network_name: 'global-mesh',
+          stun_info: { udp_nat_type: 'FullCone' }
+        },
+        新加坡出口: {
+          hostname: 'sgp-gateway',
+          instance_name: '新加坡出口',
+          ipv4_addr: '10.144.0.2',
+          version: '2.6.0',
+          network_name: 'asia-backbone',
+          stun_info: { udp_nat_type: 'OpenInternet' }
+        },
+        家庭局域网: {
+          hostname: 'home-server',
+          instance_name: '家庭网络',
+          ipv4_addr: '10.144.0.10',
+          version: '2.6.0',
+          network_name: 'home-mesh',
+          stun_info: { udp_nat_type: 'Restricted' }
+        },
+        办公室组网: {
+          hostname: 'office-gateway',
+          instance_name: '办公室网关',
+          ipv4_addr: '10.144.0.20',
+          version: '2.6.0',
+          network_name: 'office-mesh',
+          stun_info: { udp_nat_type: 'FullCone' }
+        },
+        移动设备: {
+          hostname: 'iphone-14',
+          instance_name: '移动设备',
+          ipv4_addr: '10.144.0.100',
+          version: '2.6.0',
+          network_name: 'mobile-mesh',
+          stun_info: { udp_nat_type: 'PortRestricted' }
+        }
+      }
+    : {}
 
   // 解析 CLI 返回的人类可读字节字符串，如 "1.26 kB" → 字节数
   const parseHumanBytes = (val: string | number | null | undefined): number => {

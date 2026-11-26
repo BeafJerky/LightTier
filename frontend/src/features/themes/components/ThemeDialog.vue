@@ -179,6 +179,7 @@ import { useI18n } from 'vue-i18n'
 import { isTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readTextFile } from '@tauri-apps/plugin-fs'
+import { agentCodeI18n } from '@/shared/platform/backend'
 import { systemDefaultTheme, useThemeLoader } from '@/shared/composables/useThemeLoader'
 import {
   downloadThemeGuide,
@@ -290,6 +291,11 @@ const importTheme = async (fileName: string, cssText: string) => {
   try {
     const result = await importThemeFile(fileName, cssText)
     if (!result.ok) {
+      const mapped = result.code ? agentCodeI18n(result.code) : null
+      if (mapped) {
+        toast.error(t(mapped.key, mapped.params ?? {}))
+        return
+      }
       const reasonText = {
         'invalid-name': t('newTheme.importInvalidName'),
         'reserved-name': t('newTheme.importReservedName'),
