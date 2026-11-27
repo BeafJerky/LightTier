@@ -44,6 +44,15 @@
   gap: 10px;
 }
 
+/* 高级选项：桌面对话框 3 列开关网格（文本项由 .ed-form-field-wide 占整行）；
+   Android 内联页保持自己的单列行式布局，不参与该规则。 */
+@media (min-width: 641px) {
+  .cd-dialog:not(.cd-dialog-inline) .ed-adv-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+}
+
 .ed-form-field {
   display: flex;
   flex-direction: column;
@@ -56,6 +65,11 @@
   letter-spacing: 0.5px;
   color: var(--theme-text-secondary, #7a6e5e);
   text-transform: uppercase;
+}
+
+/* 专有名词（WireGuard 等）保留原始大小写 */
+.ed-label-preserve {
+  text-transform: none;
 }
 
 .ed-form-switch-wrap {
@@ -81,6 +95,41 @@
 .ed-tag-input-short {
   width: 120px;
   flex-shrink: 0;
+}
+
+.ed-proto-select {
+  width: 92px;
+  flex-shrink: 0;
+}
+
+.ed-port-arrow {
+  color: var(--theme-text-muted, #c8bdb2);
+  flex-shrink: 0;
+}
+
+/* 窄屏端口转发：协议与删除同一行，绑定与目标地址各占整行 */
+@media (width <= 640px) {
+  .ed-port-row {
+    flex-wrap: wrap;
+  }
+
+  .ed-port-row .ed-proto-select {
+    order: 0;
+  }
+
+  .ed-port-row .ed-tag-input {
+    flex: 1 1 100%;
+    order: 2;
+  }
+
+  .ed-port-row .ed-port-arrow {
+    display: none;
+  }
+
+  .ed-port-row > :last-child {
+    margin-left: auto;
+    order: 1;
+  }
 }
 
 .ed-tag-add {

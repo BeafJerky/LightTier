@@ -212,7 +212,7 @@ describe('configFormUtil', () => {
     expect(parsed.lighttier).toEqual({ exit_route_enabled: true })
   })
 
-  it('未建模的表/字段透传：vpn_portal_config / managed_credentials', () => {
+  it('vpn_portal_config 进入表单模型，managed_credentials 继续原样透传', () => {
     const content = [
       'hostname = "h"',
       '[[managed_credentials]]',
@@ -225,9 +225,10 @@ describe('configFormUtil', () => {
       'virtual_ip = "10.14.14.2"'
     ].join('\n')
     const m = parseConfigFormModel(content)!
-    expect(m.passthrough.vpn_portal_config).toMatchObject({
+    expect(m.passthrough.vpn_portal_config).toBeUndefined()
+    expect(m.vpnPortal).toMatchObject({
       enabled: true,
-      wireguard_listen: '0.0.0.0:11013'
+      wireguardListen: '0.0.0.0:11013'
     })
     const parsed = roundTrip(content)
     expect(parsed.vpn_portal_config).toMatchObject({
@@ -263,6 +264,258 @@ describe('configFormUtil', () => {
       model.proxyExtras = []
     })
     expect(emptied.proxy_network).toBeUndefined()
+  })
+
+  it('虚拟 IPv4、监听映射与端口转发：解析、写回与空值剔除', () => {
+    const content = [
+      'ipv4 = "10.126.126.9"',
+      'mapped_listeners = ["tcp://public.example.com:11010"]',
+      '[[port_forward]]',
+      'proto = "udp"',
+      'bind_addr = "0.0.0.0:12345"',
+      'dst_addr = "10.126.126.1:23456"'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.formData.ipv4).toBe('10.126.126.9')
+    expect(m.mappedListeners).toEqual(['tcp://public.example.com:11010'])
+    expect(m.portForwards).toEqual([
+      { proto: 'udp', bind_addr: '0.0.0.0:12345', dst_addr: '10.126.126.1:23456' }
+    ])
+    // 已建模字段不得再进入 passthrough（避免双写）
+    expect(m.passthrough.mapped_listeners).toBeUndefined()
+    expect(m.passthrough.port_forward).toBeUndefined()
+
+    const parsed = roundTrip(content)
+    expect(parsed.ipv4).toBe('10.126.126.9')
+    expect(parsed.mapped_listeners).toEqual(['tcp://public.example.com:11010'])
+    expect(parsed.port_forward).toEqual([
+      { proto: 'udp', bind_addr: '0.0.0.0:12345', dst_addr: '10.126.126.1:23456' }
+    ])
+
+    const emptied = roundTrip(content, (model) => {
+      model.formData.ipv4 = ''
+      model.mappedListeners = ['', ' ']
+      model.portForwards = [{ proto: 'tcp', bind_addr: '', dst_addr: '10.0.0.1:80' }]
+    })
+    expect('ipv4' in emptied).toBe(false)
+    expect(emptied.mapped_listeners).toBeUndefined()
+    expect(emptied.port_forward).toBeUndefined()
+  })
+
+  it('WireGuard 门户 v2.7：解析、分组拆分与停用保留', () => {
+    const content = [
+      '[vpn_portal_config]',
+      'enabled = true',
+      'wireguard_listen = "0.0.0.0:51820"',
+      'wireguard_private_key = "KEY"',
+      '[[vpn_portal_config.clients]]',
+      'name = "phone"',
+      'virtual_ip = "10.44.0.2/24"',
+      'groups = ["admin", "ops"]'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.vpnPortal.enabled).toBe(true)
+    expect(m.vpnPortal.legacy).toBe(false)
+    expect(m.vpnPortal.wireguardListen).toBe('0.0.0.0:51820')
+    expect(m.vpnPortal.privateKey).toBe('KEY')
+    expect(m.vpnPortal.clients).toEqual([
+      { name: 'phone', virtual_ip: '10.44.0.2/24', groups: 'admin ops' }
+    ])
+    expect(m.passthrough.vpn_portal_config).toBeUndefined()
+
+    const parsed = roundTrip(content)
+    expect(parsed.vpn_portal_config).toEqual({
+      enabled: true,
+      wireguard_listen: '0.0.0.0:51820',
+      wireguard_private_key: 'KEY',
+      clients: [{ name: 'phone', virtual_ip: '10.44.0.2/24', groups: ['admin', 'ops'] }]
+    })
+
+    const disabled = roundTrip(content, (model) => {
+      model.vpnPortal.enabled = false
+    })
+    expect(disabled.vpn_portal_config.enabled).toBe(false)
+    expect(disabled.vpn_portal_config.clients).toHaveLength(1)
+  })
+
+  it('WireGuard 门户旧结构：client_cidr 保留，停用移除整表', () => {
+    const content = [
+      '[vpn_portal_config]',
+      'client_cidr = "10.44.0.0/16"',
+      'wireguard_listen = "0.0.0.0:51820"'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.vpnPortal.legacy).toBe(true)
+    expect(m.vpnPortal.enabled).toBe(true)
+    expect(m.vpnPortal.legacyClientCidr).toBe('10.44.0.0/16')
+
+    const parsed = roundTrip(content)
+    expect(parsed.vpn_portal_config).toEqual({
+      client_cidr: '10.44.0.0/16',
+      wireguard_listen: '0.0.0.0:51820'
+    })
+
+    const disabled = roundTrip(content, (model) => {
+      model.vpnPortal.enabled = false
+    })
+    expect(disabled.vpn_portal_config).toBeUndefined()
+  })
+
+  it('ACL：链/规则/组解析与写回，枚举支持数字与字符串，停用移除整表', () => {
+    const content = [
+      '[acl.acl_v1]',
+      '[[acl.acl_v1.chains]]',
+      'name = "in"',
+      'chain_type = 1',
+      'description = "inbound"',
+      'enabled = true',
+      'default_action = 2',
+      '[[acl.acl_v1.chains.rules]]',
+      'name = "allow-ssh"',
+      'enabled = true',
+      'protocol = 1',
+      'ports = ["22"]',
+      'source_ips = ["10.0.0.0/8"]',
+      'action = 1',
+      'stateful = true',
+      '[acl.acl_v1.group]',
+      'members = ["peer-key"]',
+      '[[acl.acl_v1.group.declares]]',
+      'group_name = "admin"',
+      'group_secret = "secret"'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.acl.enabled).toBe(true)
+    expect(m.acl.chains).toHaveLength(1)
+    expect(m.acl.chains[0]).toMatchObject({
+      name: 'in',
+      chainType: 1,
+      defaultAction: 2
+    })
+    expect(m.acl.chains[0].rules[0]).toMatchObject({
+      name: 'allow-ssh',
+      protocol: 1,
+      ports: '22',
+      sourceIps: '10.0.0.0/8',
+      action: 1,
+      stateful: true
+    })
+    expect(m.acl.declares).toEqual([{ groupName: 'admin', groupSecret: 'secret' }])
+    expect(m.acl.members).toBe('peer-key')
+
+    const parsed = roundTrip(content)
+    expect(parsed.acl.acl_v1.chains[0]).toMatchObject({
+      name: 'in',
+      chain_type: 1,
+      default_action: 2
+    })
+    expect(parsed.acl.acl_v1.chains[0].rules[0]).toMatchObject({
+      name: 'allow-ssh',
+      description: '',
+      priority: 0,
+      protocol: 1,
+      ports: ['22'],
+      source_ips: ['10.0.0.0/8'],
+      destination_ips: [],
+      source_ports: [],
+      action: 1,
+      rate_limit: 0,
+      burst_limit: 0,
+      stateful: true,
+      source_groups: [],
+      destination_groups: []
+    })
+    expect(parsed.acl.acl_v1.group).toMatchObject({
+      declares: [{ group_name: 'admin', group_secret: 'secret' }],
+      members: ['peer-key']
+    })
+
+    const disabled = roundTrip(content, (model) => {
+      model.acl.enabled = false
+    })
+    expect(disabled.acl).toBeUndefined()
+  })
+
+  it('ACL 字符串枚举：TCP/Allow/Inbound 解析为数字码', () => {
+    const content = [
+      '[acl.acl_v1]',
+      '[[acl.acl_v1.chains]]',
+      'name = "in"',
+      'chain_type = "Inbound"',
+      'default_action = "Drop"',
+      '[[acl.acl_v1.chains.rules]]',
+      'name = "r"',
+      'protocol = "TCP"',
+      'action = "Allow"'
+    ].join('\n')
+    const m = parseConfigFormModel(content)!
+    expect(m.acl.chains[0].chainType).toBe(1)
+    expect(m.acl.chains[0].defaultAction).toBe(2)
+    expect(m.acl.chains[0].rules[0].protocol).toBe(1)
+    expect(m.acl.chains[0].rules[0].action).toBe(1)
+  })
+
+  it('ACL 空链也写 rules 与空数组：满足 v2.4.5 的必填字段', () => {
+    const model = emptyFormModel()
+    model.acl = {
+      enabled: true,
+      chains: [
+        {
+          name: 'inbound',
+          chainType: 1,
+          description: '',
+          enabled: true,
+          defaultAction: 2,
+          rules: [
+            {
+              name: 'r',
+              description: '',
+              priority: '0',
+              enabled: true,
+              protocol: 5,
+              ports: '',
+              sourceIps: '',
+              destinationIps: '',
+              sourcePorts: '',
+              action: 1,
+              rateLimit: '',
+              burstLimit: '',
+              stateful: false,
+              sourceGroups: '',
+              destinationGroups: ''
+            }
+          ]
+        }
+      ],
+      declares: [],
+      members: ''
+    }
+    const { toml: built } = buildConfigFormModel(model)
+    const parsed = toml.parse(built) as any
+    expect(parsed.acl.acl_v1.chains[0].rules[0]).toMatchObject({
+      description: '',
+      destination_ips: [],
+      source_ports: [],
+      source_groups: [],
+      destination_groups: [],
+      rate_limit: 0,
+      burst_limit: 0
+    })
+    expect(parsed.acl.acl_v1.chains[0].rules).toHaveLength(1)
+  })
+
+  it('数值 flags：mtu / instance_recv_bps_limit 字符串输入落盘为数字', () => {
+    const model = emptyFormModel()
+    model.formData.flags = {
+      mtu: '1300',
+      instance_recv_bps_limit: '1000000',
+      dev_name: 'et0'
+    }
+    const { toml: built } = buildConfigFormModel(model)
+    const parsed = toml.parse(built) as any
+    expect(parsed.flags.mtu).toBe(1300)
+    expect(parsed.flags.instance_recv_bps_limit).toBe(1000000)
+    expect(parsed.flags.dev_name).toBe('et0')
   })
 
   it('公网 IPv6 顶层字段（v2.6.2+）解析与写回', () => {

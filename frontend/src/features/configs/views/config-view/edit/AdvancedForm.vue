@@ -4,9 +4,13 @@
     <summary class="ed-form-section-title ed-adv-summary"
       >✦ {{ t('newEdit.advancedSection') }}</summary
     >
-    <div class="ed-form-grid">
+    <div class="ed-form-grid ed-adv-grid">
       <div
-        class="ed-form-field ed-form-field--switch"
+        class="ed-form-field"
+        :class="{
+          'ed-form-field--switch': f.type !== 'text',
+          'ed-form-field-wide': f.type === 'text'
+        }"
         v-for="f in visibleAdvancedFlagDefs"
         :key="f.key"
       >
@@ -25,6 +29,15 @@
           size="sm"
           :aria-label="t(f.labelKey)"
           @update:model-value="setAdvancedSelect(f, $event)"
+        />
+        <LtInput
+          v-else-if="f.type === 'text'"
+          :model-value="flagText(f)"
+          variant="outline"
+          :inputmode="f.numeric ? 'numeric' : undefined"
+          :aria-label="t(f.labelKey)"
+          :placeholder="f.key"
+          @update:model-value="setFlagText(f, $event)"
         />
         <div v-else class="ed-form-switch-wrap">
           <LtSwitch
@@ -53,7 +66,7 @@
           />
         </div>
       </div>
-      <div class="ed-form-field" v-for="f in visibleTopTextDefs" :key="f.key">
+      <div class="ed-form-field ed-form-field-wide" v-for="f in visibleTopTextDefs" :key="f.key">
         <label
           class="ed-form-label"
           :for="fieldId(f.key)"
@@ -182,6 +195,8 @@ const {
   formStunServers,
   isAdvancedFlagOn,
   toggleAdvancedFlag,
+  flagText,
+  setFlagText,
   visibleSelectOptions,
   setAdvancedSelect,
   toggleTopSwitch,

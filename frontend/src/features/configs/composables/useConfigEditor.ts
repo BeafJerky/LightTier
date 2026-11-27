@@ -22,10 +22,15 @@ import { isWindows } from '@/shared/platform/platformUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import {
   buildConfigFormModel,
+  emptyAclForm,
   emptyDnsForm,
+  emptyVpnPortalForm,
   parseConfigFormModel,
+  type AclForm,
   type ConfigFormModel,
-  type DnsForm
+  type DnsForm,
+  type PortForwardForm,
+  type VpnPortalForm
 } from '@/features/configs/lib/configFormUtil'
 import {
   CONFIG_TEMPLATES,
@@ -148,6 +153,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   // 子网代理：每行为 `<cidr>` 或 `<cidr>-><mapped_cidr>`；extras 保留 allow 等字段
   const formProxies = ref<string[]>([])
   const formProxyExtras = ref<Record<string, any>[]>([])
+  const formMappedListeners = ref<string[]>([])
+  const formPortForwards = ref<PortForwardForm[]>([])
   const formRoutes = ref<string[]>([])
   const formExitNodes = ref<string[]>([])
   const formFlagsKeys = ref<string[]>([])
@@ -160,6 +167,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   const formDhcpv6Enabled = ref(false)
   const formDhcpv6Cidr = ref('')
   const formDns = ref<DnsForm>(emptyDnsForm())
+  const formVpnPortal = ref<VpnPortalForm>(emptyVpnPortalForm())
+  const formAcl = ref<AclForm>(emptyAclForm())
 
   // ===== 未保存修改检测 =====
   // 表单模式以内容快照比较（避免逐事件接线）；代码模式直接比较原文；名称变化同样视为修改
@@ -173,6 +182,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       peerExtras: formPeerExtras.value,
       proxies: formProxies.value,
       proxyExtras: formProxyExtras.value,
+      mappedListeners: formMappedListeners.value,
+      portForwards: formPortForwards.value,
       routes: formRoutes.value,
       exitNodes: formExitNodes.value,
       flagKeys: formFlagsKeys.value,
@@ -183,6 +194,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       dhcpv6Enabled: formDhcpv6Enabled.value,
       dhcpv6Cidr: formDhcpv6Cidr.value,
       dns: formDns.value,
+      vpnPortal: formVpnPortal.value,
+      acl: formAcl.value,
       secretDisplays: secretDisplays.value
     })
 
@@ -293,6 +306,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formPeerExtras.value = model.peerExtras.map((e) => ({ ...e }))
     formProxies.value = [...model.proxies]
     formProxyExtras.value = model.proxyExtras.map((e) => ({ ...e }))
+    formMappedListeners.value = [...model.mappedListeners]
+    formPortForwards.value = model.portForwards.map((row) => ({ ...row }))
     formRoutes.value = [...model.routes]
     formExitNodes.value = [...model.exitNodes]
     formFlagsKeys.value = [...model.flagsKeys]
@@ -303,6 +318,19 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formDhcpv6Enabled.value = model.dhcpv6Enabled
     formDhcpv6Cidr.value = model.dhcpv6Cidr
     formDns.value = model.dns
+    formVpnPortal.value = {
+      ...model.vpnPortal,
+      legacy: model.vpnPortal.legacy || store.coreCaps?.vpnPortalFormat === 'legacy',
+      clients: model.vpnPortal.clients.map((client) => ({ ...client }))
+    }
+    formAcl.value = {
+      ...model.acl,
+      chains: model.acl.chains.map((chain) => ({
+        ...chain,
+        rules: chain.rules.map((rule) => ({ ...rule }))
+      })),
+      declares: model.acl.declares.map((item) => ({ ...item }))
+    }
     return true
   }
 
@@ -319,6 +347,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     peerExtras: formPeerExtras.value,
     proxies: formProxies.value,
     proxyExtras: formProxyExtras.value,
+    mappedListeners: formMappedListeners.value,
+    portForwards: formPortForwards.value,
     routes: formRoutes.value,
     exitNodes: formExitNodes.value,
     flagsKeys: formFlagsKeys.value,
@@ -329,6 +359,11 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     dhcpv6Enabled: formDhcpv6Enabled.value,
     dhcpv6Cidr: formDhcpv6Cidr.value,
     dns: formDns.value,
+    vpnPortal: {
+      ...formVpnPortal.value,
+      legacy: formVpnPortal.value.legacy || store.coreCaps?.vpnPortalFormat === 'legacy'
+    },
+    acl: formAcl.value,
     lockedFlags: formLockedFlags.value,
     lockedTopLevel: formLockedTop.value
   })
@@ -366,6 +401,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   const dnsSupported = computed(
     () => isCoreFeatureSupported('magicDns', store.coreCaps) && !lockedTopKeys.value.has('dns')
   )
+  // WireGuard 门户新旧结构由内核能力判定；未知版本按新结构展示
+  const vpnPortalFormat = computed(() => store.coreCaps?.vpnPortalFormat ?? 'v2.7')
   // 下拉选项按内核功能过滤（如 LZO 仅 v2.7.1+）
   const visibleSelectOptions = (f: AdvancedFieldDef) =>
     (f.options ?? []).filter((o) => !o.feature || isCoreFeatureSupported(o.feature, store.coreCaps))
@@ -472,6 +509,19 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   const setAdvancedSelect = (f: AdvancedFieldDef, value: string | number | null) => {
     if (!formData.value.flags) formData.value.flags = {}
     const text = typeof value === 'string' ? value : ''
+    if (text) formData.value.flags[f.key] = text
+    else delete formData.value.flags[f.key]
+  }
+
+  // 高级文本 flags（dev_name / mtu / 限速 / 网络白名单）：空值不落盘；数值型仅保留数字
+  const flagText = (f: AdvancedFieldDef): string => {
+    const value = formData.value.flags?.[f.key]
+    return value === undefined || value === null ? '' : String(value)
+  }
+  const setFlagText = (f: AdvancedFieldDef, value: string | number | null) => {
+    if (!formData.value.flags) formData.value.flags = {}
+    let text = value === undefined || value === null ? '' : String(value).trim()
+    if (text && f.numeric) text = text.replace(/\D/g, '')
     if (text) formData.value.flags[f.key] = text
     else delete formData.value.flags[f.key]
   }
@@ -820,6 +870,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formListeners,
     formPeers,
     formProxies,
+    formMappedListeners,
+    formPortForwards,
     formRoutes,
     formExitNodes,
     formFlagsKeys,
@@ -830,6 +882,9 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formDhcpv6Enabled,
     formDhcpv6Cidr,
     formDns,
+    formVpnPortal,
+    formAcl,
+    vpnPortalFormat,
     visibleAdvancedFlagDefs,
     visibleTopSwitchDefs,
     visibleTopTextDefs,
@@ -859,6 +914,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     removeProxy,
     isAdvancedFlagOn,
     toggleAdvancedFlag,
+    flagText,
+    setFlagText,
     toggleTopSwitch,
     onSecurityInput,
     pickCredentialFile,

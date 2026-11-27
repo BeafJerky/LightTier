@@ -98,7 +98,6 @@ interface Flags {
   enable_relay_foreign_network_kcp?: boolean
   enable_relay_foreign_network_quic?: boolean
   tld_dns_zone?: string
-  ipv6_listener: string
 }
 
 /** 安全模式配置（顶层 [secure_mode] 表，EasyTier Core v2.6.4+） */

@@ -8,10 +8,17 @@ import {
   compareCoreVersion,
   isCoreFlagSupported,
   isCoreFeatureSupported,
+  isCoreTopLevelFieldSupported,
   parseCoreVersion,
   parseVersionTuple,
   resolveCoreCapabilities
 } from '@/entities/kernel/kernelCompatUtil'
+import {
+  CORE_FLAG_ADDITIONS,
+  CORE_FLAG_BASELINE,
+  CORE_TOP_LEVEL_FIELD_BASELINE,
+  type CoreFeature
+} from '@/entities/kernel/kernelCompat'
 
 describe('kernelCompatUtil / 版本解析', () => {
   it('解析 CLI 原始输出与纯版本号', () => {
@@ -122,6 +129,167 @@ describe('kernelCompatUtil / 能力推导', () => {
   it('未知版本下功能判断宽松放行（显示字段，不隐藏）', () => {
     expect(isCoreFeatureSupported('secureMode', null)).toBe(true)
     expect(isCoreFlagSupported('anything', null)).toBe(true)
+  })
+})
+
+describe('kernelCompatUtil / 版本可见性矩阵（官方 2.7.1 表单对齐）', () => {
+  const VERSIONS = ['v2.4.5', 'v2.5.0', 'v2.6.4', 'v2.7.1'] as const
+  type Expected = readonly [boolean, boolean, boolean, boolean]
+  const capsAt = (index: number) => resolveCoreCapabilities(VERSIONS[index] as string)!
+
+  it('顶层字段：基线全放行，新增/移除按版本', () => {
+    const matrix: Record<string, Expected> = {
+      // 基线（官方 2.7.1 表单里的 IPv4、监听映射、端口转发、ACL、SOCKS5 服务端等）
+      ipv4: [true, true, true, true],
+      ipv6: [true, true, true, true],
+      dhcp: [true, true, true, true], // CIDR 形态另由 dhcpCidr 门控
+      hostname: [true, true, true, true],
+      listeners: [true, true, true, true],
+      mapped_listeners: [true, true, true, true],
+      peer: [true, true, true, true],
+      proxy_network: [true, true, true, true],
+      routes: [true, true, true, true],
+      exit_nodes: [true, true, true, true],
+      port_forward: [true, true, true, true],
+      socks5_proxy: [true, true, true, true],
+      acl: [true, true, true, true],
+      tcp_whitelist: [true, true, true, true],
+      udp_whitelist: [true, true, true, true],
+      stun_servers: [true, true, true, true],
+      stun_servers_v6: [true, true, true, true],
+      vpn_portal_config: [true, true, true, true], // 新旧结构由 vpnPortalFormat 判定
+      // 引入版本
+      secure_mode: [false, false, true, true],
+      credential_file: [false, false, true, true],
+      ipv6_public_addr_provider: [false, false, true, true],
+      ipv6_public_addr_auto: [false, false, true, true],
+      ipv6_public_addr_prefix: [false, false, true, true],
+      source: [false, false, true, true],
+      managed_credentials: [false, false, false, true],
+      tcp_stun_servers: [false, false, false, true],
+      dns: [false, false, false, true],
+      dhcpv6: [false, false, false, true],
+      // 移除版本
+      rpc_portal_whitelist: [true, false, false, false]
+    }
+    for (const [field, expected] of Object.entries(matrix)) {
+      expected.forEach((shouldSupport, index) => {
+        expect(
+          isCoreTopLevelFieldSupported(field, capsAt(index)),
+          `${field} @ ${VERSIONS[index]}`
+        ).toBe(shouldSupport)
+      })
+    }
+  })
+
+  it('功能能力：安全模式 / peer_public_key / v2.7.x 新特性', () => {
+    const matrix: ReadonlyArray<readonly [CoreFeature, Expected]> = [
+      ['secureMode', [false, false, true, true]],
+      ['peerPublicKey', [false, false, true, true]],
+      ['ipv6PublicAddr', [false, false, true, true]],
+      ['configSource', [false, false, true, true]],
+      ['tcpStunServers', [false, false, false, true]],
+      ['managedCredentials', [false, false, false, true]],
+      ['vpnPortalClients', [false, false, false, true]],
+      ['dhcpCidr', [false, false, false, true]],
+      ['magicDns', [false, false, false, true]],
+      ['dhcpv6', [false, false, false, true]],
+      ['udpFec', [false, false, false, true]],
+      ['compressLzo', [false, false, false, true]],
+      ['aclSetCli', [false, false, false, true]]
+    ]
+    for (const [feature, expected] of matrix) {
+      expected.forEach((shouldSupport, index) => {
+        expect(
+          isCoreFeatureSupported(feature, capsAt(index)),
+          `${feature} @ ${VERSIONS[index]}`
+        ).toBe(shouldSupport)
+      })
+    }
+  })
+
+  it('flags：基线全放行，新增项按版本', () => {
+    const matrix: Record<string, Expected> = {
+      relay_network_whitelist: [true, true, true, true],
+      dev_name: [true, true, true, true],
+      mtu: [true, true, true, true],
+      accept_dns: [true, true, true, true],
+      bind_device: [true, true, true, true],
+      enable_encryption: [true, true, true, true],
+      disable_sym_hole_punching: [true, true, true, true],
+      p2p_only: [false, true, true, true],
+      disable_tcp_hole_punching: [false, true, true, true],
+      lazy_p2p: [false, false, true, true],
+      need_p2p: [false, false, true, true],
+      instance_recv_bps_limit: [false, false, true, true],
+      disable_upnp: [false, false, true, true],
+      disable_relay_data: [false, false, true, true],
+      enable_udp_broadcast_relay: [false, false, true, true],
+      prefer_peer_relay: [false, false, false, true],
+      enable_udp_fec: [false, false, false, true],
+      enable_udp_fec_kcp: [false, false, false, true],
+      enable_udp_fec_quic: [false, false, false, true]
+    }
+    for (const [flag, expected] of Object.entries(matrix)) {
+      expected.forEach((shouldSupport, index) => {
+        expect(isCoreFlagSupported(flag, capsAt(index)), `${flag} @ ${VERSIONS[index]}`).toBe(
+          shouldSupport
+        )
+      })
+    }
+  })
+
+  it('WireGuard 形态、DHCP 网段与 socks5 边界', () => {
+    expect(VERSIONS.map((version) => resolveCoreCapabilities(version)!.vpnPortalFormat)).toEqual([
+      'legacy',
+      'legacy',
+      'legacy',
+      'v2.7'
+    ])
+    expect(VERSIONS.map((_, index) => isCoreFeatureSupported('dhcpCidr', capsAt(index)))).toEqual([
+      false,
+      false,
+      false,
+      true
+    ])
+    const allFlags = new Set<string>([
+      ...CORE_FLAG_BASELINE,
+      ...CORE_FLAG_ADDITIONS.flatMap((entry) => entry.flags)
+    ])
+    // socks5 服务端走顶层 socks5_proxy；flags 中不存在 socks5 键（v2.7.0+ 会拒绝未知 flag）
+    expect(allFlags.has('socks5')).toBe(false)
+    expect(CORE_TOP_LEVEL_FIELD_BASELINE).toContain('socks5_proxy')
+    expect(CORE_TOP_LEVEL_FIELD_BASELINE).not.toContain('socks5')
+  })
+
+  it('基线注册表覆盖官方 2.7.1 表单用到的顶层字段', () => {
+    expect(CORE_TOP_LEVEL_FIELD_BASELINE).toHaveLength(26)
+    for (const field of [
+      'ipv4',
+      'ipv6',
+      'mapped_listeners',
+      'port_forward',
+      'socks5_proxy',
+      'acl',
+      'tcp_whitelist',
+      'udp_whitelist',
+      'stun_servers',
+      'stun_servers_v6',
+      'listeners',
+      'peer',
+      'proxy_network',
+      'routes',
+      'exit_nodes'
+    ]) {
+      expect(CORE_TOP_LEVEL_FIELD_BASELINE).toContain(field)
+    }
+  })
+
+  it('未登记字段与未知版本宽松放行', () => {
+    expect(isCoreTopLevelFieldSupported('future_field', resolveCoreCapabilities('v2.4.5'))).toBe(
+      true
+    )
+    expect(isCoreTopLevelFieldSupported('dns', null)).toBe(true)
   })
 })
 

@@ -7,6 +7,11 @@
  * - v2.7.0 重构 vpn_portal_config 并启用 deny_unknown_fields
  * - v2.7.0 起 service install 的 core 参数由位置参数改为 --core-args
  * - v2.7.1 新增顶层 dns / dhcpv6 字段与 3 个 UDP FEC flags；dhcp 兼容布尔值或 CIDR 字符串
+ * - 已按上游源码复核（v2.4.5 ~ v2.7.1）：
+ *   · socks5 服务端是顶层 socks5_proxy（URL，如 socks5://0.0.0.0:1080）；flags 无 socks5 键
+ *   · port_forward 为单数 TOML 键（数组），不是 port_forwards
+ *   · acl（acl_v1 / group 单数）结构与字段跨版本一致，无需版本门控
+ *   · listeners/peer 的 wg:// 路径按 bind 设备名处理；CIDR 形式只属于旧版 --vpn-portal 与 vpn_portal_config
  *
  * 版本列表固定：新增/移除可下载版本时只改 CORE_VERSION_OPTIONS，
  * 字段差异通过「引入版本」表推导，避免为每个版本复制一份完整清单。
@@ -95,9 +100,45 @@ export const CORE_FLAG_ADDITIONS: ReadonlyArray<{ since: string; flags: readonly
   { since: 'v2.7.1', flags: ['enable_udp_fec', 'enable_udp_fec_kcp', 'enable_udp_fec_quic'] }
 ]
 
+/**
+ * 顶层字段基线（v2.4.5 起全程存在，26 个）
+ * 上游已复核：Config 无 deny_unknown_fields；rpc_portal / rpc_portal_whitelist 自 v2.5.0 移除；
+ * vpn_portal_config 形态差异由 CoreCapabilities.vpnPortalFormat 判定；dhcp 的 CIDR 形态由 v2.7.1 规则判定。
+ */
+export const CORE_TOP_LEVEL_FIELD_BASELINE: readonly string[] = [
+  'netns',
+  'hostname',
+  'instance_name',
+  'instance_id',
+  'ipv4',
+  'ipv6',
+  'dhcp',
+  'network_identity',
+  'listeners',
+  'mapped_listeners',
+  'exit_nodes',
+  'peer',
+  'proxy_network',
+  'vpn_portal_config',
+  'routes',
+  'socks5_proxy',
+  'port_forward',
+  'flags',
+  'flags_struct',
+  'acl',
+  'tcp_whitelist',
+  'udp_whitelist',
+  'stun_servers',
+  'stun_servers_v6',
+  'rpc_portal',
+  'rpc_portal_whitelist'
+]
+
 /** 功能开关/字段的引入版本（用于表单显隐与启动前校验） */
 export const CORE_FEATURE_MIN_VERSION = {
   secureMode: 'v2.6.0',
+  // PeerConfig.peer_public_key（v2.6.0+；compat 检查见 kernelCompatUtil）
+  peerPublicKey: 'v2.6.0',
   ipv6PublicAddr: 'v2.6.2',
   configSource: 'v2.6.2',
   tcpStunServers: 'v2.7.0',
@@ -142,6 +183,7 @@ export const CORE_TOP_LEVEL_FIELD_REMOVED: ReadonlyArray<{
   since: string
 }> = [{ fields: ['rpc_portal', 'rpc_portal_whitelist'], since: 'v2.5.0' }]
 
+/** 表单门控约定：WireGuard 门户新旧结构用 CoreCapabilities.vpnPortalFormat 判断，不要另建版本常量 */
 /** v2.7.0 vpn_portal_config 的合法字段（启用 deny_unknown_fields） */
 export const VPN_PORTAL_V2_FIELDS = [
   'enabled',

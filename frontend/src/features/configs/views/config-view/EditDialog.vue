@@ -206,7 +206,9 @@
       >
         <BasicForm />
         <AdvancedForm />
+        <WireGuardForm />
         <MagicDnsEditor />
+        <AclForm />
       </div>
     </div>
 
@@ -276,7 +278,9 @@ import { CONFIG_EDITOR_KEY } from './edit/context'
 import TomlEditor from './edit/TomlEditor.vue'
 import BasicForm from './edit/BasicForm.vue'
 import AdvancedForm from './edit/AdvancedForm.vue'
+import WireGuardForm from './edit/WireGuardForm.vue'
 import MagicDnsEditor from './edit/MagicDnsEditor.vue'
+import AclForm from './edit/AclForm.vue'
 
 const { t } = useI18n()
 const store = useEasyTierStore()

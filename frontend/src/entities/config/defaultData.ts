@@ -103,6 +103,8 @@ export interface AdvancedFieldDef {
   defaultValue?: boolean // 内核默认值（缺省 false）；用于缺省未写配置时的开关显示
   /** 下拉选项（type: 'select'）；value 为落盘的 flags 字符串值，空串表示使用内核默认 */
   options?: ReadonlyArray<{ value: string; labelKey: string; feature?: CoreFeature }>
+  /** 文本输入只接受数字（mtu / 限速），落盘时由构建层转为 number */
+  numeric?: boolean
 }
 
 /**
@@ -162,6 +164,19 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     labelKey: 'newEdit.lblBindDevice',
     tooltipKey: 'newEdit.tipBindDevice',
     defaultValue: true
+  },
+  {
+    key: 'dev_name',
+    type: 'text',
+    labelKey: 'newEdit.lblDevName',
+    tooltipKey: 'newEdit.tipDevName'
+  },
+  {
+    key: 'mtu',
+    type: 'text',
+    labelKey: 'newEdit.lblMtu',
+    tooltipKey: 'newEdit.tipMtu',
+    numeric: true
   },
   {
     key: 'enable_encryption',
@@ -286,6 +301,19 @@ export const ADVANCED_FLAG_DEFS: AdvancedFieldDef[] = [
     type: 'switch',
     labelKey: 'newEdit.lblRelayAllPeerRpc',
     tooltipKey: 'newEdit.tipRelayAllPeerRpc'
+  },
+  {
+    key: 'relay_network_whitelist',
+    type: 'text',
+    labelKey: 'newEdit.lblRelayWhitelist',
+    tooltipKey: 'newEdit.tipRelayWhitelist'
+  },
+  {
+    key: 'instance_recv_bps_limit',
+    type: 'text',
+    labelKey: 'newEdit.lblInstanceRecvLimit',
+    tooltipKey: 'newEdit.tipInstanceRecvLimit',
+    numeric: true
   },
   {
     key: 'disable_kcp_input',

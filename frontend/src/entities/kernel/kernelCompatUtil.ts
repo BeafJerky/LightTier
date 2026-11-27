@@ -10,6 +10,7 @@ import {
   CORE_FEATURE_MIN_VERSION,
   CORE_FLAG_ADDITIONS,
   CORE_FLAG_BASELINE,
+  CORE_TOP_LEVEL_FIELD_BASELINE,
   CORE_TOP_LEVEL_FIELD_GROUPS,
   CORE_TOP_LEVEL_FIELD_REMOVED,
   CORE_VERSION_BASELINE,
@@ -133,6 +134,25 @@ export const isCoreFeatureSupported = (
 /** flag 是否为当前内核合法键：未知版本/白名单不可用一律返回 true（不隐藏） */
 export const isCoreFlagSupported = (flag: string, caps: CoreCapabilities | null): boolean =>
   caps?.flags ? caps.flags.has(flag) : true
+
+/**
+ * 顶层字段在当前内核是否可用（表单显隐/只读判断的唯一入口）。
+ * - 未登记字段与未知版本一律放行，保持对更高版本的向前兼容
+ * - rpc_portal 仍由表单自身的 CLI 迁移逻辑处理，这里只反映「TOML 是否读取」
+ */
+export const isCoreTopLevelFieldSupported = (
+  field: string,
+  caps: CoreCapabilities | null
+): boolean => {
+  if (!caps) return true
+  const removed = CORE_TOP_LEVEL_FIELD_REMOVED.find((entry) => entry.fields.includes(field))
+  if (removed && versionAtLeast(caps.version, removed.since)) return false
+  const group = CORE_TOP_LEVEL_FIELD_GROUPS.find((entry) => entry.fields.includes(field))
+  const minVersion =
+    group?.since ?? (CORE_TOP_LEVEL_FIELD_BASELINE.includes(field) ? CORE_VERSION_BASELINE : null)
+  if (!minVersion) return true
+  return versionAtLeast(caps.version, minVersion)
+}
 
 /** 当前内核不支持的配置项（来自配置文件原文，供表单锁定展示与原样保留） */
 export interface UnsupportedConfigEntries {

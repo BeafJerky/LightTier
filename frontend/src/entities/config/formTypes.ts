@@ -58,8 +58,6 @@ interface FlagsInput {
   multi_thread: boolean
   multi_thread_count?: number | undefined // 工作线程数
   relay_all_peer_rpc: boolean
-  ipv6_listener: string
-  socks5?: string | undefined
   relay_network_whitelist?: string | undefined
   bind_device: boolean
   disable_kcp_input: boolean

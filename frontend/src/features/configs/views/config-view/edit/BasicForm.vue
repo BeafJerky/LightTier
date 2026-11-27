@@ -24,12 +24,6 @@
           placeholder="instance_name"
         />
       </div>
-    </div>
-  </div>
-
-  <div class="ed-form-section">
-    <div class="ed-form-section-title">{{ t('newEdit.network') }}</div>
-    <div class="ed-form-grid">
       <div class="ed-form-field">
         <label class="ed-form-label" :for="fieldId('network_name')">{{
           t('newConfig.networkName')
@@ -45,11 +39,36 @@
         <label class="ed-form-label" :for="fieldId('network_secret')">{{
           t('newEdit.networkSecret')
         }}</label>
+        <div class="ed-secret-row">
+          <LtInput
+            v-model="formDataNetworkSecret"
+            variant="outline"
+            :aria-label="t('newEdit.networkSecret')"
+            :type="networkSecretVisible ? 'text' : 'password'"
+            placeholder="network_secret"
+          />
+          <LtButton
+            variant="ghost"
+            size="sm"
+            :title="networkSecretVisible ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
+            :aria-label="networkSecretVisible ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
+            @click="networkSecretVisible = !networkSecretVisible"
+            >{{
+              networkSecretVisible ? t('newEdit.hideSecret') : t('newEdit.showSecret')
+            }}</LtButton
+          >
+        </div>
+      </div>
+      <div class="ed-form-field">
+        <label class="ed-form-label" :for="fieldId('ipv4')" :title="t('newEdit.tipIpv4')">{{
+          t('newEdit.lblIpv4')
+        }}</label>
         <LtInput
-          v-model="formDataNetworkSecret"
+          v-model="formData.ipv4"
           variant="outline"
-          :aria-label="t('newEdit.networkSecret')"
-          placeholder="network_secret"
+          :disabled="formData.dhcp === true"
+          :aria-label="t('newEdit.lblIpv4')"
+          placeholder="10.126.126.1"
         />
       </div>
       <div v-if="!dhcpLocked" class="ed-form-field ed-form-field--switch">
@@ -127,12 +146,22 @@
     <div class="ed-form-section-title">{{ t('newEdit.listenSection') }}</div>
     <div class="ed-tag-list">
       <div class="ed-tag-row" v-for="(_, i) in formListeners" :key="'l' + i">
+        <LtSelect
+          class="ed-proto-select"
+          :model-value="uriProto(formListeners[i])"
+          :options="protocolOptionsFor(formListeners[i])"
+          variant="outline"
+          size="sm"
+          :aria-label="`${t('newEdit.listenSection')} ${i + 1} ${t('newEdit.protocolLabel')}`"
+          @update:model-value="formListeners[i] = joinUri($event, uriRest(formListeners[i]))"
+        />
         <LtInput
-          v-model="formListeners[i]"
+          :model-value="uriRest(formListeners[i])"
           class="ed-tag-input"
           variant="outline"
           :aria-label="`${t('newEdit.listenSection')} ${i + 1}`"
-          placeholder="tcp://0.0.0.0:11000"
+          placeholder="0.0.0.0:11000"
+          @update:model-value="formListeners[i] = joinUri(uriProto(formListeners[i]), $event)"
         />
         <LtButton
           variant="text"
@@ -152,15 +181,71 @@
   </div>
 
   <div class="ed-form-section">
+    <div class="ed-form-section-title">{{ t('newEdit.mappedSection') }}</div>
+    <div class="ed-tag-list">
+      <div class="ed-tag-row" v-for="(_, i) in formMappedListeners" :key="'ml' + i">
+        <LtSelect
+          class="ed-proto-select"
+          :model-value="uriProto(formMappedListeners[i])"
+          :options="protocolOptionsFor(formMappedListeners[i])"
+          variant="outline"
+          size="sm"
+          :aria-label="`${t('newEdit.mappedSection')} ${i + 1} ${t('newEdit.protocolLabel')}`"
+          @update:model-value="
+            formMappedListeners[i] = joinUri($event, uriRest(formMappedListeners[i]))
+          "
+        />
+        <LtInput
+          :model-value="uriRest(formMappedListeners[i])"
+          class="ed-tag-input"
+          variant="outline"
+          :aria-label="`${t('newEdit.mappedSection')} ${i + 1}`"
+          placeholder="public.example.com:11010"
+          @update:model-value="
+            formMappedListeners[i] = joinUri(uriProto(formMappedListeners[i]), $event)
+          "
+        />
+        <LtButton
+          variant="text"
+          size="md"
+          circle
+          :title="t('newEdit.removeItem', { label: t('newEdit.mappedSection') })"
+          :aria-label="t('newEdit.removeItem', { label: t('newEdit.mappedSection') })"
+          @click="formMappedListeners.splice(i, 1)"
+        >
+          ✕
+        </LtButton>
+      </div>
+      <LtButton
+        variant="ghost"
+        size="sm"
+        class="ed-tag-add"
+        @click="formMappedListeners.push('')"
+        >{{ t('newEdit.addMapped') }}</LtButton
+      >
+    </div>
+  </div>
+
+  <div class="ed-form-section">
     <div class="ed-form-section-title">{{ t('newEdit.peerSection') }}</div>
     <div class="ed-tag-list">
       <div class="ed-tag-row" v-for="(_, i) in formPeers" :key="'p' + i">
+        <LtSelect
+          class="ed-proto-select"
+          :model-value="uriProto(formPeers[i])"
+          :options="protocolOptionsFor(formPeers[i])"
+          variant="outline"
+          size="sm"
+          :aria-label="`${t('newEdit.peerSection')} ${i + 1} ${t('newEdit.protocolLabel')}`"
+          @update:model-value="formPeers[i] = joinUri($event, uriRest(formPeers[i]))"
+        />
         <LtInput
-          v-model="formPeers[i]"
+          :model-value="uriRest(formPeers[i])"
           class="ed-tag-input"
           variant="outline"
           :aria-label="`${t('newEdit.peerSection')} ${i + 1}`"
-          placeholder="tcp://host:port"
+          placeholder="host:port"
+          @update:model-value="formPeers[i] = joinUri(uriProto(formPeers[i]), $event)"
         />
         <LtButton
           variant="text"
@@ -272,6 +357,52 @@
     </div>
   </div>
 
+  <div class="ed-form-section">
+    <div class="ed-form-section-title">{{ t('newEdit.portForwardSection') }}</div>
+    <p class="ed-section-hint">{{ t('newEdit.portForwardHint') }}</p>
+    <div class="ed-tag-list">
+      <div class="ed-tag-row ed-port-row" v-for="(row, i) in formPortForwards" :key="'pf' + i">
+        <LtSelect
+          class="ed-proto-select"
+          :model-value="row.proto"
+          :options="portForwardProtoOptions(row.proto)"
+          variant="outline"
+          size="sm"
+          :aria-label="`${t('newEdit.portForwardProto')} ${i + 1}`"
+          @update:model-value="row.proto = String($event)"
+        />
+        <LtInput
+          v-model="row.bind_addr"
+          class="ed-tag-input"
+          variant="outline"
+          :aria-label="`${t('newEdit.portForwardBind')} ${i + 1}`"
+          placeholder="0.0.0.0:12345"
+        />
+        <span class="ed-port-arrow" aria-hidden="true">→</span>
+        <LtInput
+          v-model="row.dst_addr"
+          class="ed-tag-input"
+          variant="outline"
+          :aria-label="`${t('newEdit.portForwardDst')} ${i + 1}`"
+          placeholder="10.126.126.1:23456"
+        />
+        <LtButton
+          variant="text"
+          size="md"
+          circle
+          :title="t('newEdit.removeItem', { label: t('newEdit.portForwardSection') })"
+          :aria-label="t('newEdit.removeItem', { label: t('newEdit.portForwardSection') })"
+          @click="formPortForwards.splice(i, 1)"
+        >
+          ✕
+        </LtButton>
+      </div>
+      <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="addPortForward">{{
+        t('newEdit.addPortForward')
+      }}</LtButton>
+    </div>
+  </div>
+
   <div class="ed-form-section" v-if="formFlagsKeys.length">
     <div class="ed-form-section-title">{{ t('newEdit.flagsSection') }}</div>
     <div class="ed-tag-list">
@@ -313,10 +444,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
+import { LtButton, LtInput, LtSelect, LtSwitch } from '@/shared/ui'
 import { injectRequired } from '@/shared/lib/inject'
+import { joinTunnelUri, splitTunnelUri, TUNNEL_PROTOCOLS } from '@/features/configs/lib/tunnelUri'
 import { validateDhcpCidr, validateDhcpv6Cidr, validateProxyCidr } from '@/entities/config/cidr'
 import { isAndroid } from '@/shared/platform/platformUtil'
 import { backendMode } from '@/shared/platform/backend'
@@ -325,6 +457,8 @@ import { CONFIG_EDITOR_KEY } from './context'
 defineOptions({ name: 'ConfigBasicForm' })
 
 const { t } = useI18n()
+// 网络密钥默认掩码；显隐状态是纯 UI，不参与表单签名
+const networkSecretVisible = ref(false)
 const {
   fieldId,
   formData,
@@ -342,6 +476,8 @@ const {
   formListeners,
   formPeers,
   formProxies,
+  formMappedListeners,
+  formPortForwards,
   formRoutes,
   formExitNodes,
   formFlagsKeys,
@@ -352,6 +488,30 @@ const {
   addProxy,
   removeFlag
 } = injectRequired(CONFIG_EDITOR_KEY, 'ConfigBasicForm')
+
+const uriProto = (uri: string) => splitTunnelUri(uri).proto
+const uriRest = (uri: string) => splitTunnelUri(uri).rest
+const joinUri = (proto: string | number | null, rest: string) =>
+  joinTunnelUri(String(proto ?? ''), rest)
+
+const toOptions = (values: string[]) => values.map((value) => ({ label: value, value }))
+
+// 当前行使用非常用协议时动态补一项，避免只改协议下拉就把原值改坏
+const protocolOptionsFor = (uri: string) => {
+  const protocols = [...TUNNEL_PROTOCOLS] as string[]
+  const current = uriProto(uri)
+  if (current && !protocols.includes(current)) protocols.push(current)
+  return toOptions(protocols)
+}
+
+const portForwardProtoOptions = (current: string) => {
+  const protocols = ['tcp', 'udp']
+  if (current && !protocols.includes(current)) protocols.push(current)
+  return toOptions(protocols)
+}
+
+const addPortForward = () =>
+  formPortForwards.value.push({ proto: 'tcp', bind_addr: '', dst_addr: '' })
 
 const dhcpCidrIssue = computed(() => validateDhcpCidr(formDhcpCidr.value))
 const dhcpv6CidrIssue = computed(() => validateDhcpv6Cidr(formDhcpv6Cidr.value))
