@@ -2,10 +2,12 @@
 
 ## 2.16.0 (2026-11-27)
 
-> 子网代理（`[[proxy_network]]`）表单落地，agent 启动时 RPC 控制端口被占用不再导致启动失败。桌面与 Android 运行时行为不变。
+> 配置表单按 EasyTier 官方 2.7.1 GUI 全量对齐并按内核版本门控，补齐 WireGuard 门户、ACL、端口转发与子网代理；agent 启动时 RPC 控制端口被占用不再导致启动失败；修复 Android 导入名与入站配置相关问题。
 
 ### 新增
 
+- 配置编辑（全端）：表单按官方 2.7.1 GUI 重组为「基础设置 / 网络 / WireGuard / ACL / 高级」，基础与网络合并，新增 `ipv4`、结构化协议与监听/对端、映射监听、端口转发、WireGuard 门户与 ACL 组/链/规则编辑
+- 配置编辑：新增内核能力注册表（v2.4.5 / v2.5.0 / v2.6.4 / v2.7.1），按当前内核版本显示或隐藏顶层字段、特性与标志；WireGuard 门户自动区分旧版 `client_cidr` 与 2.7 的 `enabled/wireguard_listen/private_key/clients` 两种格式
 - 配置编辑（全端）：新增「子网代理」区段，每行支持 `192.168.1.0/24` 与 `192.168.1.0/24->10.0.0.0/24`（同时填写 `mapped_cidr`）；`allow` 等表单未建模字段按行原样保留，空行与删行不落盘；CIDR 非法只提示不阻止保存
 - 配置编辑：子网代理在 Android 进程内内核下不生效，按平台在表单内提示（agent 走 CLI 内核，不受影响）
 - 配置编辑：路由区段补充说明——手动路由会覆盖内核从对等节点收集到的代理网段，共享本机子网应使用子网代理
@@ -13,11 +15,15 @@
 ### 修复
 
 - agent：配置的 `rpc_portal` 被其他实例或进程占用时启动直接失败；现在与桌面 `findAvailableRpcPortal` 对齐，占用时从 15889 起回退到首个空闲回环端口，实例状态与 `lighttier-agent cli` 展示实际端口；监听端口仍按占用硬失败
+- Android：文件选择器返回的 content URI 未解码，导入配置名变成 `raw%3A...`；现先解码再取 basename
+- Android：进程内内核无法绑定入站监听，表单对监听、端口转发与 WireGuard 服务端入口按平台禁用并提示；新建配置默认 `bind_device=false`，客户端模式可正常组网
 
 ### 验证
 
-- 前端：`pnpm ts:check`、`pnpm test`（788 例）、lint/format 通过；浏览器 Mock 实测子网代理增删行与生成 TOML
-- agent：容器内 `cargo test` 224 项通过（含 RPC 端口回退 2 例）；`cargo clippy --all-targets` 无新增告警（既有 5 条位于 `packages`/`http`）
+- 前端：`pnpm ts:check`、`pnpm test`（808 例）、lint/format 通过；浏览器 Mock 实测子网代理增删行与生成 TOML
+- 内核矩阵：v2.4.5 / v2.5.0 / v2.6.4 / v2.7.1 四版本 `--check-config` 与 6 秒运行（no_tun）通过；保存管线在 2.4.5 / 2.7.1 复验通过
+- agent：WSL/Docker 下 v2.6.4 与派生 v2.7.1 配置保存/启动、端口、Web UI、WireGuard 握手与 ACL 动态放行/拦截（`acl set`）实测通过；容器内 `cargo test` 224 项通过（含 RPC 端口回退 2 例）
+- Android：模拟器（x86_64）完成界面渲染、WireGuard/ACL 表单、客户端组网与三项修复复测
 
 ## 2.15.0 (2026-11-26)
 

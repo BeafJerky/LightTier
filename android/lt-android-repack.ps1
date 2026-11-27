@@ -1,13 +1,16 @@
 ﻿# Android 重打包脚本（本机推荐流程，绕开 tauri CLI 的符号链接限制）：
 # 1) pnpm build 产出前端 dist（Vite 7 需要 Node 20.19+）
 # 2) cargo 重编 libapp_lib.so（--features custom-protocol 生产模式：内嵌 dist 资源）
-# 3) 复制 .so 到 jniLibs/arm64-v8a
-# 4) Gradle 打包 arm64Release（-x rustBuildArm64Release，跳过 rust 插件任务）
+# 3) 复制 .so 到对应 jniLibs/<abi>
+# 4) Gradle 打包 <abi>Release（-x rustBuild<Abi>Release，跳过 rust 插件任务）
 # 5) apksigner 用 debug.keystore 签名（缺失时自动生成）
-# 用法: powershell -ExecutionPolicy Bypass -File .\lt-android-repack.ps1 [-VersionOverride 2.0.0-nightly.20261024]
+# 用法: powershell -ExecutionPolicy Bypass -File .\lt-android-repack.ps1 [-VersionOverride 2.0.0-nightly.20261024] [-Abi arm64|x86_64|both]
 param(
     # 预发布版本号（如 2.0.0-nightly.20261024）；留空则使用 package.json 的正式版本
-    [string]$VersionOverride = ""
+    [string]$VersionOverride = "",
+    # 目标 ABI；both 依次构建 arm64 与 x86_64（共用一次前端构建）
+    [ValidateSet("arm64", "x86_64", "both")]
+    [string]$Abi = "arm64"
 )
 $ErrorActionPreference = "Continue"
 # Node 环境（优先 nvm 安装的版本，兼容 nvm-windows 1.x/2.x）
@@ -18,6 +21,26 @@ $ErrorActionPreference = "Continue"
 $env:Path = "$env:JAVA_HOME\bin;$env:NDK_BIN;" + $env:Path
 
 $root = Split-Path -Parent $PSScriptRoot
+
+$abiProfiles = @{
+    arm64  = @{
+        RustTarget = "aarch64-linux-android"
+        JniDir     = "arm64-v8a"
+        GradleTask = "assembleArm64Release"
+        GradleSkip = "rustBuildArm64Release"
+        ApkSub     = "arm64"
+        ApkPrefix  = "app-arm64-release"
+    }
+    x86_64 = @{
+        RustTarget = "x86_64-linux-android"
+        JniDir     = "x86_64"
+        GradleTask = "assembleX86_64Release"
+        GradleSkip = "rustBuildX86_64Release"
+        ApkSub     = "x86_64"
+        ApkPrefix  = "app-x86_64-release"
+    }
+}
+$selectedAbis = if ($Abi -eq "both") { @("arm64", "x86_64") } else { @($Abi) }
 
 # 预检：tauri CLI 生成的 Android 工程文件不入库（gen/android 的 .gitignore 排除，
 # 且 tauri.settings.gradle 含本机绝对路径），新 clone 直接跑 Gradle 会报晦涩错误
@@ -77,50 +100,57 @@ tauri.android.versionName=$appVersion
 tauri.android.versionCode=$versionCode
 "@ | Set-Content -Path "$root\src-tauri\gen\android\app\tauri.properties" -Encoding UTF8
 
-$soSrc = "$root\target\aarch64-linux-android\release\libapp_lib.so"
-$jniDir = "$root\src-tauri\gen\android\app\src\main\jniLibs\arm64-v8a"
-$apkDir = "$root\src-tauri\gen\android\app\build\outputs\apk\arm64\release"
-
-Write-Host "=== [1/5] pnpm build ==="
+Write-Host "=== [1/4] pnpm build ==="
 Set-Location $root
 pnpm build *> "$env:TEMP\lt-repack-front.log"
 if ($LASTEXITCODE -ne 0) { Write-Host "pnpm build FAILED, see $env:TEMP\lt-repack-front.log"; exit 1 }
 
-Write-Host "=== [2/5] cargo build --release --target aarch64-linux-android --features custom-protocol ==="
-Set-Location "$root\src-tauri"
-# 预发布版本：通过 TAURI_CONFIG 让 tauri-build/codegen 采用该版本（应用内 getVersion 与 APK versionName 一致），
-# 避免改写 package.json / Cargo.toml / tauri.conf.json5 等仓库文件
 if ($VersionOverride) {
     $env:TAURI_CONFIG = (@{ version = $VersionOverride } | ConvertTo-Json -Compress)
 }
-cargo build --release --target aarch64-linux-android --features custom-protocol *> "$env:TEMP\lt-repack-cargo.log"
-$cargoExit = $LASTEXITCODE
-if ($VersionOverride) {
-    Remove-Item Env:TAURI_CONFIG -ErrorAction SilentlyContinue
+try {
+    foreach ($abiName in $selectedAbis) {
+        $profile = $abiProfiles[$abiName]
+        $soSrc = "$root\target\$($profile.RustTarget)\release\libapp_lib.so"
+        $jniDir = "$root\src-tauri\gen\android\app\src\main\jniLibs\$($profile.JniDir)"
+        $apkDir = "$root\src-tauri\gen\android\app\build\outputs\apk\$($profile.ApkSub)\release"
+        $cargoLog = "$env:TEMP\lt-repack-cargo-$abiName.log"
+        $gradleLog = "$env:TEMP\lt-repack-gradle-$abiName.log"
+
+        Write-Host "=== [2/4] cargo build --release --target $($profile.RustTarget) --features custom-protocol ($abiName) ==="
+        Set-Location "$root\src-tauri"
+        # 预发布版本：通过 TAURI_CONFIG 让 tauri-build/codegen 采用该版本（应用内 getVersion 与 APK versionName 一致），
+        # 避免改写 package.json / Cargo.toml / tauri.conf.json5 等仓库文件
+        cargo build --release --target $profile.RustTarget --features custom-protocol *> $cargoLog
+        if ($LASTEXITCODE -ne 0) { Write-Host "cargo build FAILED ($abiName), see $cargoLog"; exit 1 }
+
+        Write-Host "=== [3/4] copy libapp_lib.so -> jniLibs/$($profile.JniDir) ==="
+        New-Item -ItemType Directory -Path $jniDir -Force | Out-Null
+        Copy-Item $soSrc "$jniDir\libapp_lib.so" -Force
+
+        # 生产模式防回归校验：dev 模式编译的 .so 含 devUrl 代理错误串，到手机上会白屏
+        $soText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes("$jniDir\libapp_lib.so"))
+        if ($soText.Contains("Failed to request")) { Write-Host "FATAL: $abiName .so 是 dev 模式（缺 --features custom-protocol），中止"; exit 1 }
+        # 全量内嵌校验：dist 中全部 css/js 文件名都应出现在 .so 内嵌资源中
+        # （Vite 按 chunk 拆分命名哈希，抽查单个文件会漏检部分/未内嵌的情况）
+        $allAssets = @(Get-ChildItem "$root\frontend\dist\assets" -File | Where-Object { $_.Extension -in ".css", ".js" })
+        if ($allAssets.Count -eq 0) { Write-Host "FATAL: frontend\dist\assets 中未找到 css/js 资源"; exit 1 }
+        $missingAssets = @($allAssets | Where-Object { -not $soText.Contains($_.Name) } | ForEach-Object { $_.Name })
+        if ($missingAssets.Count -gt 0) { Write-Host "FATAL: 以下前端资源未内嵌到 $abiName .so: $($missingAssets -join ', ')"; exit 1 } else { Write-Host "production mode OK ($abiName): all $($allAssets.Count) dist assets embedded" }
+
+        Write-Host "=== [4/4] gradlew $($profile.GradleTask) -x $($profile.GradleSkip) ==="
+        Set-Location "$root\src-tauri\gen\android"
+        .\gradlew.bat $profile.GradleTask -x $profile.GradleSkip *> $gradleLog
+        if ($LASTEXITCODE -ne 0) { Write-Host "gradle FAILED ($abiName), see $gradleLog"; exit 1 }
+
+        Write-Host "=== apksigner sign ($abiName) ==="
+        & $apksigner sign --ks $debugKeystore --ks-pass pass:android --key-pass pass:android --ks-key-alias androiddebugkey --out "$apkDir\$($profile.ApkPrefix)-signed.apk" "$apkDir\$($profile.ApkPrefix)-unsigned.apk"
+        if ($LASTEXITCODE -ne 0) { Write-Host "apksigner FAILED ($abiName)"; exit 1 }
+        Write-Host "=== DONE ($abiName): $apkDir\$($profile.ApkPrefix)-signed.apk ==="
+    }
 }
-if ($cargoExit -ne 0) { Write-Host "cargo build FAILED, see $env:TEMP\lt-repack-cargo.log"; exit 1 }
-
-Write-Host "=== [3/5] copy libapp_lib.so -> jniLibs ==="
-New-Item -ItemType Directory -Path $jniDir -Force | Out-Null
-Copy-Item $soSrc "$jniDir\libapp_lib.so" -Force
-
-# 生产模式防回归校验：dev 模式编译的 .so 含 devUrl 代理错误串，到手机上会白屏
-$soText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes("$jniDir\libapp_lib.so"))
-if ($soText.Contains("Failed to request")) { Write-Host "FATAL: .so 是 dev 模式（缺 --features custom-protocol），中止"; exit 1 }
-# 全量内嵌校验：dist 中全部 css/js 文件名都应出现在 .so 内嵌资源中
-# （Vite 按 chunk 拆分命名哈希，抽查单个文件会漏检部分/未内嵌的情况）
-$allAssets = @(Get-ChildItem "$root\frontend\dist\assets" -File | Where-Object { $_.Extension -in ".css", ".js" })
-if ($allAssets.Count -eq 0) { Write-Host "FATAL: frontend\dist\assets 中未找到 css/js 资源"; exit 1 }
-$missingAssets = @($allAssets | Where-Object { -not $soText.Contains($_.Name) } | ForEach-Object { $_.Name })
-if ($missingAssets.Count -gt 0) { Write-Host "FATAL: 以下前端资源未内嵌到 .so: $($missingAssets -join ', ')"; exit 1 } else { Write-Host "production mode OK: all $($allAssets.Count) dist assets embedded" }
-
-Write-Host "=== [4/5] gradlew assembleArm64Release -x rustBuildArm64Release ==="
-Set-Location "$root\src-tauri\gen\android"
-.\gradlew.bat assembleArm64Release -x rustBuildArm64Release *> "$env:TEMP\lt-repack-gradle.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "gradle FAILED, see $env:TEMP\lt-repack-gradle.log"; exit 1 }
-
-Write-Host "=== [5/5] apksigner sign ==="
-& $apksigner sign --ks $debugKeystore --ks-pass pass:android --key-pass pass:android --ks-key-alias androiddebugkey --out "$apkDir\app-arm64-release-signed.apk" "$apkDir\app-arm64-release-unsigned.apk"
-if ($LASTEXITCODE -ne 0) { Write-Host "apksigner FAILED"; exit 1 }
-
-Write-Host "=== DONE: $apkDir\app-arm64-release-signed.apk ==="
+finally {
+    if ($VersionOverride) {
+        Remove-Item Env:TAURI_CONFIG -ErrorAction SilentlyContinue
+    }
+}

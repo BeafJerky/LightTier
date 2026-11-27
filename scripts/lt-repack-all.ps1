@@ -17,10 +17,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ---------- [2/2] Android ----------
-Write-Host "=== [2/2] android: lt-android-repack.ps1 ==="
-& powershell -ExecutionPolicy Bypass -File "$root\android\lt-android-repack.ps1"
+Write-Host "=== [2/2] android: lt-android-repack.ps1 -Abi both ==="
+& powershell -ExecutionPolicy Bypass -File "$root\android\lt-android-repack.ps1" -Abi both
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "android FAILED, see $env:TEMP\lt-repack-front.log / lt-repack-cargo.log / lt-repack-gradle.log"
+    Write-Host "android FAILED, see %TEMP%\lt-repack-front.log / lt-repack-cargo-<abi>.log / lt-repack-gradle-<abi>.log"
     exit 1
 }
 
@@ -32,6 +32,7 @@ $files = @()
 $files += Get-ChildItem "$bundle\nsis\*.exe" -ErrorAction SilentlyContinue
 $files += Get-ChildItem "$bundle\msi\*.msi" -ErrorAction SilentlyContinue
 $files += Get-ChildItem "$root\src-tauri\gen\android\app\build\outputs\apk\arm64\release\app-arm64-release-signed.apk" -ErrorAction SilentlyContinue
+$files += Get-ChildItem "$root\src-tauri\gen\android\app\build\outputs\apk\x86_64\release\app-x86_64-release-signed.apk" -ErrorAction SilentlyContinue
 if ($files.Count -eq 0) {
     Write-Host "WARN: no artifacts found, check logs above"
 } else {

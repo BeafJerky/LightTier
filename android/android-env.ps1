@@ -115,6 +115,10 @@ $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "$script:NDK_BIN\aarch64-linux-
 $env:CC_aarch64_linux_android  = "$script:NDK_BIN\aarch64-linux-android24-clang.cmd"
 $env:CXX_aarch64_linux_android = "$script:NDK_BIN\aarch64-linux-android24-clang++.cmd"
 $env:AR_aarch64_linux_android  = "$script:NDK_BIN\llvm-ar.exe"
+$env:CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER = "$script:NDK_BIN\x86_64-linux-android24-clang.cmd"
+$env:CC_x86_64_linux_android  = "$script:NDK_BIN\x86_64-linux-android24-clang.cmd"
+$env:CXX_x86_64_linux_android = "$script:NDK_BIN\x86_64-linux-android24-clang++.cmd"
+$env:AR_x86_64_linux_android  = "$script:NDK_BIN\llvm-ar.exe"
 $env:LIBCLANG_PATH = $script:NDK_BIN
 
 # --- bindgen (Windows 反斜杠会被 shlex 当转义符，sysroot 必须用正斜杠) ---
@@ -127,6 +131,9 @@ $clangResInclude = "$clangResDir/include" -replace '\\', '/'
 $clangArgs = "--sysroot=$sysroot --target=aarch64-linux-android24 -isystem $clangResInclude"
 ${env:BINDGEN_EXTRA_CLANG_ARGS_aarch64-linux-android} = $clangArgs
 ${env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android} = $clangArgs
+$clangArgsX86 = "--sysroot=$sysroot --target=x86_64-linux-android24 -isystem $clangResInclude"
+${env:BINDGEN_EXTRA_CLANG_ARGS_x86_64-linux-android} = $clangArgsX86
+${env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android} = $clangArgsX86
 
 # --- protoc (可选，存在则设置) ---
 # 顺序: 已设置的 PROTOC → <SDK>\protoc\bin\protoc.exe（项目自带布局） → PATH
