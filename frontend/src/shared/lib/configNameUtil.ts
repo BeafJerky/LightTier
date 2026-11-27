@@ -36,3 +36,21 @@ export const isConfigNameTaken = (
     caseInsensitive ? name.toLowerCase() === value.toLowerCase() : name === value
   )
 }
+
+/**
+ * 从文件选择结果提取配置名。
+ *
+ * Android 文件选择器返回 content URI（可能整段 URL 编码，如
+ * `content://.../document/raw%3A%2Fstorage%2F...%2Fhome`），直接按 `/` 取尾段
+ * 会得到 `raw%3A...`。这里先解码再取 basename，并去掉 .toml 扩展名。
+ */
+export const configNameFromSelection = (selected: string): string => {
+  let decoded = selected
+  try {
+    decoded = decodeURIComponent(selected)
+  } catch {
+    // 非法百分号编码：保留原值，仍尝试取 basename
+  }
+  const base = decoded.split(/[\\/]/).pop() ?? ''
+  return base.replace(/\.toml$/i, '')
+}

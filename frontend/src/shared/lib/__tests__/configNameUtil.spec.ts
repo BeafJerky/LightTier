@@ -2,7 +2,11 @@
  * configNameUtil 单测：配置名允许中文，拦截路径分隔符、非法文件名字符与系统保留名
  */
 import { describe, it, expect } from 'vitest'
-import { isConfigNameTaken, isValidConfigName } from '@/shared/lib/configNameUtil'
+import {
+  configNameFromSelection,
+  isConfigNameTaken,
+  isValidConfigName
+} from '@/shared/lib/configNameUtil'
 
 describe('configNameUtil', () => {
   it('允许中文、字母、数字及空格 . _ -', () => {
@@ -67,5 +71,30 @@ describe('isConfigNameTaken', () => {
     expect(isConfigNameTaken('home', [])).toBe(false)
     expect(isConfigNameTaken('home', undefined)).toBe(false)
     expect(isConfigNameTaken('home', undefined, true)).toBe(false)
+  })
+})
+
+describe('configNameFromSelection', () => {
+  it('普通 Windows / POSIX 路径取文件名并去掉 .toml', () => {
+    expect(configNameFromSelection('C:\\configs\\home.toml')).toBe('home')
+    expect(configNameFromSelection('/sdcard/Download/home.toml')).toBe('home')
+    expect(configNameFromSelection('home.TOML')).toBe('home')
+  })
+
+  it('Android content URI 先解码再取 basename', () => {
+    expect(
+      configNameFromSelection(
+        'content://com.android.providers.downloads.documents/document/primary%3ADownload%2Fhome.toml'
+      )
+    ).toBe('home')
+    expect(
+      configNameFromSelection(
+        'content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2Flt-android-test'
+      )
+    ).toBe('lt-android-test')
+  })
+
+  it('非法百分号编码不抛错，仍取最后一段', () => {
+    expect(configNameFromSelection('content://x/document/bad%2.toml')).toBe('bad%2')
   })
 })

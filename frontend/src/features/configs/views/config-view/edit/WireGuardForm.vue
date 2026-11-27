@@ -6,10 +6,17 @@
         t('newEdit.wireguardEnable')
       }}</label>
       <div class="ed-form-switch-wrap">
-        <LtSwitch v-model="formVpnPortal.enabled" :aria-label="t('newEdit.wireguardEnable')" />
+        <LtSwitch
+          v-model="formVpnPortal.enabled"
+          :disabled="androidLocalKernel && !formVpnPortal.enabled"
+          :aria-label="t('newEdit.wireguardEnable')"
+        />
       </div>
     </div>
     <p class="ed-section-hint">{{ t('newEdit.wireguardHint') }}</p>
+    <p v-if="androidLocalKernel" class="ed-section-hint">
+      {{ t('newEdit.androidWireguardUnsupported') }}
+    </p>
     <p v-if="isLegacy && vpnPortalFormat === 'v2.7'" class="ed-section-hint">
       {{ t('newEdit.wireguardLegacyOnNew') }}
     </p>
@@ -117,7 +124,7 @@ import { CONFIG_EDITOR_KEY } from './context'
 defineOptions({ name: 'ConfigWireGuardForm' })
 
 const { t } = useI18n()
-const { fieldId, formVpnPortal, formAcl, vpnPortalFormat } = injectRequired(
+const { fieldId, formVpnPortal, formAcl, vpnPortalFormat, androidLocalKernel } = injectRequired(
   CONFIG_EDITOR_KEY,
   'ConfigWireGuardForm'
 )

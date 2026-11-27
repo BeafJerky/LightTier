@@ -399,6 +399,12 @@ export default {
       'Virtual IP must include a prefix (e.g. 10.44.0.2/24); network/broadcast or host addresses are rejected by the kernel.',
     vpnClientGroupsUndeclared:
       'Client groups are not declared in ACL: {groups}. Declare them under Access Control > Groups & Members, otherwise the kernel rejects startup.',
+    androidListenUnsupported:
+      'The Android in-process kernel runs in client mode and cannot bind inbound listeners; existing listener entries will make startup fail. Remove them before running.',
+    androidPortForwardUnsupported:
+      'The Android in-process kernel does not support local port forwarding (it requires binding inbound ports); added rules will make startup fail.',
+    androidWireguardUnsupported:
+      'The Android in-process kernel does not support the WireGuard portal (it requires an inbound listener); disable it before running.',
     vpnClientGroups: 'Client groups',
     aclSection: 'Access Control',
     aclEnable: 'Enable ACL',

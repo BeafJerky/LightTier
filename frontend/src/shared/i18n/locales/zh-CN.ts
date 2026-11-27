@@ -389,6 +389,12 @@ export default {
       '虚拟 IP 必须带前缀（如 10.44.0.2/24）；不能使用网段首/末地址或本机地址，否则内核会拒绝启动。',
     vpnClientGroupsUndeclared:
       '客户端分组未在 ACL 中声明：{groups}。启用 ACL 时需先在“访问控制 > 组与成员”声明，否则内核拒绝启动。',
+    androidListenUnsupported:
+      'Android 内置内核为客户端模式，不能绑定入站监听；已有监听地址会导致启动失败，请删除后再运行。',
+    androidPortForwardUnsupported:
+      'Android 内置内核不支持本地端口转发（需要绑定入站端口），新增规则会导致启动失败。',
+    androidWireguardUnsupported:
+      'Android 内置内核不支持 WireGuard 门户（需要绑定入站监听）；已有配置请先停用。',
     vpnClientGroups: '客户端分组',
     aclSection: '访问控制',
     aclEnable: '启用 ACL',

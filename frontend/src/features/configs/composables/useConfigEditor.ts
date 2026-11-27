@@ -17,8 +17,12 @@ import {
 } from '@/features/configs/lib/tomlNormalize'
 import { validateToml } from '@/shared/lib/tomlValidationUtil'
 import { migrateLightTierConfig } from '@/entities/config/lighttierConfigUtil'
-import { isValidConfigName, isConfigNameTaken } from '@/shared/lib/configNameUtil'
-import { isWindows } from '@/shared/platform/platformUtil'
+import {
+  configNameFromSelection,
+  isConfigNameTaken,
+  isValidConfigName
+} from '@/shared/lib/configNameUtil'
+import { isAndroid, isWindows } from '@/shared/platform/platformUtil'
 import { getErrorMessage } from '@/shared/lib/error'
 import {
   buildConfigFormModel,
@@ -296,6 +300,13 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
       /* parseConfigFormModel 已成功解析，忽略重复解析异常 */
     }
     formData.value = { ...model.formData } as FormData
+    // Android 内置内核为客户端模式：新建配置默认关闭“仅使用物理网卡”，避免 SO_BINDTODEVICE 权限失败
+    if (isAddMode.value && isAndroid() && backendMode() !== 'agent') {
+      if (!formData.value.flags) formData.value.flags = {}
+      if (formData.value.flags.bind_device === undefined) {
+        formData.value.flags.bind_device = false
+      }
+    }
     formPassthrough.value = { ...model.passthrough }
     secureModeEnabled.value = model.secureModeEnabled
     secretDisplays.value = model.secretDisplays
@@ -403,6 +414,8 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
   )
   // WireGuard 门户新旧结构由内核能力判定；未知版本按新结构展示
   const vpnPortalFormat = computed(() => store.coreCaps?.vpnPortalFormat ?? 'v2.7')
+  // Android 进程内内核为客户端模式：不能绑定入站监听（listener/WG portal/端口转发）
+  const androidLocalKernel = computed(() => isAndroid() && backendMode() !== 'agent')
   // 下拉选项按内核功能过滤（如 LZO 仅 v2.7.1+）
   const visibleSelectOptions = (f: AdvancedFieldDef) =>
     (f.options ?? []).filter((o) => !o.feature || isCoreFeatureSupported(o.feature, store.coreCaps))
@@ -821,8 +834,7 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
         if (formParsedOk.value) codeIssue.value = ''
       }
       // 从文件名提取配置名
-      const fileName = selected.split(/[\\/]/).pop() || ''
-      const nameWithoutExt = fileName.replace(/\.toml$/i, '')
+      const nameWithoutExt = configNameFromSelection(selected)
       if (nameWithoutExt && !props.existingConfigNames?.includes(nameWithoutExt)) {
         newConfigName.value = nameWithoutExt
         nameError.value = ''
@@ -885,6 +897,7 @@ export function useConfigEditor(options: UseConfigEditorOptions) {
     formVpnPortal,
     formAcl,
     vpnPortalFormat,
+    androidLocalKernel,
     visibleAdvancedFlagDefs,
     visibleTopSwitchDefs,
     visibleTopTextDefs,

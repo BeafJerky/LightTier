@@ -144,6 +144,9 @@
 
   <div class="ed-form-section">
     <div class="ed-form-section-title">{{ t('newEdit.listenSection') }}</div>
+    <p v-if="androidLocalKernel" class="ed-section-hint">
+      {{ t('newEdit.androidListenUnsupported') }}
+    </p>
     <div class="ed-tag-list">
       <div class="ed-tag-row" v-for="(_, i) in formListeners" :key="'l' + i">
         <LtSelect
@@ -174,9 +177,14 @@
           ✕
         </LtButton>
       </div>
-      <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="formListeners.push('')">{{
-        t('newEdit.addListen')
-      }}</LtButton>
+      <LtButton
+        variant="ghost"
+        size="sm"
+        class="ed-tag-add"
+        :disabled="androidLocalKernel"
+        @click="formListeners.push('')"
+        >{{ t('newEdit.addListen') }}</LtButton
+      >
     </div>
   </div>
 
@@ -360,6 +368,9 @@
   <div class="ed-form-section">
     <div class="ed-form-section-title">{{ t('newEdit.portForwardSection') }}</div>
     <p class="ed-section-hint">{{ t('newEdit.portForwardHint') }}</p>
+    <p v-if="androidLocalKernel" class="ed-section-hint">
+      {{ t('newEdit.androidPortForwardUnsupported') }}
+    </p>
     <div class="ed-tag-list">
       <div class="ed-tag-row ed-port-row" v-for="(row, i) in formPortForwards" :key="'pf' + i">
         <LtSelect
@@ -397,9 +408,14 @@
           ✕
         </LtButton>
       </div>
-      <LtButton variant="ghost" size="sm" class="ed-tag-add" @click="addPortForward">{{
-        t('newEdit.addPortForward')
-      }}</LtButton>
+      <LtButton
+        variant="ghost"
+        size="sm"
+        class="ed-tag-add"
+        :disabled="androidLocalKernel"
+        @click="addPortForward"
+        >{{ t('newEdit.addPortForward') }}</LtButton
+      >
     </div>
   </div>
 
@@ -478,6 +494,7 @@ const {
   formProxies,
   formMappedListeners,
   formPortForwards,
+  androidLocalKernel,
   formRoutes,
   formExitNodes,
   formFlagsKeys,
