@@ -83,15 +83,17 @@ powershell -ExecutionPolicy Bypass -File .\android\lt-android-build.ps1
 一键打包（推荐；脚本内已配好 NDK/JDK 环境变量、前端构建、内嵌校验与签名）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\android\lt-android-repack.ps1
+# 默认 arm64；x86_64 模拟器用 -Abi x86_64，双 ABI 用 -Abi both
+powershell -ExecutionPolicy Bypass -File .\android\lt-android-repack.ps1 -Abi both
 ```
 
-管线：`pnpm build` → `cargo build --release --target aarch64-linux-android --features custom-protocol` → 复制 `.so` 到 `src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a`（生产模式防回归校验）→ Gradle `assembleArm64Release`（`-x rustBuildArm64Release`）→ `apksigner` 签名（`~/.android/debug.keystore`，缺失时自动生成）。
+管线：`pnpm build` → 按 ABI 执行 `cargo build --release --target <aarch64|x86_64>-linux-android --features custom-protocol` → 复制 `.so` 到 `src-tauri/gen/android/app/src/main/jniLibs/<arm64-v8a|x86_64>`（生产模式防回归校验）→ Gradle `assemble<Arm64|X86_64>Release`（`-x rustBuild<Arm64|X86_64>Release`）→ `apksigner` 签名（`~/.android/debug.keystore`，缺失时自动生成）。
 
-产物：`src-tauri/gen/android/app/build/outputs/apk/arm64/release/app-arm64-release-signed.apk`，安装：
+产物分别为 `src-tauri/gen/android/app/build/outputs/apk/arm64/release/app-arm64-release-signed.apk` 与 `src-tauri/gen/android/app/build/outputs/apk/x86_64/release/app-x86_64-release-signed.apk`，安装：
 
 ```powershell
 adb install -r "src-tauri\gen\android\app\build\outputs\apk\arm64\release\app-arm64-release-signed.apk"
+adb install -r "src-tauri\gen\android\app\build\outputs\apk\x86_64\release\app-x86_64-release-signed.apk"
 ```
 
 辅助脚本（均在 `android/` 下）：`lt-android-check.ps1`（cargo check 快速验证）、`lt-android-gradle.ps1`（已有 `.so` 后单独跑 Gradle）、`lt-android-build.ps1`（官方 `pnpm tauri android build` 路线，需 Windows 开发者模式/symlink 权限）。
@@ -102,7 +104,7 @@ adb install -r "src-tauri\gen\android\app\build\outputs\apk\arm64\release\app-ar
 powershell -ExecutionPolicy Bypass -File .\scripts\lt-repack-all.ps1
 ```
 
-串行执行「先桌面后 Android」：任一步失败即中止并指向对应日志；全部完成后汇总输出两端产物路径、大小与时间戳。
+串行执行「先桌面后 Android（arm64 + x86_64）」：任一步失败即中止并指向对应日志；全部完成后汇总输出两端产物路径、大小与时间戳。
 
 ### Linux / fnOS（Web 管理端）
 
