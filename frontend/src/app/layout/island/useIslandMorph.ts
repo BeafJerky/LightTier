@@ -192,11 +192,25 @@ export function useIslandMorph(
     kick()
   })
 
-  watch(el, () => applyShape(), { immediate: true })
+  /** 主题切换只改 CSS 变量、不改变目标尺寸：重新读取圆角并立即应用 */
+  const refreshTheme = () => {
+    readRadii()
+    applyShape()
+  }
+
+  watch(
+    el,
+    (node) => {
+      if (!node) return
+      readRadii()
+      applyShape()
+    },
+    { immediate: true }
+  )
 
   onScopeDispose(() => {
     if (frame) cancelAnimationFrame(frame)
   })
 
-  return { setTarget, cardVisible }
+  return { setTarget, refreshTheme, cardVisible }
 }

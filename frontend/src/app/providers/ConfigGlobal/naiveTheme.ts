@@ -6,9 +6,10 @@
  * 无法解析 var()/color-mix()；因此注入前必须把表达式解析为具体 RGB 值，
  * 并在主题切换后重新解析。light / dark 基础主题按背景亮度切换。
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { darkTheme, type GlobalTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { useThemeLoader } from '@/shared/composables/useThemeLoader'
+import { useThemeTokenSync } from '@/shared/composables/useThemeTokenSync'
 import { detectDarkTheme, parseCssColor } from '@/shared/lib/themeColorUtil'
 
 const cssVar = (name: string, fallback: string) => `var(${name}, ${fallback})`
@@ -971,7 +972,7 @@ const readThemeBackground = (): string | null => {
  * 监听主题名与 themeRevision，确保重启恢复外部主题（名称未变）时也会重新判定。
  */
 export const useNaiveTheme = () => {
-  const { currentTheme, themeRevision } = useThemeLoader()
+  const { currentTheme } = useThemeLoader()
   const isDark = ref(detectDarkTheme(currentTheme.value, readThemeBackground()))
   const themeOverrides = ref<GlobalThemeOverrides>(resolveThemeOverrides(NAIVE_THEME_OVERRIDES))
 
@@ -984,7 +985,7 @@ export const useNaiveTheme = () => {
   onMounted(() => {
     void refresh()
   })
-  watch([currentTheme, themeRevision], () => {
+  useThemeTokenSync(() => {
     void refresh()
   })
 

@@ -173,6 +173,40 @@ describe('useIslandMorph 内容与外形协调', () => {
     }
   )
 
+  it('主题切换后无需改变目标尺寸即可刷新圆角', () => {
+    let pill = '100px'
+    let card = '18px'
+    vi.stubGlobal('getComputedStyle', () => ({
+      getPropertyValue: (name: string) =>
+        name === '--theme-radius-pill' ? pill : name === '--theme-radius-xl' ? card : ''
+    }))
+    const { element } = createHost()
+    const morph = scope.run(() => useIslandMorph(ref(element), ref(false), 132, 40))!
+
+    morph.setTarget(132, 40)
+    for (let time = 16; time <= 900; time += 16) advance(time)
+    expect(element.style.borderRadius).toBe('20px')
+
+    pill = '0px'
+    card = '0px'
+    morph.refreshTheme()
+    expect(element.style.borderRadius).toBe('0px')
+
+    pill = '100px'
+    card = '18px'
+    morph.refreshTheme()
+    expect(element.style.borderRadius).toBe('20px')
+
+    morph.setTarget(352, 196)
+    for (let time = 916; time <= 2_400; time += 16) advance(time)
+    expect(element.style.borderRadius).toBe('18px')
+
+    pill = '0px'
+    card = '0px'
+    morph.refreshTheme()
+    expect(element.style.borderRadius).toBe('0px')
+  })
+
   it('标准档展开读取并保留自定义主题圆角', () => {
     vi.stubGlobal('getComputedStyle', () => ({
       getPropertyValue: (name: string) =>

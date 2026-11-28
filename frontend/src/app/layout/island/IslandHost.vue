@@ -10,6 +10,7 @@ import type { IslandAction } from '@/shared/lib/island/types'
 import IslandFace from './IslandFace.vue'
 import IslandCard from './IslandCard.vue'
 import { useIslandMorph } from './useIslandMorph'
+import { useThemeTokenSync } from '@/shared/composables/useThemeTokenSync'
 import { usePausableTimer } from './usePausableTimer'
 
 const props = withDefaults(defineProps<{ suspended?: boolean }>(), { suspended: false })
@@ -68,7 +69,7 @@ const initialIdleWidth =
       ? IDLE_NARROW_WIDTH
       : IDLE_WIDTH
 
-const { setTarget, cardVisible } = useIslandMorph(
+const { setTarget, refreshTheme, cardVisible } = useIslandMorph(
   rootRef,
   reducedMotion,
   initialIdleWidth,
@@ -258,6 +259,9 @@ watch(
   },
   { immediate: true }
 )
+
+// 主题切换（含同名外部主题恢复）只改变 CSS 变量：无需等用户点开再跟随形状
+useThemeTokenSync(refreshTheme)
 
 function onFocusOut(event: FocusEvent) {
   const next = event.relatedTarget as Node | null
