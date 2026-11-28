@@ -75,7 +75,7 @@ watch(visible, (v) => {
 }
 
 .ntv-page :deep(.td-refresh-btn) {
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   font-size: 11.5px;
   background: var(--theme-bg-card);
@@ -86,12 +86,13 @@ watch(visible, (v) => {
 .ntv-page :deep(.td-list) {
   display: block;
   min-height: 0;
-  padding: 0;
+  padding: 0 0 8px;
   overflow-y: auto;
   background: var(--theme-bg-card);
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-lg, 14px);
   overscroll-behavior: contain;
+  scroll-padding-bottom: 8px;
   flex: 1;
 }
 
@@ -303,14 +304,230 @@ watch(visible, (v) => {
   }
 }
 
-/* 横屏手机（矮屏）：侧栏放宽、工具恢复双列，给主题列表留下可见行 */
+/* 手机竖屏：主题列表改双列卡片，预览缩为缩略图，列表可见更多主题 */
+@media (width <= 640px) and (aspect-ratio <= 3 / 5) {
+  .ntv-page :deep(.td-tool-btn) {
+    height: 44px;
+  }
+
+  .ntv-page :deep(.td-preview-wrap) {
+    height: 150px;
+  }
+
+  .ntv-page :deep(.td-list) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+    gap: 8px;
+    padding: 8px;
+    box-shadow: inset 0 -18px 16px -16px var(--theme-bg-card);
+  }
+
+  .ntv-page :deep(.td-group) {
+    grid-column: 1 / -1;
+    top: -8px;
+    padding: 4px 6px 0;
+  }
+
+  .ntv-page :deep(.td-item) {
+    min-height: 50px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--theme-border-light);
+    border-radius: 10px;
+    gap: 8px;
+  }
+
+  .ntv-page :deep(.td-item + .td-item) {
+    border-top: 1px solid var(--theme-border-light);
+  }
+
+  .ntv-page :deep(.td-item.active) {
+    background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.07);
+    border-color: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.35);
+  }
+
+  .ntv-page :deep(.td-item-dot) {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ntv-page :deep(.td-item-label) {
+    font-size: 13px;
+  }
+
+  .ntv-page :deep(.td-item-badge) {
+    padding: 1px 5px;
+    font-size: 10px;
+  }
+}
+
+/* 横屏手机（矮屏）：保留左列表 + 右预览，压缩左侧工具栏给列表让出高度；
+   平板横屏高度更大，不命中本段，维持现有左右布局 */
 @media (width >= 641px) and (height <= 520px) {
+  .ntv-page :deep(.td-body) {
+    gap: 12px;
+  }
+
   .ntv-page :deep(.td-sidebar) {
-    width: 300px;
+    width: 260px;
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+  }
+
+  .ntv-page :deep(.td-sidebar-header) {
+    height: auto;
+    min-height: 40px;
+  }
+
+  .ntv-page :deep(.td-sidebar-title) {
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+
+  .ntv-page :deep(.td-total) {
+    margin-left: 4px;
+    font-size: 11px;
+  }
+
+  .ntv-page :deep(.td-refresh-btn) {
+    height: 40px;
+    padding: 0 10px;
+    font-size: 11.5px;
   }
 
   .ntv-page :deep(.td-tools) {
     grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .ntv-page :deep(.td-tool-btn) {
+    height: 44px;
+    padding: 0 6px;
+    font-size: 11.5px;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .ntv-page :deep(.td-tool-btn svg) {
+    width: 12px;
+    height: 12px;
+  }
+
+  .ntv-page :deep(.td-list) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+    gap: 3px;
+    padding: 6px;
+    box-shadow: inset 0 -16px 14px -14px var(--theme-bg-card);
+  }
+
+  .ntv-page :deep(.td-group) {
+    grid-column: 1 / -1;
+    top: -6px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .ntv-page :deep(.td-item) {
+    min-height: 40px;
+    padding: 0 7px;
+    background: transparent;
+    border: 1px solid var(--theme-border-light);
+    border-radius: 8px;
+    gap: 6px;
+  }
+
+  .ntv-page :deep(.td-item + .td-item) {
+    border-top: 1px solid var(--theme-border-light);
+  }
+
+  .ntv-page :deep(.td-item.active) {
+    background: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.07);
+    border-color: rgb(var(--theme-accent-primary-rgb, 232, 160, 160), 0.35);
+  }
+
+  .ntv-page :deep(.td-item-dot) {
+    width: 14px;
+    height: 14px;
+  }
+
+  .ntv-page :deep(.td-item-label) {
+    overflow: hidden;
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ntv-page :deep(.td-item-badge) {
+    padding: 0 4px;
+    font-size: 8px;
+  }
+
+  .ntv-page :deep(.td-item-check) {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* 恢复默认移到底部操作栏，侧栏只保留列表 */
+  .ntv-page :deep(.td-inline-reset) {
+    display: none;
+  }
+
+  .ntv-page :deep(.td-preview-block) {
+    height: 100%;
+  }
+
+  .ntv-page :deep(.td-preview-label) {
+    margin: 0 2px 5px;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  .ntv-page :deep(.td-preview-wrap) {
+    height: auto;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .ntv-page :deep(.td-preview) {
+    min-height: 0;
+  }
+
+  .ntv-page :deep(.cd-footer) {
+    padding: 6px 0 calc(6px + var(--lt-safe-area-bottom, 0px));
+  }
+
+  .ntv-page :deep(.td-footer-inline) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ntv-page :deep(.td-footer-reset) {
+    display: flex;
+    height: 40px;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--theme-text-secondary);
+    flex: none;
+    gap: 5px;
+  }
+
+  .ntv-page :deep(.td-footer-inline .td-footer-actions) {
+    display: grid;
+    width: auto;
+    grid-template-columns: 1fr 1.35fr;
+    flex: 1;
+    gap: 8px;
+  }
+
+  .ntv-page :deep(.td-btn) {
+    height: 40px;
+    font-size: 12.5px;
   }
 }
 </style>

@@ -192,7 +192,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 }
 
 .nce-page :deep(.ed-name-bar .ed-name-input) {
-  height: 42px;
+  height: 44px;
   grid-column: 1 / -1;
 }
 
@@ -208,7 +208,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 
 .nce-page :deep(.ed-template-trigger) {
   width: 100%;
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
   font-size: 12.5px;
   border: 1px solid var(--theme-border);
@@ -219,7 +219,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 
 .nce-page :deep(.ed-import-btn) {
   width: 100%;
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
   font-size: 12.5px;
   border: 1px dashed var(--theme-border);
@@ -247,7 +247,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 }
 
 .nce-page :deep(.ed-tab) {
-  height: 36px;
+  height: 44px;
   padding: 0 12px;
   font-size: 12.5px;
   font-weight: 600;
@@ -279,6 +279,7 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
 /* --- 表单卡片 --- */
 .nce-page :deep(.ed-form-scroll) {
   padding-right: 0;
+  padding-bottom: 8px;
 }
 
 .nce-page :deep(.ed-form-section),
@@ -474,6 +475,15 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
   gap: 10px;
 }
 
+/* 平板：操作按钮不再随 800+dp 内容拉伸，右对齐固定宽度 */
+@media (width >= 768px) {
+  .nce-page :deep(.ed-footer-btns) {
+    width: auto;
+    margin-left: auto;
+    grid-template-columns: 140px 180px;
+  }
+}
+
 .nce-page :deep(.ed-btn) {
   height: 44px;
   padding: 0 12px;
@@ -492,5 +502,53 @@ const handleSaved = async (name: string, content: string, done: (ok: boolean) =>
   color: var(--theme-text-on-accent, #fff);
   background: var(--theme-accent-primary);
   border: none;
+}
+
+/* 横屏矮窗口：名称/模板/导入合并成一行，隐藏版本号，首屏至少露出“基础设置”与第一个字段 */
+@media (orientation: landscape) and (height <= 520px) {
+  .nce-page :deep(.ed-name-bar) {
+    display: flex;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .nce-page :deep(.ed-name-bar .ed-form-label) {
+    display: none;
+  }
+
+  .nce-page :deep(.ed-name-bar .ed-name-input) {
+    height: 44px;
+    min-width: 0;
+    flex: 1 1 40%;
+  }
+
+  .nce-page :deep(.ed-name-error) {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .nce-page :deep(.ed-template-select) {
+    min-width: 0;
+    flex: 1 1 28%;
+  }
+
+  .nce-page :deep(.ed-import-btn) {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .nce-page :deep(.ed-tabs) {
+    margin-bottom: 8px;
+  }
+
+  .nce-page :deep(.ed-tabs-track) {
+    padding: 3px;
+  }
+
+  .nce-page :deep(.ed-core-target) {
+    display: none;
+  }
 }
 </style>

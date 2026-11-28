@@ -384,7 +384,7 @@
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
               />
             </svg>
-            <span class="nl-tab-label">{{ t(tab.labelKey) }}</span>
+            <span class="nl-tab-label">{{ t(tab.tabLabelKey) }}</span>
           </LtButton>
         </nav>
       </div>
@@ -580,11 +580,36 @@ const webConfigSupported = backendMode() !== 'agent' || backendCapabilities().we
 
 // 底部导航：对应桌面侧边栏一级入口，顺序与命名保持两端一致
 const androidTabs = [
-  { path: '/new', labelKey: 'newLayout.overview', icon: 'overview' },
-  { path: '/new/monitor', labelKey: 'newLayout.monitor', icon: 'monitor' },
-  { path: '/new/config', labelKey: 'newLayout.config', icon: 'config' },
-  { path: '/new/web-config', labelKey: 'newLayout.webConfig', icon: 'web' },
-  { path: '/new/settings', labelKey: 'newSettings.settings', icon: 'settings' }
+  {
+    path: '/new',
+    labelKey: 'newLayout.overview',
+    tabLabelKey: 'newLayout.overview',
+    icon: 'overview'
+  },
+  {
+    path: '/new/monitor',
+    labelKey: 'newLayout.monitor',
+    tabLabelKey: 'newLayout.monitor',
+    icon: 'monitor'
+  },
+  {
+    path: '/new/config',
+    labelKey: 'newLayout.config',
+    tabLabelKey: 'newLayout.configTab',
+    icon: 'config'
+  },
+  {
+    path: '/new/web-config',
+    labelKey: 'newLayout.webConfig',
+    tabLabelKey: 'newLayout.webConfig',
+    icon: 'web'
+  },
+  {
+    path: '/new/settings',
+    labelKey: 'newSettings.settings',
+    tabLabelKey: 'newSettings.settings',
+    icon: 'settings'
+  }
 ].filter((tab) => webConfigSupported || tab.path !== '/new/web-config')
 const isTabActive = (path: string) =>
   path === '/new' ? route.path === '/new' : route.path === path || route.path.startsWith(path + '/')
@@ -803,6 +828,10 @@ onBeforeUnmount(() => {
 .nl-window {
   /* 内容区底部为悬浮菜单预留的避让高度（窄屏在媒体查询中加大） */
   --lt-fab-clearance: 56px;
+
+  /* Android 平板内容容器：正文/底栏/全宽页共用同一限宽，避免各自为政 */
+  --lt-content-max: 860px;
+  --lt-content-max-narrow: 720px;
 
   display: flex;
   height: 100%;
@@ -1133,6 +1162,13 @@ onBeforeUnmount(() => {
   background: var(--theme-overlay, rgb(0 0 0 / 30%));
 }
 
+/* 抽屉只存在于窄屏：窗口拉宽后即使 sidebarOpen 仍为 true，也不能留下遮罩 */
+@media (width > 900px) {
+  .nl-mask {
+    display: none;
+  }
+}
+
 .nl-mask-fade-enter-active {
   transition: opacity var(--theme-duration) var(--theme-ease-out);
 }
@@ -1365,15 +1401,42 @@ onBeforeUnmount(() => {
 @media (width >= 768px) {
   .nl-window.nl-android .nl-content-android:not(.nl-content-full) {
     width: 100%;
-    max-width: 860px;
+    max-width: var(--lt-content-max);
     margin: 0 auto;
     box-sizing: border-box;
   }
 
   /* 与内容卡片左边缘对齐（容器居中留白 + 内容内边距） */
   .nl-window.nl-android .nl-toolbar-android {
-    padding-right: max(var(--theme-space-4), calc((100% - 860px) / 2 + var(--theme-space-4)));
-    padding-left: max(var(--theme-space-4), calc((100% - 860px) / 2 + var(--theme-space-4)));
+    padding-right: max(
+      var(--theme-space-4),
+      calc((100% - var(--lt-content-max)) / 2 + var(--theme-space-4))
+    );
+    padding-left: max(
+      var(--theme-space-4),
+      calc((100% - var(--lt-content-max)) / 2 + var(--theme-space-4))
+    );
+  }
+
+  /* 底栏背景仍铺满，入口与内容限宽对齐，避免平板横屏 5 个入口拉到 256dp 间距 */
+  .nl-window.nl-android .nl-tabbar {
+    padding-right: max(
+      var(--theme-space-4),
+      calc((100% - var(--lt-content-max)) / 2 + var(--theme-space-4))
+    );
+    padding-left: max(
+      var(--theme-space-4),
+      calc((100% - var(--lt-content-max)) / 2 + var(--theme-space-4))
+    );
+    box-sizing: border-box;
+  }
+
+  /* 全宽页（编辑器）只去壳层留白，不取消内容限宽；单列表单固定 720dp 居中 */
+  .nl-window.nl-android .nl-content-full > * {
+    width: 100%;
+    max-width: var(--lt-content-max-narrow);
+    margin-right: auto;
+    margin-left: auto;
   }
 }
 
@@ -1405,7 +1468,7 @@ onBeforeUnmount(() => {
   }
 
   .nl-window.nl-android .nl-tab-label {
-    font-size: 9.5px;
+    font-size: 11px;
   }
 
   .nl-window.nl-android .nl-content-android {
@@ -1505,7 +1568,7 @@ onBeforeUnmount(() => {
 }
 
 .nl-tab-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.2px;
 }

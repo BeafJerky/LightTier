@@ -159,12 +159,17 @@
 }
 
 /* 横屏且够宽（手机横屏 / 平板）：主卡在左，配置列表在右 */
-@media (width >= 700px) and (orientation: landscape) {
+@media (width >= 768px) and (orientation: landscape) {
   .nd-android {
     display: grid;
     grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
     align-items: start;
     gap: var(--theme-space-4);
+  }
+
+  /* 无配置时主卡不渲染，空态独占整行，避免只剩左侧 360dp 列 */
+  .nd-android.nd-list-empty {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .nd-android .nda-hero {
@@ -231,6 +236,7 @@
 
 .nda-empty {
   display: flex;
+  grid-column: 1 / -1;
   padding: 36px var(--theme-space-5);
   flex-direction: column;
   text-align: center;

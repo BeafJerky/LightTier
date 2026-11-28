@@ -8,7 +8,7 @@
         :size="isAndroid ? 'lg' : 'sm'"
         class="nwc-add-btn"
         @click="emit('add')"
-        :title="t('newWebConfig.addConfig')"
+        :title="t('newWebConfig.addWebConfig')"
       >
         <svg
           :width="isAndroid ? 17 : 14"
@@ -22,7 +22,7 @@
         >
           <path d="M12 5v14M5 12h14" />
         </svg>
-        <span>{{ t('newWebConfig.addConfig') }}</span>
+        <span>{{ t('newWebConfig.addWebConfig') }}</span>
       </LtButton>
     </div>
     <div class="nwc-left-scroll lt-loading-host">
@@ -116,7 +116,7 @@
         <p class="nwc-empty-title">{{ t('newWebConfig.emptyTitle') }}</p>
         <span class="nwc-empty-desc">{{ t('newWebConfig.emptyDesc') }}</span>
         <LtButton variant="primary" size="md" class="nwc-empty-cta" @click="emit('add')">
-          {{ t('newWebConfig.addConfig') }}
+          {{ t('newWebConfig.addWebConfig') }}
         </LtButton>
       </div>
     </div>

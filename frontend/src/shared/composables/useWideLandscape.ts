@@ -1,8 +1,9 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-const QUERY = '(width >= 700px) and (orientation: landscape)'
+const QUERY = '(width >= 768px)'
 
-// 横屏宽屏（手机横屏 / 平板）：JS 侧判断是否需要走分栏交互（如列表本地选中而非路由跳转）
+// 宽屏（手机横屏 / 平板横竖屏）：JS 侧判断是否走分栏交互（如列表本地选中而非路由跳转）。
+// 只按宽度判断，和 CSS 分栏断点保持一致；短屏压缩由各自媒体查询处理。
 export const useWideLandscape = () => {
   const matched = ref(false)
   let mq: MediaQueryList | null = null

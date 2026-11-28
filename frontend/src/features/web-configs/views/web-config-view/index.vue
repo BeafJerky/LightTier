@@ -414,7 +414,7 @@ const notifyWebListLoadFailed = () => toast(t('newWebConfig.loadFailed'), 'error
 
 // 选中配置卡片：Android 进入详情路由（由 syncDetailFromRoute 统一加载），宽屏同时展示右侧详情
 const selectConfig = (item: FormWebData) => {
-  // Android 横屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
+  // Android 宽屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
   if (isAndroidPlatform && isWideLandscape.value) {
     selectedConfig.value = item
     return

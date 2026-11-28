@@ -4,7 +4,9 @@
       <!-- 左侧：主题列表 -->
       <div class="td-sidebar">
         <div class="td-sidebar-header">
-          <span class="td-sidebar-title">{{ t('newTheme.installed') }}</span>
+          <span class="td-sidebar-title">
+            {{ t('newTheme.installed') }}<span class="td-total">{{ themeTotal }}</span>
+          </span>
           <LtButton variant="ghost" size="sm" class="td-refresh-btn" @click="refreshList">{{
             t('newTheme.refreshList')
           }}</LtButton>
@@ -142,6 +144,29 @@
         <LtButton v-if="!inline" variant="ghost" size="md" @click="handleReset">{{
           t('newTheme.resetDefault')
         }}</LtButton>
+        <LtButton
+          v-if="inline"
+          variant="text"
+          size="sm"
+          class="td-footer-reset"
+          @click="handleReset"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          {{ t('newTheme.resetDefault') }}
+        </LtButton>
         <div class="td-footer-actions">
           <template v-if="inline">
             <LtButton variant="ghost" size="lg" class="td-btn" @click="visible = false">{{
@@ -237,6 +262,7 @@ interface ThemeInfo {
 }
 
 const themes = ref<ThemeInfo[]>([])
+const themeTotal = computed(() => themes.value.length)
 
 // 分组展示：内置两项属颜色主题；空分组（如导入前无风格化主题）不渲染标题
 const themeGroups = computed(() => {
@@ -471,6 +497,17 @@ watch(locale, () => {
   margin-left: auto;
 }
 
+.td-total {
+  margin-left: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-text-muted, #9a8f80);
+}
+
+.td-footer-reset {
+  display: none;
+}
+
 .td-list {
   display: flex;
   flex-direction: column;
@@ -491,7 +528,7 @@ watch(locale, () => {
 }
 
 .td-group-count {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   opacity: 0.85;
 }

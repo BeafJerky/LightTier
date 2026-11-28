@@ -107,6 +107,7 @@
       <LtButton
         variant="ghost"
         size="md"
+        class="ed-import-btn"
         @click="handleImportToml"
         :title="t('newEdit.importToml')"
       >

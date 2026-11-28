@@ -302,8 +302,8 @@
   margin-top: 8px;
 }
 
-/* Android 横屏宽屏：列表常驻可滚动 */
-@media (width >= 700px) and (orientation: landscape) {
+/* Android 宽屏：列表常驻可滚动（与主从断点一致，覆盖平板竖屏） */
+@media (width >= 768px) {
   .nwc-root.nwc-android .nwc-left-scroll {
     display: block;
     min-height: 0;

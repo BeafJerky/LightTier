@@ -4,7 +4,8 @@
     :class="{
       'nm-android': isAndroidPlatform,
       'nm-detail-open': !!selectedConfig,
-      'nm-ls-split': isAndroidPlatform && isWideLandscape && !!selectedData
+      'nm-ls-split': isAndroidPlatform && isWideLandscape && !!selectedData,
+      'nm-list-empty': !isAndroidPlatform && displayList.length === 0 && !loading
     }"
   >
     <!-- 左侧配置列表（桌面 master-detail；Android 单实例直接展示详情） -->

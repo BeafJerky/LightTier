@@ -6,6 +6,15 @@
   font-family: var(--theme-font-body);
 }
 
+/* 无运行实例：左侧空态独占整行，隐藏右侧“选择一个配置”的重复提示 */
+.nm-root.nm-list-empty .nm-left {
+  width: 100%;
+}
+
+.nm-root.nm-list-empty .nm-right {
+  display: none;
+}
+
 /* 左侧列表 */
 .nm-left {
   display: flex;

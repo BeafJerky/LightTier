@@ -1,5 +1,8 @@
 <template>
-  <div class="nd" :class="{ 'nd-android': isAndroidPlatform }">
+  <div
+    class="nd"
+    :class="{ 'nd-android': isAndroidPlatform, 'nd-list-empty': displayList.length === 0 }"
+  >
     <div v-if="isQueued" class="nd-queue-bar">
       <span class="nd-queue-icon">⟳</span>
       <span class="nd-queue-text">

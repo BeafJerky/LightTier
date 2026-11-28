@@ -49,7 +49,7 @@
           />
           <LtButton
             variant="ghost"
-            size="sm"
+            size="md"
             :title="networkSecretVisible ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
             :aria-label="networkSecretVisible ? t('newEdit.hideSecret') : t('newEdit.showSecret')"
             @click="networkSecretVisible = !networkSecretVisible"

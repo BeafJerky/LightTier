@@ -175,4 +175,12 @@ const submit = async () => {
 .lt-auth__submit {
   margin-top: var(--theme-space-5);
 }
+
+/* 禁用态用中性表面：白字压浅粉对比过低，且与可用态难以区分 */
+.lt-auth__submit.lt-btn--primary:disabled {
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-secondary);
+  border-color: var(--theme-border);
+  opacity: 1;
+}
 </style>

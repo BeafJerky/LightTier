@@ -88,7 +88,6 @@ import { useEasyTierStore } from '@/shared/store/easytier'
 import { useLocaleStore } from '@/shared/store/locale'
 import { changeLocale } from '@/shared/i18n'
 import { useThemeLoader } from '@/shared/composables/useThemeLoader'
-import { useWideLandscape } from '@/shared/composables/useWideLandscape'
 import { getAppVersion } from '@/shared/platform/sysUtil'
 import { isAndroid } from '@/shared/platform/platformUtil'
 
@@ -116,8 +115,6 @@ interface SettingsRow {
 
 const router = useRouter()
 const isAndroidPlatform = isAndroid()
-// 横屏三列时第一组补上分组标题，三列卡片顶部对齐
-const isWideLandscape = useWideLandscape()
 const { t } = useI18n()
 const store = useEasyTierStore()
 const localeStore = useLocaleStore()
@@ -186,7 +183,7 @@ const groups = computed(() => {
   return [
     {
       key: 'primary',
-      label: isAndroidPlatform && isWideLandscape.value ? t('newSettings.groupPrimary') : '',
+      label: isAndroidPlatform ? t('newSettings.groupPrimary') : '',
       rows: [rows.core, rows.theme]
     },
     {
@@ -249,6 +246,13 @@ onMounted(async () => {
   letter-spacing: 1.4px;
   color: var(--theme-text-secondary);
   text-transform: uppercase;
+}
+
+/* 手机单列：首组无需标题；进入两列/三列后与“运行/应用”对齐显示 */
+@media (width < 768px) {
+  .ssv-group-wrap:first-child .ssv-group-label {
+    display: none;
+  }
 }
 
 .ssv-group {
@@ -355,13 +359,19 @@ onMounted(async () => {
   background: var(--theme-bg-active);
 }
 
-/* Android 横屏宽屏：三组设置并排展示 */
-@media (width >= 700px) and (orientation: landscape) {
+/* Android 宽屏：按宽度而非方向分栏——平板竖屏 800dp 用两列，宽横屏再升三列 */
+@media (width >= 768px) {
   .ssv-page.ssv-android {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: var(--theme-space-4);
+  }
+}
+
+@media (width >= 1024px) {
+  .ssv-page.ssv-android {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>

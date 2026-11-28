@@ -183,7 +183,7 @@ export function useConfigList(options: UseConfigListOptions) {
 
   // 选中配置卡片：加载详情、重置路由筛选，并记录选择（供下次进入页面恢复）
   const selectConfig = async (item: RunningItem) => {
-    // Android 横屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
+    // Android 宽屏分栏：列表常驻，本地选中即可（不跳详情路由，保留根工具栏与底栏）
     if (isAndroidPlatform && isWideLandscape.value) {
       selectedConfig.value = item
       await loadConfigDetail(item)

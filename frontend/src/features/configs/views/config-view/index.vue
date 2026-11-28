@@ -474,8 +474,8 @@ onMounted(() => {
   margin-top: var(--theme-space-4);
 }
 
-/* Android 横屏宽屏：列表与详情常驻左右分栏，两栏各自滚动 */
-@media (width >= 700px) and (orientation: landscape) {
+/* Android 宽屏：列表与详情常驻左右分栏，两栏各自滚动（按宽度而非方向，覆盖平板竖屏） */
+@media (width >= 768px) {
   .nw-root.nw-android {
     display: grid;
     grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
