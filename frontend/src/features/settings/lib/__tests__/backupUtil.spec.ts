@@ -426,7 +426,11 @@ describe('分类载荷校验', () => {
   it('偏好载荷仅接受白名单字段与正确类型', () => {
     const value = JSON.stringify({
       version: 1,
-      store: { refreshInterval: 5, defaultServiceInstallMethod: 'official' },
+      store: {
+        refreshInterval: 5,
+        defaultServiceInstallMethod: 'official',
+        updateStableOnly: false
+      },
       local: { 'settings.autoRunNetwork': 'true' },
       serviceConfigs: {
         家庭: '{"installMethod":"nssm"}',
@@ -436,6 +440,7 @@ describe('分类载荷校验', () => {
     })
     const payload = sanitizePreferencesPayload(value)
     expect(payload?.store.refreshInterval).toBe(5)
+    expect(payload?.store.updateStableOnly).toBe(false)
     expect(payload?.local['settings.autoRunNetwork']).toBe('true')
     expect(payload?.serviceConfigs['service-config:家庭']).toBe('{"installMethod":"nssm"}')
     expect(payload?.serviceConfigs['service-config:easytier-家庭']).toBe(

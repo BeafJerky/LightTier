@@ -242,7 +242,7 @@ const collectPreferencesPayload = async (
     store: {
       p2pNotifySetting: store.p2pNotifySetting,
       refreshInterval: store.refreshInterval,
-      selectedColumns: [...store.selectedColumns],
+      updateStableOnly: store.updateStableOnly,
       defaultServiceInstallMethod: store.defaultServiceInstallMethod,
       defaultEnableAutostart: store.defaultEnableAutostart,
       autoRunNetworkSetting: store.autoRunNetworkSetting,

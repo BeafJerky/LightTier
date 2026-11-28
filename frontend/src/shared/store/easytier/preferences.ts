@@ -21,8 +21,6 @@ export function createPreferencesDomain() {
   const lockPassword = ref('')
   // 检查更新只认正式版（忽略 nightly 等预发布），默认开启
   const updateStableOnly = ref(true)
-  // 当前选择的列（存储prop值）
-  const selectedColumns = ref(['rx_bytes', 'tx_bytes', 'nat_type'])
   // 默认服务安装方式
   const defaultServiceInstallMethod = ref<'nssm' | 'official'>('nssm')
   // 默认开机自启动
@@ -41,7 +39,6 @@ export function createPreferencesDomain() {
     isFirstLoad,
     lockPassword,
     updateStableOnly,
-    selectedColumns,
     defaultServiceInstallMethod,
     defaultEnableAutostart,
     setRefreshInterval

@@ -20,7 +20,7 @@
       />
     </label>
 
-    <div v-if="store.autoRunNetworkSetting" class="sd-row">
+    <div v-if="store.autoRunNetworkSetting && !isAgentMode" class="sd-row">
       <div class="sd-row-info">
         <span class="sd-row-title">{{ t('newSettings.autoRunConfig') }}</span>
         <span class="sd-row-desc">{{ t('newSettings.autoRunConfigDesc') }}</span>
@@ -34,6 +34,23 @@
         />
       </div>
     </div>
+
+    <div v-if="isAgentMode && store.autoRunNetworkSetting" class="sd-row">
+      <span class="sd-row-desc">{{ t('newSettings.agentAutoRunHint') }}</span>
+    </div>
+
+    <label v-if="isDesktopRuntime" class="sd-row" @click="setMinimizeOnStart(!minimizeOnStart)">
+      <div class="sd-row-info">
+        <span class="sd-row-title">{{ t('newSettings.minimizeOnStart') }}</span>
+        <span class="sd-row-desc">{{ t('newSettings.minimizeOnStartDesc') }}</span>
+      </div>
+      <LtSwitch
+        :model-value="minimizeOnStart"
+        :aria-label="t('newSettings.minimizeOnStart')"
+        @update:model-value="setMinimizeOnStart"
+        @click.stop
+      />
+    </label>
 
     <div class="sd-row">
       <div class="sd-row-info">
@@ -91,6 +108,47 @@
       />
     </label>
 
+    <!-- agent：服务端运行时设置（noTun / 日志级别） -->
+    <template v-if="isAgentMode">
+      <label
+        class="sd-row"
+        :class="{ 'is-disabled': agentSettingsBusy }"
+        @click="handleAgentNoTunToggle(!agentNoTun)"
+      >
+        <div class="sd-row-info">
+          <span class="sd-row-title">{{ t('newSettings.agentNoTun') }}</span>
+          <span class="sd-row-desc">{{ t('newSettings.agentNoTunDesc') }}</span>
+        </div>
+        <LtSwitch
+          :model-value="agentNoTun"
+          :disabled="agentSettingsBusy"
+          :aria-label="t('newSettings.agentNoTun')"
+          @update:model-value="handleAgentNoTunToggle"
+          @click.stop
+        />
+      </label>
+
+      <div class="sd-row" :class="{ 'is-disabled': agentSettingsBusy }">
+        <div class="sd-row-info">
+          <span class="sd-row-title">{{ t('newSettings.agentLogLevel') }}</span>
+          <span class="sd-row-desc">{{ t('newSettings.agentLogLevelDesc') }}</span>
+        </div>
+        <div class="sd-select-field">
+          <LtSelect
+            :model-value="agentLogLevel"
+            :options="logLevelOptions"
+            :disabled="agentSettingsBusy"
+            :aria-label="t('newSettings.agentLogLevel')"
+            @update:model-value="handleAgentLogLevelSelect"
+          />
+        </div>
+      </div>
+
+      <div v-if="agentSettingsError" class="sd-row">
+        <span class="sd-field-error" role="alert">{{ agentSettingsError }}</span>
+      </div>
+    </template>
+
     <!-- P2P 直连通知（5.4） -->
     <label class="sd-row" @click="store.p2pNotifySetting = !store.p2pNotifySetting">
       <div class="sd-row-info">
@@ -121,10 +179,20 @@ const { isDesktopRuntime, capabilities } = injectRequired(SETTINGS_ENV_KEY, 'Gen
 // agent 下服务能力关闭时隐藏“默认服务安装方式”（原生/预览始终可见）
 const servicesSupported = !capabilities || capabilities.services
 const {
+  isAgentMode,
   refreshInput,
   refreshError,
   commitRefreshInterval,
+  minimizeOnStart,
+  setMinimizeOnStart,
+  agentNoTun,
+  agentLogLevel,
+  agentSettingsBusy,
+  agentSettingsError,
+  logLevelOptions,
   handleAutoRunToggle,
+  handleAgentNoTunToggle,
+  handleAgentLogLevelSelect,
   autoRunConfigOptions,
   handleAutoRunConfigSelect,
   serviceMethodOptions,
@@ -134,6 +202,10 @@ const {
 
 <style scoped lang="less">
 @import url('./styles/common.less');
+
+.sd-row.is-disabled {
+  opacity: 0.55;
+}
 
 /* 下拉选择：固定宽度，避免挤压左侧说明 */
 .sd-select-field {

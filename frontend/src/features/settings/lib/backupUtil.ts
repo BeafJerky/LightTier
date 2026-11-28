@@ -140,11 +140,6 @@ export const extractLegacyAutoRunSettings = (
   return result
 }
 
-const isStringArray = (value: unknown, maxEntries: number, maxLength = 100): value is string[] =>
-  Array.isArray(value) &&
-  value.length <= maxEntries &&
-  value.every((item) => isBoundedString(item, maxLength))
-
 /** 单个备份条目（value 为统一序列化后的内容，hash 由 value 计算） */
 export interface BackupItem {
   id: string
@@ -414,7 +409,7 @@ export interface PreferencesPayload {
   store: {
     p2pNotifySetting?: boolean
     refreshInterval?: number
-    selectedColumns?: string[]
+    updateStableOnly?: boolean
     defaultServiceInstallMethod?: 'nssm' | 'official'
     defaultEnableAutostart?: boolean
     autoRunNetworkSetting?: boolean
@@ -454,6 +449,7 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
     if (!isRecord(rawStore)) return null
     const booleans = [
       'p2pNotifySetting',
+      'updateStableOnly',
       'defaultEnableAutostart',
       'autoRunNetworkSetting'
     ] as const
@@ -473,10 +469,6 @@ export const sanitizePreferencesPayload = (value: string): PreferencesPayload | 
         return null
       }
       store.refreshInterval = interval
-    }
-    if (rawStore.selectedColumns !== undefined) {
-      if (!isStringArray(rawStore.selectedColumns, 50, 100)) return null
-      store.selectedColumns = [...rawStore.selectedColumns]
     }
     if (rawStore.defaultServiceInstallMethod !== undefined) {
       const method = rawStore.defaultServiceInstallMethod

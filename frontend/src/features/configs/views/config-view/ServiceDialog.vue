@@ -110,6 +110,7 @@ import { useI18n } from 'vue-i18n'
 import type { ServiceInstallConfig } from '@/entities/config/formTypes'
 import CreamDialog from '@/shared/ui/CreamDialog.vue'
 import { LtButton, LtInput, LtSwitch } from '@/shared/ui'
+import { useEasyTierStore } from '@/shared/store/easytier'
 
 const { t } = useI18n()
 
@@ -134,29 +135,22 @@ watch(visible, (v) => {
   emit('update:modelValue', v)
 })
 
+const store = useEasyTierStore()
 const installing = ref(false)
-// 安装表单：切换安装方式时仅展示对应分支的字段（nssm 账户 / official 显示名等）
-const form = ref<ServiceInstallConfig>({
-  installMethod: 'nssm',
-  description: '',
-  displayName: '',
-  enableAutostart: true,
+// 安装表单：安装方式 / 开机自启取设置页默认值，其余字段按当前配置名生成
+const createForm = (): ServiceInstallConfig => ({
+  installMethod: store.defaultServiceInstallMethod,
+  description: t('newConfig.svcDefaultDesc', { name: props.configName }),
+  displayName: t('newConfig.svcDefaultName', { name: props.configName }),
+  enableAutostart: store.defaultEnableAutostart,
   username: '',
   password: ''
 })
+const form = ref<ServiceInstallConfig>(createForm())
 
-// 每次打开时重置表单（描述/显示名按当前配置名生成默认值）
+// 每次打开时重置表单（默认值实时读取设置，避免打开弹窗时沿用旧值）
 watch(visible, (v) => {
-  if (v) {
-    form.value = {
-      installMethod: 'nssm',
-      description: t('newConfig.svcDefaultDesc', { name: props.configName }),
-      displayName: t('newConfig.svcDefaultName', { name: props.configName }),
-      enableAutostart: true,
-      username: '',
-      password: ''
-    }
-  }
+  if (v) form.value = createForm()
 })
 
 // 提交安装：把表单快照交给父组件执行（父组件负责调用 installService 并刷新状态）

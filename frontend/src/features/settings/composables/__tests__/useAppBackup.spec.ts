@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => {
   const storeState: Record<string, unknown> = {
     p2pNotifySetting: true,
     refreshInterval: 10,
-    selectedColumns: [],
+    updateStableOnly: true,
     defaultServiceInstallMethod: 'nssm',
     defaultEnableAutostart: false,
     autoRunNetworkSetting: false,
