@@ -74,6 +74,19 @@ describe('useMockData 服务状态与卸载分发', () => {
     await expect(api.checkWebService('home')).resolves.toBe('notInstalled')
   })
 
+  it('启动中/停止中/暂停映射为明确状态，而不是 unknown', async () => {
+    shell.detectServiceInstallMethod.mockResolvedValue('nssm')
+    shell.checkServiceOnWindows
+      .mockResolvedValueOnce('SERVICE_START_PENDING')
+      .mockResolvedValueOnce('SERVICE_STOP_PENDING')
+      .mockResolvedValueOnce('SERVICE_PAUSED')
+    const api = useMockData()
+
+    await expect(api.checkService('home')).resolves.toBe('starting')
+    await expect(api.checkService('home')).resolves.toBe('stopping')
+    await expect(api.checkService('home')).resolves.toBe('paused')
+  })
+
   it('普通服务检测未知或不存在时不再回退 NSSM 卸载', async () => {
     const api = useMockData()
 
@@ -82,5 +95,32 @@ describe('useMockData 服务状态与卸载分发', () => {
     await expect(api.uninstallService('home')).resolves.toBe(false)
     expect(shell.uninstallServiceOnWindows).not.toHaveBeenCalled()
     expect(shell.uninstallServiceWithOfficialCli).not.toHaveBeenCalled()
+  })
+
+  it('显式 force 时未知状态依次尝试 NSSM 与官方 CLI 清理', async () => {
+    const api = useMockData()
+    shell.detectServiceInstallMethod.mockResolvedValue('unknown')
+    shell.uninstallServiceOnWindows.mockResolvedValueOnce(false)
+    shell.uninstallServiceWithOfficialCli.mockResolvedValueOnce(true)
+
+    await expect(api.uninstallService('home', { force: true })).resolves.toBe(true)
+
+    expect(shell.uninstallServiceOnWindows).toHaveBeenCalledWith('easytier-home', {
+      force: true
+    })
+    expect(shell.uninstallServiceWithOfficialCli).toHaveBeenCalledWith('easytier-home', {
+      force: true
+    })
+  })
+
+  it('Web 服务强制清理把 force 透传给 NSSM 卸载', async () => {
+    const api = useMockData()
+    shell.uninstallServiceOnWindows.mockResolvedValueOnce(true)
+
+    await expect(api.uninstallWebService('home', { force: true })).resolves.toBe(true)
+
+    expect(shell.uninstallServiceOnWindows).toHaveBeenCalledWith('easytierweb-home', {
+      force: true
+    })
   })
 })

@@ -103,6 +103,7 @@ export function useConfigList(options: UseConfigListOptions) {
     svcConfigName,
     currentServiceStatus,
     mapServiceStatus,
+    refreshServiceStatus,
     refreshServiceStatuses,
     openServiceDialog,
     handleServiceInstalled,
@@ -495,6 +496,10 @@ export function useConfigList(options: UseConfigListOptions) {
     // 以实时检测为准：首屏状态尚未返回时，缓存里没有记录，不能据此放行删除。
     if (!isAndroidPlatform) {
       const svcStatus = await checkService(target.configFileName).catch(() => 'unknown')
+      if (svcStatus === 'unknown') {
+        toast(t('newCommon.deleteBlockedServiceUnknown'), 'warning', 5000)
+        return
+      }
       if (svcStatus !== 'notInstalled') {
         toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
         return
@@ -717,6 +722,7 @@ export function useConfigList(options: UseConfigListOptions) {
     toggleExitRoute,
     openRouteCheck,
     currentServiceStatus,
+    refreshServiceStatus,
     openServiceDialog,
     handleServiceInstalled,
     handleStartService,

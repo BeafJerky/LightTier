@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resolveServiceStatuses, SERVICE_STATUS_TTL_MS } from '@/shared/lib/serviceStatusCache'
+import {
+  resolveServiceStatuses,
+  SERVICE_STATUS_TTL_MS,
+  TRANSIENT_SERVICE_STATUS_TTL_MS
+} from '@/shared/lib/serviceStatusCache'
 
 describe('resolveServiceStatuses（服务状态缓存）', () => {
   it('命中原有缓存时不调用检测，并立即回传状态', async () => {
@@ -67,6 +71,37 @@ describe('resolveServiceStatuses（服务状态缓存）', () => {
       force: true
     })
     expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('启动中/停止中只缓存短 TTL，避免服务已就绪仍显示过渡状态', async () => {
+    const cache = new Map()
+    const load = vi.fn(async () => 'starting')
+    const updates: Array<[string, string]> = []
+    const onUpdate = (name: string, status: string) => updates.push([name, status])
+
+    await resolveServiceStatuses('test:spec', ['a'], load, onUpdate, {
+      cache,
+      now: () => 1_000
+    })
+    expect(load).toHaveBeenCalledTimes(1)
+
+    await resolveServiceStatuses('test:spec', ['a'], load, onUpdate, {
+      cache,
+      now: () => 1_000 + TRANSIENT_SERVICE_STATUS_TTL_MS - 1
+    })
+    expect(load).toHaveBeenCalledTimes(1)
+
+    await resolveServiceStatuses('test:spec', ['a'], load, onUpdate, {
+      cache,
+      now: () => 1_000 + TRANSIENT_SERVICE_STATUS_TTL_MS
+    })
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        ['a', 'starting'],
+        ['a', 'starting']
+      ])
+    )
   })
 
   it('并发发起所有缺失项检测，不等待前一项完成', async () => {

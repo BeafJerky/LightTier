@@ -8,7 +8,7 @@ import type { ServiceInstallConfig } from '@/entities/config/formTypes'
 import { useEasyTierStore } from '@/shared/store/easytier'
 import { useCreamToast } from '@/shared/ui/useCreamToast'
 import { useMockData } from '@/shared/platform/mockData'
-import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
+import { resolveServiceStatuses, clearServiceStatusCache } from '@/shared/lib/serviceStatusCache'
 import { useRunningListSync } from '@/shared/composables/useRunningListSync'
 import { useConfigCompatCheck } from '@/shared/composables/useConfigCompatCheck'
 
@@ -46,10 +46,14 @@ export function useConfigServices(options: UseConfigServicesOptions) {
     switch (key) {
       case 'running':
         return t('newCommon.running')
+      case 'starting':
+        return t('newCommon.starting')
       case 'stopped':
         return t('newConfig.stoppedStatus')
       case 'stopping':
         return t('newCommon.stopping')
+      case 'paused':
+        return t('newCommon.paused')
       case 'notInstalled':
         return t('newConfig.notInstalled')
       case 'unknown':
@@ -78,6 +82,15 @@ export function useConfigServices(options: UseConfigServicesOptions) {
       applyServiceStatus,
       { force }
     )
+  }
+
+  // 手动重新检测：忽略 TTL 缓存，用于“未知/启动中/停止中”状态恢复
+  const refreshServiceStatus = async () => {
+    if (!selectedConfig.value) return
+    const name = selectedConfig.value.configFileName
+    // 先回到“检测中”，避免点击后长时间仍显示旧的未知状态
+    serviceStatusMap.value.delete(name)
+    await loadServiceStatus(name, true)
   }
 
   // 列表加载后刷新全部服务状态：优先回传 TTL 缓存，缺失项限流并发检测，不阻塞列表渲染
@@ -137,54 +150,78 @@ export function useConfigServices(options: UseConfigServicesOptions) {
   // 启动 Windows 服务
   const handleStartService = async () => {
     if (!selectedConfig.value) return
+    const configName = selectedConfig.value.configFileName
+    let ok: boolean
     try {
-      const ok = await startService(selectedConfig.value.configFileName)
-      toast(
-        ok ? t('newConfig.svcStartSuccess') : t('newConfig.svcStartFail'),
-        ok ? 'success' : 'error'
-      )
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
-      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
-      await updateRunningList({ force: true })
+      ok = await startService(configName)
     } catch {
+      ok = false
+    }
+    // 无论命令成败都以服务真实状态为准：慢启动超过等待窗口时仍可能是 starting
+    await loadServiceStatus(configName, true)
+    if (ok) {
+      toast(t('newConfig.svcStartSuccess'), 'success')
+    } else if (currentServiceStatus.value === 'starting') {
+      toast(t('newConfig.svcStartPending'), 'warning', 5000)
+    } else {
       toast(t('newConfig.svcStartFail'), 'error')
     }
+    // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
+    await updateRunningList({ force: true })
   }
 
   // 停止 Windows 服务（停止后提示内核已断开）
   const handleStopService = async () => {
     if (!selectedConfig.value) return
+    const configName = selectedConfig.value.configFileName
+    let ok: boolean
     try {
-      const ok = await stopService(selectedConfig.value.configFileName)
-      toast(
-        ok ? t('newConfig.svcStopSuccess') : t('newConfig.svcStopFail'),
-        ok ? 'success' : 'error'
-      )
-      // 仅在真正停止后提示；失败时不再补一条“已停止”的成功 toast
-      if (ok) toast(t('newConfig.svcStopHint'), 'success', 3000)
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
-      // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
-      await updateRunningList({ force: true })
+      ok = await stopService(configName)
     } catch {
+      ok = false
+    }
+    await loadServiceStatus(configName, true)
+    if (ok) {
+      toast(t('newConfig.svcStopSuccess'), 'success')
+      toast(t('newConfig.svcStopHint'), 'success', 3000)
+    } else if (currentServiceStatus.value === 'stopping') {
+      toast(t('newConfig.svcStopPending'), 'warning', 5000)
+    } else {
       toast(t('newConfig.svcStopFail'), 'error')
     }
+    // 服务启停会改变内核运行状态：强制重扫，避免等待后端扫描周期
+    await updateRunningList({ force: true })
   }
 
-  // 卸载 Windows 服务（二次确认后执行）
+  // 卸载 Windows 服务（二次确认后执行）；状态未知时走显式清理通道
   const handleUninstallService = async () => {
     if (!selectedConfig.value) return
+    const configName = selectedConfig.value.configFileName
+    const unknown = currentServiceStatus.value === 'unknown'
+    const transitioning =
+      currentServiceStatus.value === 'starting' || currentServiceStatus.value === 'stopping'
     const ok = await options.confirm(
-      t('newConfig.uninstallTitle'),
-      t('newConfig.uninstallMsg', { name: selectedConfig.value.configFileName })
+      t(unknown ? 'newConfig.cleanupServiceTitle' : 'newConfig.uninstallTitle'),
+      t(unknown ? 'newConfig.cleanupServiceMsg' : 'newConfig.uninstallMsg', {
+        name: configName
+      })
     )
     if (!ok) return
     try {
-      const result = await uninstallService(selectedConfig.value.configFileName)
-      toast(
-        result ? t('newConfig.svcUninstallSuccess') : t('newConfig.svcUninstallFail'),
-        result ? 'success' : 'error'
+      const result = await uninstallService(
+        configName,
+        unknown || transitioning ? { force: true } : undefined
       )
-      await loadServiceStatus(selectedConfig.value.configFileName, true)
+      if (result) {
+        // 卸载成功后立即落定，避免状态查询仍失败时回退成“未知”
+        applyServiceStatus(configName, 'notInstalled')
+        clearServiceStatusCache(SERVICE_STATUS_SCOPE, configName)
+        toast(t('newConfig.svcUninstallSuccess'), 'success')
+        await updateRunningList({ force: true })
+      } else {
+        toast(t('newConfig.svcUninstallFail'), 'error')
+        await loadServiceStatus(configName, true)
+      }
     } catch {
       toast(t('newConfig.svcUninstallFail'), 'error')
     }
@@ -197,6 +234,7 @@ export function useConfigServices(options: UseConfigServicesOptions) {
     currentServiceStatus,
     mapServiceStatus,
     loadServiceStatus,
+    refreshServiceStatus,
     refreshServiceStatuses,
     openServiceDialog,
     handleServiceInstalled,

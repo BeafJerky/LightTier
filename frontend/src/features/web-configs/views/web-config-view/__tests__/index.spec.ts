@@ -90,6 +90,7 @@ vi.mock('@/shared/store/easytier', async () => {
   return { useEasyTierStore: () => store }
 })
 vi.mock('@/shared/lib/serviceStatusCache', () => ({
+  clearServiceStatusCache: vi.fn(),
   resolveServiceStatuses: async (
     _scope: string,
     names: string[],

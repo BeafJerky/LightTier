@@ -1,4 +1,6 @@
 export const SERVICE_STATUS_TTL_MS = 60_000
+/** 过渡状态只缓存很短时间：服务可能在下一次进入页面时已经就绪 */
+export const TRANSIENT_SERVICE_STATUS_TTL_MS = 5_000
 
 export interface CachedServiceStatus {
   status: string
@@ -30,6 +32,17 @@ const cacheFor = (scope: string): Map<string, CachedServiceStatus> => {
   return cache
 }
 
+const isTransientStatus = (status: string) => status === 'starting' || status === 'stopping'
+
+/** 清理指定条目的缓存：卸载/安装成功后避免旧状态在 TTL 内回显 */
+export const clearServiceStatusCache = (scope: string, name?: string): void => {
+  if (!name) {
+    caches.delete(scope)
+    return
+  }
+  caches.get(scope)?.delete(name)
+}
+
 /**
  * 先回传 TTL 内的缓存，再限流并发检测缺失/过期项。
  * 不等待检测完成即可返回，调用方可先渲染列表。
@@ -49,9 +62,14 @@ export const resolveServiceStatuses = async (
   for (const name of names) {
     if (!options.force) {
       const cached = cache.get(name)
-      if (cached && now() - cached.at < ttl) {
-        onUpdate(name, cached.status)
-        continue
+      if (cached) {
+        const effectiveTtl = isTransientStatus(cached.status)
+          ? Math.min(ttl, TRANSIENT_SERVICE_STATUS_TTL_MS)
+          : ttl
+        if (now() - cached.at < effectiveTtl) {
+          onUpdate(name, cached.status)
+          continue
+        }
       }
     }
     pending.push(name)

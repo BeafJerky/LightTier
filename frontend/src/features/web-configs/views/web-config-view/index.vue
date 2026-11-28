@@ -36,6 +36,7 @@
       @start-service="handleStartService"
       @stop-service="handleStopService"
       @uninstall-service="handleUninstallService"
+      @recheck-service="handleRecheckService"
     />
 
     <div class="nwc-right" v-else>
@@ -166,7 +167,7 @@ import WebConfigList from './WebConfigList.vue'
 import WebConfigDetail from './WebConfigDetail.vue'
 import { isWebChecking, isWebRunning, isWebServiceStatusPending } from '../../lib/webConfigStatus'
 import { formatWebConfigServerUrl, isValidWebHost } from '../../lib/webConfigHost'
-import { resolveServiceStatuses } from '@/shared/lib/serviceStatusCache'
+import { resolveServiceStatuses, clearServiceStatusCache } from '@/shared/lib/serviceStatusCache'
 import { mutateWebConfigList } from '@/shared/platform/webConfigStorage'
 import type { FormWebData } from '@/entities/config/formTypes'
 
@@ -249,6 +250,28 @@ const currentServiceStatus = computed(() => {
   // 未检测到结果时保持空串（显示“检测中”），不能默认成“未安装”误导用户
   return serviceStatusMap.value.get(selectedConfig.value.configFileName) || ''
 })
+
+// 单条服务状态重检：等待结果后再提示，避免 refreshWebList 的后台检测造成 Toast 判据滞后
+const reloadWebServiceStatus = async (name: string, force = true) => {
+  await resolveServiceStatuses(
+    'web-config',
+    [name],
+    async (configFileName) => (await checkWebService(configFileName)) as string,
+    (configFileName, serviceStatus) => {
+      serviceStatusMap.value.set(configFileName, serviceStatus)
+      // 服务运行态要同步到列表卡片，避免详情已更新而列表仍显示旧运行态
+      const item = webConfigList.value.find((c) => c.configFileName === configFileName)
+      if (!item) return
+      if (serviceStatus === 'running') {
+        item.status = 'runningService'
+      } else if (item.status === 'runningService') {
+        item.status = 'notRunning'
+        item.pid = undefined
+      }
+    },
+    { force }
+  )
+}
 
 // 确认弹窗
 const cfmVisible = ref(false)
@@ -543,6 +566,10 @@ const deleteConfig = async () => {
       toast(t('newCommon.deleteBlockedChecking'), 'warning', 4000)
       return
     }
+    if (svcStatus === 'unknown') {
+      toast(t('newCommon.deleteBlockedServiceUnknown'), 'warning', 5000)
+      return
+    }
     if (svcStatus && svcStatus !== 'notInstalled') {
       toast(t('newCommon.deleteBlockedService'), 'warning', 4000)
       return
@@ -636,7 +663,7 @@ const stopWeb = async (item: FormWebData) => {
     return
   }
   const svcStatus = serviceStatusMap.value.get(item.configFileName)
-  if (svcStatus === 'running') {
+  if (svcStatus === 'running' || svcStatus === 'paused') {
     try {
       const ok = await stopWebService(item.configFileName)
       toast(
@@ -646,8 +673,20 @@ const stopWeb = async (item: FormWebData) => {
     } catch {
       toast(t('newCommon.stoppedFail'), 'error')
     } finally {
-      await refreshWebList({ forceServiceStatus: true })
+      await reloadWebServiceStatus(item.configFileName)
+      await refreshWebList()
     }
+    return
+  }
+  // 服务状态不可用时不能按 PID 结束：SCM 可能立刻拉起进程，且界面会误判为“已停止”
+  if (svcStatus === 'unknown' || item.status === 'runningService') {
+    toast(t('newWebConfig.svcUnknownAction'), 'warning', 5000)
+    await reloadWebServiceStatus(item.configFileName)
+    return
+  }
+  if (svcStatus === 'starting' || svcStatus === 'stopping') {
+    toast(t('newWebConfig.svcStateBusy'), 'warning', 4000)
+    await reloadWebServiceStatus(item.configFileName)
     return
   }
   if (!item.pid) {
@@ -743,50 +782,86 @@ const handleServiceInstalled = async () => {
 // 启动 Windows 服务
 const handleStartService = async () => {
   if (!selectedConfig.value) return
+  const name = selectedConfig.value.configFileName
+  let ok: boolean
   try {
-    const ok = await startWebService(selectedConfig.value.configFileName)
-    toast(
-      ok ? t('newWebConfig.svcStartSuccess') : t('newWebConfig.svcStartFail'),
-      ok ? 'success' : 'error'
-    )
-    await refreshWebList({ forceServiceStatus: true })
+    ok = await startWebService(name)
   } catch {
+    ok = false
+  }
+  await reloadWebServiceStatus(name)
+  if (ok) {
+    toast(t('newWebConfig.svcStartSuccess'), 'success')
+  } else if (serviceStatusMap.value.get(name) === 'starting') {
+    toast(t('newWebConfig.svcStartPending'), 'warning', 5000)
+  } else {
     toast(t('newWebConfig.svcStartFail'), 'error')
   }
+  await refreshWebList()
 }
 
 // 停止 Windows 服务
 const handleStopService = async () => {
   if (!selectedConfig.value) return
+  const name = selectedConfig.value.configFileName
+  let ok: boolean
   try {
-    const ok = await stopWebService(selectedConfig.value.configFileName)
-    toast(
-      ok ? t('newWebConfig.svcStopSuccess') : t('newWebConfig.svcStopFail'),
-      ok ? 'success' : 'error'
-    )
-    // 仅在成功时提示；失败时保留错误，不再追加“已停止”的成功文案
-    if (ok) toast(t('newWebConfig.svcStopHint'), 'success', 3000)
-    await refreshWebList({ forceServiceStatus: true })
+    ok = await stopWebService(name)
   } catch {
+    ok = false
+  }
+  await reloadWebServiceStatus(name)
+  if (ok) {
+    toast(t('newWebConfig.svcStopSuccess'), 'success')
+    toast(t('newWebConfig.svcStopHint'), 'success', 3000)
+  } else if (serviceStatusMap.value.get(name) === 'stopping') {
+    toast(t('newWebConfig.svcStopPending'), 'warning', 5000)
+  } else {
     toast(t('newWebConfig.svcStopFail'), 'error')
   }
+  await refreshWebList()
 }
 
-// 卸载 Windows 服务（二次确认后执行）
+// 手动重新检测：忽略 TTL 缓存，用于“未知/启动中/停止中”状态恢复
+const handleRecheckService = async () => {
+  if (!selectedConfig.value) return
+  const name = selectedConfig.value.configFileName
+  // 先回到“检测中”，避免点击后长时间仍显示旧的未知状态
+  serviceStatusMap.value.delete(name)
+  await reloadWebServiceStatus(name)
+}
+
+// 卸载 Windows 服务（二次确认后执行）；状态未知时走显式清理通道
 const handleUninstallService = async () => {
   if (!selectedConfig.value) return
+  const name = selectedConfig.value.configFileName
+  const unknown = currentServiceStatus.value === 'unknown'
+  const transitioning =
+    currentServiceStatus.value === 'starting' || currentServiceStatus.value === 'stopping'
   const ok = await showConfirm(
-    t('newWebConfig.uninstallTitle'),
-    t('newWebConfig.uninstallMsg', { name: selectedConfig.value.configFileName })
+    t(unknown ? 'newWebConfig.cleanupServiceTitle' : 'newWebConfig.uninstallTitle'),
+    t(unknown ? 'newWebConfig.cleanupServiceMsg' : 'newWebConfig.uninstallMsg', { name })
   )
   if (!ok) return
   try {
-    const result = await uninstallWebService(selectedConfig.value.configFileName)
-    toast(
-      result ? t('newWebConfig.svcUninstallSuccess') : t('newWebConfig.svcUninstallFail'),
-      result ? 'success' : 'error'
+    const result = await uninstallWebService(
+      name,
+      unknown || transitioning ? { force: true } : undefined
     )
-    await refreshWebList({ forceServiceStatus: true })
+    if (result) {
+      toast(t('newWebConfig.svcUninstallSuccess'), 'success')
+      // 卸载已成功：即使随后探测失败，也不能把界面回退成“未知”
+      serviceStatusMap.value.set(name, 'notInstalled')
+      clearServiceStatusCache('web-config', name)
+      const item = webConfigList.value.find((c) => c.configFileName === name)
+      if (item && item.status === 'runningService') {
+        item.status = 'notRunning'
+        item.pid = undefined
+      }
+    } else {
+      toast(t('newWebConfig.svcUninstallFail'), 'error')
+      await reloadWebServiceStatus(name)
+    }
   } catch {
     toast(t('newWebConfig.svcUninstallFail'), 'error')
   }

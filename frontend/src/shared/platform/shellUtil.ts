@@ -765,15 +765,34 @@ export const installServiceOnWindows = async (
 /**
  * Windows 删除服务
  * @param serviceName 服务名
+ * @param options.force 状态无法确认时仍尝试清理（仅用于 UI 二次确认后的残留清理）
  * @returns Promise<boolean> 是否成功
  */
-export const uninstallServiceOnWindows = (serviceName: string): Promise<boolean> => {
+export const uninstallServiceOnWindows = (
+  serviceName: string,
+  options: { force?: boolean } = {}
+): Promise<boolean> => {
   return new Promise(async (resolve) => {
     try {
       const status = await checkServiceOnWindows(serviceName)
-      if (status === null || status === false) {
+      if (status === false) {
         resolve(false)
         return
+      }
+      // 默认 fail-closed：状态未知时不能确认服务是否存在，更不应盲目删除
+      if (status === null && !options.force) {
+        resolve(false)
+        return
+      }
+      // 运行中的服务先停止：直接 remove 会让 SCM 在停止过程中删除服务，留下难排查的残留
+      if (typeof status === 'string' && status.trim().toUpperCase() !== 'SERVICE_STOPPED') {
+        const stopped = await stopServiceOnWindows(serviceName)
+        if (!stopped && !options.force) {
+          error(`删除服务前停止失败:${serviceName}`)
+          resolve(false)
+          return
+        }
+        if (!stopped) warn(`删除服务前停止未确认，继续按用户确认清理:${serviceName}`)
       }
       const args = ['remove', serviceName, 'confirm']
       const res: any = await systemOps.runNssmCommand(args)
@@ -787,12 +806,13 @@ export const uninstallServiceOnWindows = (serviceName: string): Promise<boolean>
 }
 /**
  * 轮询等待服务达到目标状态：nssm/CLI 的 start/stop 异步生效，固定 sleep 在慢盘上易误判
+ * 默认约 20 秒：老机器或杀毒扫描下首次启动可能明显超过 5 秒
  * @returns 是否在超时前达到目标状态（中途 STOPPED 等中间态继续等待，超时才算失败）
  */
 const waitServiceStatus = async (
   probe: () => Promise<unknown>,
   target: 'SERVICE_RUNNING' | 'SERVICE_STOPPED',
-  attempts = 10,
+  attempts = 40,
   intervalMs = 500
 ): Promise<boolean> => {
   for (let i = 0; i < attempts; i++) {
@@ -1033,26 +1053,40 @@ export const installServiceWithOfficialCli = async (
 
 /**
  * 使用官方 easytier-cli 卸载服务
+ * @param options.force 状态无法确认时仍尝试清理（仅用于 UI 二次确认后的残留清理）
  */
-export const uninstallServiceWithOfficialCli = async (serviceName: string) => {
+export const uninstallServiceWithOfficialCli = async (
+  serviceName: string,
+  options: { force?: boolean } = {}
+) => {
   try {
-    const target = await resolveOfficialServiceName(serviceName)
-    if (target === null) return false
+    if (!options.force) {
+      const target = await resolveOfficialServiceName(serviceName)
+      if (target === null) return false
+      return await runOfficialUninstall(target)
+    }
 
-    const res: any = await runOfficialServiceCmd(target, 'uninstall')
-    info(`官方CLI卸载服务结果: ${JSON.stringify(res)}`)
-
-    return !!(
-      res &&
-      (res.code === 0 ||
-        res.code === undefined ||
-        res.includes('success') ||
-        res.includes('卸载成功'))
-    )
+    // 强制清理：无法确认具名/默认服务时才依次尝试，避免把“状态未知”误判成“未安装”
+    const targets = serviceName ? [serviceName, ''] : ['']
+    for (const target of targets) {
+      if (await runOfficialUninstall(target)) return true
+    }
+    return false
   } catch (e: any) {
     error(`官方CLI卸载服务失败: ${e}`)
     return false
   }
+}
+
+const runOfficialUninstall = async (target: string): Promise<boolean> => {
+  const res: any = await runOfficialServiceCmd(target, 'uninstall')
+  info(`官方CLI卸载服务结果: ${JSON.stringify(res)}`)
+  return !!(
+    res &&
+    (res.code === 0 ||
+      res.code === undefined ||
+      (typeof res === 'string' && (res.includes('success') || res.includes('卸载成功'))))
+  )
 }
 
 /**

@@ -503,7 +503,7 @@ export const useMockData = () => {
 
   const getUninstallService = () => {
     if (isMock) return mockUninstallService
-    return async (configFileName: string) => {
+    return async (configFileName: string, options: { force?: boolean } = {}) => {
       const { PREFIX_SVC } = await import('@/shared/constants/easytier')
       const {
         detectServiceInstallMethod,
@@ -513,8 +513,13 @@ export const useMockData = () => {
       const serviceName = PREFIX_SVC + configFileName
       const method = await detectServiceInstallMethod(serviceName)
       let ok = false
-      if (method === 'official') ok = await uninstallServiceWithOfficialCli(serviceName)
-      else if (method === 'nssm') ok = await uninstallServiceOnWindows(serviceName)
+      if (method === 'official') ok = await uninstallServiceWithOfficialCli(serviceName, options)
+      else if (method === 'nssm') ok = await uninstallServiceOnWindows(serviceName, options)
+      else if (options.force) {
+        // 状态未知：两条受信路径都尝试，成功后清掉安装记录，避免下次继续判为 unknown
+        ok = await uninstallServiceOnWindows(serviceName, options)
+        if (!ok) ok = await uninstallServiceWithOfficialCli(serviceName, options)
+      }
       if (ok) clearServiceInstallMethod(serviceName)
       return ok
     }
@@ -557,8 +562,14 @@ export const useMockData = () => {
         return 'stopped'
       case 'SERVICE_RUNNING':
         return 'running'
+      case 'SERVICE_START_PENDING':
+        return 'starting'
       case 'SERVICE_STOP_PENDING':
         return 'stopping'
+      case 'SERVICE_CONTINUE_PENDING':
+      case 'SERVICE_PAUSE_PENDING':
+      case 'SERVICE_PAUSED':
+        return 'paused'
       case 'uninstalled':
         return 'notInstalled'
       default:
@@ -684,11 +695,11 @@ export const useMockData = () => {
 
   const getUninstallWebService = () => {
     if (isMock) return mockUninstallService
-    return async (configFileName: string) => {
+    return async (configFileName: string, options: { force?: boolean } = {}) => {
       const { PREFIX_SVC_WEB } = await import('@/shared/constants/easytier')
       const { uninstallServiceOnWindows } = await import('@/shared/platform/shellUtil')
       const serviceName = PREFIX_SVC_WEB + configFileName
-      const ok = await uninstallServiceOnWindows(serviceName)
+      const ok = await uninstallServiceOnWindows(serviceName, options)
       if (ok) clearServiceInstallMethod(serviceName)
       return ok as boolean
     }

@@ -710,6 +710,42 @@ describe('Windows 服务状态未知与卸载 fail-closed', () => {
     ])
   })
 
+  it('运行中的服务先停止并确认停止后再删除', async () => {
+    mocks.execute
+      .mockResolvedValueOnce({ code: 0, stdout: 'SERVICE_RUNNING', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'SERVICE_STOPPED', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+
+    await expect(uninstallServiceOnWindows('easytier-a')).resolves.toBe(true)
+
+    const commands = mocks.create.mock.calls.map((call) => call[1])
+    expect(commands).toEqual([
+      ['status', 'easytier-a'],
+      ['stop', 'easytier-a'],
+      ['status', 'easytier-a'],
+      ['remove', 'easytier-a', 'confirm']
+    ])
+  })
+
+  it('状态未知时默认拒绝；显式 force 清理才尝试删除', async () => {
+    mocks.execute.mockRejectedValueOnce(new Error('nssm unavailable'))
+    await expect(uninstallServiceOnWindows('easytier-a')).resolves.toBe(false)
+
+    mocks.create.mockClear()
+    mocks.execute.mockReset()
+    mocks.execute
+      .mockRejectedValueOnce(new Error('nssm unavailable'))
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+
+    await expect(uninstallServiceOnWindows('easytier-a', { force: true })).resolves.toBe(true)
+    expect(mocks.create.mock.calls.map((call) => call[1])).toContainEqual([
+      'remove',
+      'easytier-a',
+      'confirm'
+    ])
+  })
+
   it('官方 CLI 状态未知时不回退默认服务也不执行卸载', async () => {
     mocks.execute.mockResolvedValueOnce({ code: 5, stdout: '', stderr: 'access denied' })
 
@@ -773,6 +809,17 @@ describe('Windows 服务启动状态判定（服务启停可靠性回归）', ()
       return { code: 0, stdout: 'SERVICE_STOPPED', stderr: '' }
     })
     await expect(startServiceOnWindows('easytier-a')).resolves.toBe(false)
+  })
+
+  it('待启动超过 5 秒但在 20 秒内就绪 → 启动成功', async () => {
+    let call = 0
+    mocks.execute.mockImplementation(async () => {
+      call++
+      if (call === 1) return { code: 0, stdout: '', stderr: '' }
+      if (call <= 16) return { code: 0, stdout: 'SERVICE_START_PENDING', stderr: '' }
+      return { code: 0, stdout: 'SERVICE_RUNNING', stderr: '' }
+    })
+    await expect(startServiceOnWindows('easytier-a')).resolves.toBe(true)
   })
 })
 

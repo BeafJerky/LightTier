@@ -263,6 +263,9 @@
                 'svc-running': currentServiceStatus === 'running',
                 'svc-stopped': currentServiceStatus === 'stopped',
                 'svc-uninstalled': currentServiceStatus === 'notInstalled',
+                'svc-starting': currentServiceStatus === 'starting',
+                'svc-stopping': currentServiceStatus === 'stopping',
+                'svc-paused': currentServiceStatus === 'paused',
                 'svc-checking': !currentServiceStatus
               }"
             ></span>
@@ -278,19 +281,37 @@
                 t('newConfig.installService')
               }}</LtButton>
             </template>
-            <!-- 检测中不渲染操作，避免把“未知”当作“未安装/已停止”误触 -->
+            <!-- 状态无法确认：不再提供会必然失败的启动，改为重检测或显式清理 -->
+            <template v-else-if="currentServiceStatus === 'unknown'">
+              <LtButton variant="secondary" size="sm" @click="refreshServiceStatus">{{
+                t('newSettings.recheck')
+              }}</LtButton>
+              <LtButton variant="ghost" size="sm" @click="handleUninstallService">{{
+                t('newConfig.uninstall')
+              }}</LtButton>
+            </template>
+            <template
+              v-else-if="currentServiceStatus === 'starting' || currentServiceStatus === 'stopping'"
+            >
+              <LtButton variant="secondary" size="sm" @click="refreshServiceStatus">{{
+                t('newSettings.recheck')
+              }}</LtButton>
+              <LtButton variant="ghost" size="sm" @click="handleUninstallService">{{
+                t('newConfig.uninstall')
+              }}</LtButton>
+            </template>
             <template v-else-if="currentServiceStatus">
               <LtButton
                 variant="success"
                 size="sm"
-                :disabled="currentServiceStatus === 'running'"
+                :disabled="currentServiceStatus !== 'stopped'"
                 @click="handleStartService"
                 >{{ t('newCommon.start') }}</LtButton
               >
               <LtButton
                 variant="soft"
                 size="sm"
-                :disabled="currentServiceStatus !== 'running'"
+                :disabled="currentServiceStatus !== 'running' && currentServiceStatus !== 'paused'"
                 @click="handleStopService"
                 >{{ t('newCommon.stop') }}</LtButton
               >
@@ -401,6 +422,7 @@ const {
   openRouteCheck,
   currentServiceStatus,
   mapServiceStatus,
+  refreshServiceStatus,
   openServiceDialog,
   handleStartService,
   handleStopService,

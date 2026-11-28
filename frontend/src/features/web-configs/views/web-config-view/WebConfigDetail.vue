@@ -131,18 +131,35 @@
               t('newWebConfig.installService')
             }}</LtButton>
           </template>
+          <!-- 状态无法确认：不再提供会必然失败的启动，改为重检测或显式清理 -->
+          <template v-else-if="serviceStatus === 'unknown'">
+            <LtButton variant="secondary" size="sm" @click="emit('recheckService')">{{
+              t('newSettings.recheck')
+            }}</LtButton>
+            <LtButton variant="ghost" size="sm" @click="emit('uninstallService')">{{
+              t('newConfig.uninstall')
+            }}</LtButton>
+          </template>
+          <template v-else-if="serviceStatus === 'starting' || serviceStatus === 'stopping'">
+            <LtButton variant="secondary" size="sm" @click="emit('recheckService')">{{
+              t('newSettings.recheck')
+            }}</LtButton>
+            <LtButton variant="ghost" size="sm" @click="emit('uninstallService')">{{
+              t('newConfig.uninstall')
+            }}</LtButton>
+          </template>
           <template v-else-if="serviceStatus">
             <LtButton
               variant="success"
               size="sm"
-              :disabled="serviceStatus === 'running'"
+              :disabled="serviceStatus !== 'stopped'"
               @click="emit('startService')"
               >{{ t('newCommon.start') }}</LtButton
             >
             <LtButton
               variant="soft"
               size="sm"
-              :disabled="serviceStatus !== 'running'"
+              :disabled="serviceStatus !== 'running' && serviceStatus !== 'paused'"
               @click="emit('stopService')"
               >{{ t('newCommon.stop') }}</LtButton
             >
@@ -204,6 +221,7 @@ const emit = defineEmits<{
   startService: []
   stopService: []
   uninstallService: []
+  recheckService: []
 }>()
 
 const { t } = useI18n()
@@ -213,10 +231,14 @@ const mapServiceStatus = (key: string): string => {
   switch (key) {
     case 'running':
       return t('newCommon.running')
+    case 'starting':
+      return t('newCommon.starting')
     case 'stopped':
       return t('newWebConfig.stoppedService')
     case 'stopping':
       return t('newCommon.stopping')
+    case 'paused':
+      return t('newCommon.paused')
     case 'notInstalled':
       return t('newConfig.notInstalled')
     case 'unknown':
@@ -230,6 +252,8 @@ const serviceDotClass = computed(() => {
   const s = props.serviceStatus
   if (s === 'running') return 'svc-running'
   if (s === 'stopped') return 'svc-stopped'
+  if (s === 'starting' || s === 'stopping') return 'svc-starting'
+  if (s === 'paused') return 'svc-paused'
   if (!s) return 'svc-checking'
   return 'svc-uninstalled'
 })

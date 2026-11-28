@@ -299,6 +299,16 @@
   background: var(--theme-border);
 }
 
+.nw-svc-dot.svc-starting,
+.nw-svc-dot.svc-stopping {
+  background: var(--theme-color-warning);
+  animation: nw-pulse 1s infinite;
+}
+
+.nw-svc-dot.svc-paused {
+  background: var(--theme-color-warning);
+}
+
 .nw-svc-dot.svc-checking {
   background: var(--theme-border);
   animation: nw-pulse 1s infinite;

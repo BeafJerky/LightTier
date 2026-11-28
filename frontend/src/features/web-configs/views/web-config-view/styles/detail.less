@@ -348,6 +348,16 @@
   background: var(--theme-border);
 }
 
+.nwc-svc-dot.svc-starting,
+.nwc-svc-dot.svc-stopping {
+  background: var(--theme-color-warning);
+  animation: nwc-pulse 1s infinite;
+}
+
+.nwc-svc-dot.svc-paused {
+  background: var(--theme-color-warning);
+}
+
 .nwc-svc-dot.svc-checking {
   background: var(--theme-border);
   animation: nwc-pulse 1s infinite;
